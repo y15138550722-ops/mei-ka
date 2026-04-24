@@ -2,7 +2,7 @@
 
 ## 全球翻译认证集成办理平台 · 核心功能演示
 
-(将项目部署到 Vercel 供开发人员演示和使用)
+(将项目部署到 Vercel 供开发人员演示和使用，并推送到GitHub 仓库)
 
 （更新项目PRD)
 
@@ -19,21 +19,31 @@
 ### 传统模式的四大痛点
 
 ```mermaid
-mindmap
-  root["传统办理模式的痛点"]
-    pain1["多源分散"]
-      d1["代理商各自管理"]
-      d2["OTA渠道互相独立"]
-      d3["汇总全靠Excel"]
-    pain2["状态黑洞"]
-      d4["客户无法实时查看进度"]
-      d5["催单频率居高不下"]
-    pain3["对账混乱"]
-      d6["手工匹配代理层级价格"]
-      d7["加急/普通价格容易混淆"]
-    pain4["产品僵化"]
-      d8["调一次价改多张表"]
-      d9["新品上线周期长"]
+graph TD
+    root["传统办理模式的痛点"]
+
+    root --> pain1["多源分散"]
+    pain1 --> d1["代理商各自管理"]
+    pain1 --> d2["OTA渠道互相独立"]
+    pain1 --> d3["汇总全靠 Excel"]
+
+    root --> pain2["状态黑洞"]
+    pain2 --> d4["客户无法实时查看进度"]
+    pain2 --> d5["催单频率居高不下"]
+
+    root --> pain3["对账混乱"]
+    pain3 --> d6["手工匹配代理层级价格"]
+    pain3 --> d7["加急 / 普通价格容易混淆"]
+
+    root --> pain4["产品僵化"]
+    pain4 --> d8["调一次价改多张表"]
+    pain4 --> d9["新品上线周期长"]
+
+    style root fill:#F5F5F5,stroke:#616161,stroke-width:2px,color:#212121
+    style pain1 fill:#E3F2FD,stroke:#1E88E5,color:#0D47A1
+    style pain2 fill:#FFF3E0,stroke:#FB8C00,color:#E65100
+    style pain3 fill:#F3E5F5,stroke:#8E24AA,color:#4A148C
+    style pain4 fill:#E8F5E9,stroke:#43A047,color:#1B5E20
 ```
 
 ### 美卡的解法
@@ -200,33 +210,27 @@ sequenceDiagram
 ## 四、产品矩阵全景
 
 ```mermaid
-graph TB
-    subgraph products["产品类型"]
-        P1["IDP国际驾照"]
-        P2["NZTA新西兰认证"]
-        P3["驾照翻译国际认证<br/>(小白本)"]
-        P4["多国翻译件"]
-    end
+graph LR
+    H1["产品类型"] --> H2["办理类型"]
+    H2 --> H3["代理层级"]
 
-    subgraph types["办理类型"]
-        T1["正常办理"]
-        T2["优先办理"]
-        T3["加急办理"]
-    end
+    H1 --> P1["IDP国际驾照"]
+    H1 --> P2["NZTA 新西兰认证"]
+    H1 --> P3["驾照翻译国际认证（小白本）"]
+    H1 --> P4["多国翻译件"]
 
-    subgraph agents["代理层级"]
-        A1["自营"]
-        A2["一级代理"]
-        A3["二级代理"]
-        A4["三级代理"]
-    end
+    H2 --> T1["正常办理"]
+    H2 --> T2["优先办理"]
+    H2 --> T3["加急办理"]
 
-    products --> types
-    types --> agents
+    H3 --> A1["自营"]
+    H3 --> A2["一级代理"]
+    H3 --> A3["二级代理"]
+    H3 --> A4["三级代理"]
 
-    style products fill:#E3F2FD,stroke:#1565C0
-    style types fill:#FFF3E0,stroke:#EF6C00
-    style agents fill:#E8F5E9,stroke:#2E7D32
+    style H1 fill:#E3F2FD,stroke:#1565C0,color:#0D47A1
+    style H2 fill:#FFF3E0,stroke:#EF6C00,color:#E65100
+    style H3 fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
 ```
 
 > **定价公式**: `最终价格 = 产品 × 办理类型 × 代理等级`
