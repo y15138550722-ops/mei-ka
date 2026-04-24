@@ -1,0 +1,434 @@
+import type { Order } from '../shared/types';
+import { formatBeijingTimestamp } from '../shared/utils/dateTime';
+import { getOrderById, getOrders, updateOrder } from './mockDataService';
+
+const NOTARY_OFFICE_ORDER_STORAGE_KEY = 'meika-notary-office-orders';
+const NOTARY_OFFICE_ORDER_DATA_VERSION_STORAGE_KEY = 'meika-notary-office-orders-version';
+const NOTARY_OFFICE_ORDER_DATA_VERSION = 'v3-translating-flow';
+const REMOVED_NOTARY_OFFICE_ORDER_IDS = new Set(['MK2600057', 'MK2600061']);
+
+const NOTARY_OFFICE_PENDING_REVIEW_SEEDS = [
+  {
+    orderId: 'NO2600101',
+    customerName: '林知夏',
+    customerPhone: '13800192011',
+    customerPassport: 'E2600101',
+    customerEmail: 'notary-office-101@example.com',
+    productName: '公证单号',
+    deliveryAddress: '上海市浦东新区锦绣路188号8栋1102室',
+    licenseNo: 'D30000001',
+    licenseCategory: 'C1',
+    language: '英语',
+    officeId: 'beibu-gulf',
+    officeName: '北部湾公证处',
+  },
+  {
+    orderId: 'NO2600102',
+    customerName: '周书禾',
+    customerPhone: '13800192012',
+    customerPassport: 'E2600102',
+    customerEmail: 'notary-office-102@example.com',
+    productName: '公证双号',
+    deliveryAddress: '广西南宁市良庆区平乐大道66号3栋902室',
+    licenseNo: 'D30000002',
+    licenseCategory: 'C2',
+    language: '法语',
+    officeId: 'zhangjiang',
+    officeName: '张江公证处',
+  },
+  {
+    orderId: 'NO2600103',
+    customerName: '顾景川',
+    customerPhone: '13800192013',
+    customerPassport: 'E2600103',
+    customerEmail: 'notary-office-103@example.com',
+    productName: '公证海牙单号',
+    deliveryAddress: '北京市朝阳区酒仙桥路10号恒通商务园B座1206室',
+    licenseNo: 'D30000003',
+    licenseCategory: 'C1',
+    language: '德语',
+    officeId: 'beibu-gulf',
+    officeName: '北部湾公证处',
+  },
+  {
+    orderId: 'NO2600104',
+    customerName: '许安宁',
+    customerPhone: '13800192014',
+    customerPassport: 'E2600104',
+    customerEmail: 'notary-office-104@example.com',
+    productName: '公证海牙双号',
+    deliveryAddress: '广东省广州市天河区珠江新城华夏路16号1201室',
+    licenseNo: 'D30000004',
+    licenseCategory: 'B2',
+    language: '日语',
+    officeId: 'zhangjiang',
+    officeName: '张江公证处',
+  },
+  {
+    orderId: 'NO2600105',
+    customerName: '苏若岚',
+    customerPhone: '13800192015',
+    customerPassport: 'E2600105',
+    customerEmail: 'notary-office-105@example.com',
+    productName: '公证单号',
+    deliveryAddress: '江苏省南京市建邺区江东中路98号万达广场C座1808室',
+    licenseNo: 'D30000005',
+    licenseCategory: 'C1',
+    language: '英语',
+    officeId: 'beibu-gulf',
+    officeName: '北部湾公证处',
+  },
+  {
+    orderId: 'NO2600106',
+    customerName: '陆清和',
+    customerPhone: '13800192016',
+    customerPassport: 'E2600106',
+    customerEmail: 'notary-office-106@example.com',
+    productName: '公证双号',
+    deliveryAddress: '浙江省杭州市西湖区文三路478号华星时代广场1幢1303室',
+    licenseNo: 'D30000006',
+    licenseCategory: 'C2',
+    language: '法语',
+    officeId: 'zhangjiang',
+    officeName: '张江公证处',
+  },
+  {
+    orderId: 'NO2600107',
+    customerName: '唐星野',
+    customerPhone: '13800192017',
+    customerPassport: 'E2600107',
+    customerEmail: 'notary-office-107@example.com',
+    productName: '公证海牙单号',
+    deliveryAddress: '四川省成都市高新区天府二街88号5栋1509室',
+    licenseNo: 'D30000007',
+    licenseCategory: 'A1',
+    language: '德语',
+    officeId: 'beibu-gulf',
+    officeName: '北部湾公证处',
+  },
+  {
+    orderId: 'NO2600108',
+    customerName: '沈慕晴',
+    customerPhone: '13800192018',
+    customerPassport: 'E2600108',
+    customerEmail: 'notary-office-108@example.com',
+    productName: '公证海牙双号',
+    deliveryAddress: '福建省厦门市思明区湖滨东路319号人才中心大厦A座901室',
+    licenseNo: 'D30000008',
+    licenseCategory: 'C1',
+    language: '日语',
+    officeId: 'zhangjiang',
+    officeName: '张江公证处',
+  },
+  {
+    orderId: 'NO2600109',
+    customerName: '陈望舒',
+    customerPhone: '13800192019',
+    customerPassport: 'E2600109',
+    customerEmail: 'notary-office-109@example.com',
+    productName: '公证单号',
+    deliveryAddress: '湖北省武汉市江汉区解放大道688号创世纪广场2栋1706室',
+    licenseNo: 'D30000009',
+    licenseCategory: 'C2',
+    language: '英语',
+    officeId: 'beibu-gulf',
+    officeName: '北部湾公证处',
+  },
+  {
+    orderId: 'NO2600110',
+    customerName: '赵砚秋',
+    customerPhone: '13800192020',
+    customerPassport: 'E2600110',
+    customerEmail: 'notary-office-110@example.com',
+    productName: '公证双号',
+    deliveryAddress: '山东省青岛市市南区香港中路8号颐和国际A座706室',
+    licenseNo: 'D30000010',
+    licenseCategory: 'C1',
+    language: '法语',
+    officeId: 'zhangjiang',
+    officeName: '张江公证处',
+  },
+] as const;
+
+const isBrowser = () => typeof window !== 'undefined';
+
+const getCurrentTimestamp = () => formatBeijingTimestamp();
+
+const cloneOrder = (order: Order): Order => ({
+  ...order,
+  logs: order.logs.map((log) => ({ ...log })),
+});
+
+const excludeRemovedOrders = (orders: Order[]) =>
+  orders.filter((order) => !REMOVED_NOTARY_OFFICE_ORDER_IDS.has(order.orderId));
+
+const hasPushedNotaryOffice = (order: Order) =>
+  Boolean(
+    order.pushedNotaryOfficeId?.trim() ||
+      order.pushedNotaryOfficeName?.trim() ||
+      order.logs.some((log) => /推送至/.test(log.action)),
+  );
+
+const isManagementFlowOfficeOrder = (order: Order) => /^MK\d+$/.test(order.orderId) && hasPushedNotaryOffice(order);
+
+const normalizeDefaultPushedOrder = (order: Order): Order => {
+  const nextOrder = cloneOrder(order);
+
+  return nextOrder.status === 'pending_production'
+    ? {
+        ...nextOrder,
+        status: 'translating',
+      }
+    : nextOrder;
+};
+
+const normalizeStoredNotaryOfficeOrder = (order: Order): Order => {
+  if (order.status === 'pending_review' && isManagementFlowOfficeOrder(order)) {
+    return {
+      ...order,
+      status: 'translating',
+    };
+  }
+
+  return order;
+};
+
+const mergeUniqueOrdersById = (orders: Order[]) => {
+  const orderMap = new Map<string, Order>();
+  orders.forEach((order) => {
+    orderMap.set(order.orderId, order);
+  });
+  return Array.from(orderMap.values());
+};
+
+const createSeedTimestamp = (index: number) => {
+  const date = new Date();
+  date.setDate(date.getDate() - Math.floor(index / 2));
+  date.setHours(9 + (index % 4) * 2, 8 + index, 0, 0);
+  return formatBeijingTimestamp(date);
+};
+
+const buildSeedNotaryOfficeOrders = (templateOrders: Order[]): Order[] =>
+  NOTARY_OFFICE_PENDING_REVIEW_SEEDS.map((seed, index) => {
+    const templateOrder = templateOrders[index % templateOrders.length];
+    const createdAt = createSeedTimestamp(index);
+
+    return {
+      orderId: seed.orderId,
+      customerName: seed.customerName,
+      customerPhone: seed.customerPhone,
+      customerPassport: seed.customerPassport,
+      customerEmail: seed.customerEmail,
+      productId: templateOrder?.productId || 'MK-9',
+      productName: seed.productName,
+      productCategory: 'notary',
+      processType: templateOrder?.processType || 'normal',
+      processTypeId: templateOrder?.processTypeId,
+      pushTimeliness: templateOrder?.pushTimeliness || 'same_day',
+      channel: templateOrder?.channel || 'private',
+      agentLevel: templateOrder?.agentLevel || 'self',
+      lockedPrice: templateOrder?.lockedPrice || 299,
+      status: 'pending_review',
+      deliveryAddress: seed.deliveryAddress,
+      logisticsCompany: '',
+      trackingNumber: '',
+      shippedAt: undefined,
+      remark: '公证处待审核补充数据',
+      rejectReason: undefined,
+      pushedNotaryOfficeId: seed.officeId,
+      pushedNotaryOfficeName: seed.officeName,
+      licenseName: seed.customerName,
+      licenseNo: seed.licenseNo,
+      licenseCategory: seed.licenseCategory,
+      language: seed.language,
+      createdAt,
+      updatedAt: createdAt,
+      logs: [
+        {
+          time: createdAt,
+          operator: '公证处系统',
+          action: '订单创建',
+        },
+        {
+          time: createdAt,
+          operator: seed.officeName,
+          action: '补充待审核订单',
+        },
+      ],
+    };
+  });
+
+const buildDefaultNotaryOfficeOrders = (): Order[] => {
+  const managementNotaryOrders = getOrders().filter((order) => order.productCategory === 'notary');
+  const pushedOrders = managementNotaryOrders.filter(hasPushedNotaryOffice).map(normalizeDefaultPushedOrder);
+  const seedOrders = buildSeedNotaryOfficeOrders(managementNotaryOrders);
+
+  return excludeRemovedOrders(mergeUniqueOrdersById([...pushedOrders, ...seedOrders]));
+};
+
+const persistNotaryOfficeOrders = () => {
+  if (!isBrowser()) return;
+  window.localStorage.setItem(NOTARY_OFFICE_ORDER_STORAGE_KEY, JSON.stringify(_notaryOfficeOrders));
+  window.localStorage.setItem(NOTARY_OFFICE_ORDER_DATA_VERSION_STORAGE_KEY, NOTARY_OFFICE_ORDER_DATA_VERSION);
+};
+
+const loadNotaryOfficeOrders = (): Order[] => {
+  const defaultOrders = buildDefaultNotaryOfficeOrders();
+
+  if (!isBrowser()) {
+    return defaultOrders;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(NOTARY_OFFICE_ORDER_STORAGE_KEY);
+
+    if (!rawValue) {
+      if (defaultOrders.length > 0) {
+        window.localStorage.setItem(NOTARY_OFFICE_ORDER_STORAGE_KEY, JSON.stringify(defaultOrders));
+      }
+      window.localStorage.setItem(NOTARY_OFFICE_ORDER_DATA_VERSION_STORAGE_KEY, NOTARY_OFFICE_ORDER_DATA_VERSION);
+      return defaultOrders;
+    }
+
+    const parsedValue = JSON.parse(rawValue) as unknown;
+    if (!Array.isArray(parsedValue)) {
+      return defaultOrders;
+    }
+
+    const storedOrders = excludeRemovedOrders(parsedValue as Order[]).map(normalizeStoredNotaryOfficeOrder);
+    const existingOrderIds = new Set(storedOrders.map((order) => order.orderId));
+    const missingDefaultOrders = defaultOrders.filter((order) => !existingOrderIds.has(order.orderId));
+    const mergedOrders = [...storedOrders, ...missingDefaultOrders];
+
+    window.localStorage.setItem(NOTARY_OFFICE_ORDER_STORAGE_KEY, JSON.stringify(mergedOrders));
+    window.localStorage.setItem(NOTARY_OFFICE_ORDER_DATA_VERSION_STORAGE_KEY, NOTARY_OFFICE_ORDER_DATA_VERSION);
+    return mergedOrders;
+  } catch {
+    return defaultOrders;
+  }
+};
+
+const createNotaryOfficeOrderFromManagementOrder = (
+  managementOrder: Order,
+  options: {
+    operator?: string;
+    pushedAt?: string;
+  } = {},
+): Order => {
+  const pushedAt = options.pushedAt?.trim() || getCurrentTimestamp();
+  const operator = options.operator?.trim() || '系统';
+
+  return {
+    ...cloneOrder(managementOrder),
+    status: 'translating',
+    logisticsCompany: '',
+    trackingNumber: '',
+    shippedAt: undefined,
+    rejectReason: undefined,
+    createdAt: pushedAt,
+    updatedAt: pushedAt,
+    logs: [
+      ...managementOrder.logs.map((log) => ({ ...log })),
+      {
+        time: pushedAt,
+        operator,
+        action: `公证处已接收：${managementOrder.pushedNotaryOfficeName || '未指定公证处'}，进入翻译中`,
+      },
+    ],
+  };
+};
+
+let _notaryOfficeOrders = loadNotaryOfficeOrders();
+
+export function getNotaryOfficeOrders() {
+  return _notaryOfficeOrders.map(cloneOrder);
+}
+
+export function getNotaryOfficeOrderById(id: string) {
+  const order = _notaryOfficeOrders.find((item) => item.orderId === id);
+  return order ? cloneOrder(order) : undefined;
+}
+
+export function updateNotaryOfficeOrder(id: string, updates: Partial<Order>) {
+  _notaryOfficeOrders = _notaryOfficeOrders.map((order) => {
+    if (order.orderId !== id) {
+      return order;
+    }
+
+    const isShippingTransition = order.status === 'in_production' && updates.status === 'shipped';
+    if (!isShippingTransition || updates.shippedAt) {
+      return { ...order, ...updates };
+    }
+
+    const shippedTime = getCurrentTimestamp();
+    return {
+      ...order,
+      ...updates,
+      shippedAt: shippedTime,
+      updatedAt: updates.updatedAt || shippedTime,
+    };
+  });
+
+  persistNotaryOfficeOrders();
+}
+
+export function pushNotaryOrderToOffice(
+  managementOrder: Order,
+  options: {
+    operator?: string;
+    pushedAt?: string;
+  } = {},
+) {
+  const existingOrder = _notaryOfficeOrders.find((order) => order.orderId === managementOrder.orderId);
+  if (existingOrder) {
+    return cloneOrder(existingOrder);
+  }
+
+  if (REMOVED_NOTARY_OFFICE_ORDER_IDS.has(managementOrder.orderId)) {
+    return cloneOrder(createNotaryOfficeOrderFromManagementOrder(managementOrder, options));
+  }
+
+  const officeOrder = createNotaryOfficeOrderFromManagementOrder(managementOrder, options);
+  _notaryOfficeOrders = [..._notaryOfficeOrders, officeOrder];
+  persistNotaryOfficeOrders();
+  return cloneOrder(officeOrder);
+}
+
+export function syncNotaryOfficeRejectionToManagement(
+  officeOrder: Order,
+  options: {
+    rejectReason: string;
+    operator?: string;
+    rejectedAt?: string;
+  },
+) {
+  const managementOrder = getOrderById(officeOrder.orderId);
+  if (!managementOrder) {
+    return undefined;
+  }
+
+  const rejectedAt = options.rejectedAt?.trim() || getCurrentTimestamp();
+  const operator = options.operator?.trim() || officeOrder.pushedNotaryOfficeName?.trim() || '公证处';
+  const rejectReason = options.rejectReason.trim();
+  const officeName = officeOrder.pushedNotaryOfficeName?.trim() || '公证处';
+  const nextUpdates: Partial<Order> = {
+    status: 'cancelled',
+    rejectReason,
+    remark: rejectReason,
+    updatedAt: rejectedAt,
+    logs: [
+      ...managementOrder.logs,
+      {
+        time: rejectedAt,
+        operator,
+        action: `${officeName}审核驳回：${rejectReason}`,
+      },
+    ],
+  };
+
+  updateOrder(managementOrder.orderId, nextUpdates);
+  return {
+    ...managementOrder,
+    ...nextUpdates,
+  } as Order;
+}

@@ -1,0 +1,12 @@
+.env
+.env.*
+.npm-cache
+deploy
+docs
+rules
+specs
+src/dist
+src/node_modules
+README.md
+DEPLOY.md
+Dockerfile

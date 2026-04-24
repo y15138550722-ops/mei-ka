@@ -1,0 +1,711 @@
+import type {
+  AgentLevel,
+  Channel,
+  Order,
+  OrderStatus,
+  ProcessType,
+  PushTimeliness,
+  Product,
+  ProductCategory,
+  ProductProcessType,
+  PriceTier,
+} from '../shared/types';
+import {
+  BUILT_IN_PROCESS_TYPE_KEYS,
+  DEFAULT_STANDARD_PROCESS_TYPE_KEYS,
+  getDefaultProcessTypeKeysForProduct,
+  getDefaultProcessTypeTemplatesForProduct,
+  getProcessTypeTone,
+  isDefaultProcessTypeProfileProduct,
+} from '../shared/utils/productProcessType';
+import { formatBeijingTimestamp } from '../shared/utils/dateTime';
+
+const PRODUCT_STORAGE_KEY = 'meika-products';
+const ORDER_STORAGE_KEY = 'meika-orders';
+const ORDER_DATA_VERSION_STORAGE_KEY = 'meika-order-data-version';
+const ORDER_DATA_VERSION = 'notary-pending-review-plus-10-v1';
+const REMOVED_ORDER_IDS = new Set(['MK2600057', 'MK2600061']);
+
+const NAMES = ['张伟', '王芳', '李明', '赵丽', '孙强', '周杰', '吴秀英', '郑敏', '陈浩', '钱亮', '刘洋', '黄磊', '何欣', '马丽', '朱俊', '林静', '徐峰', '高蕾', '谢宇', '韩雪'];
+const PASSPORTS = ['E12345678', 'G98765432', 'E55667788', 'G11223344', 'E99887766', 'G44556677', 'E33221100', 'G77889900', 'E66554433', 'G22113344'];
+const PHONES = ['13800138001', '13912345678', '15011112222', '18699998888', '13566667777', '17700001111', '15233334444', '18655556666', '13877778888', '13288889999'];
+const ADDRESSES = [
+  '北京市朝阳区建国路 88 号 SOHO 现代城',
+  '上海市浦东新区陆家嘴环路 1000 号',
+  '广州市天河区天河路 385 号太古汇',
+  '深圳市南山区深南大道 9966 号',
+  '杭州市西湖区文三路 478 号',
+  '成都市锦江区红星路三段 99 号',
+  '南京市鼓楼区中山路 18 号',
+  '武汉市江岸区解放大道 688 号',
+];
+
+const STATUSES: OrderStatus[] = ['pending_review', 'pending_production', 'in_production', 'shipped', 'completed', 'cancelled'];
+const PROCESS_TYPES: ProcessType[] = ['normal', 'priority', 'urgent'];
+const PUSH_TIMELINESS_OPTIONS: PushTimeliness[] = ['instant', 'within_2h', 'same_day', 'next_day'];
+const CHANNELS: Channel[] = ['ctrip', 'fliggy', 'private', 'offline'];
+const AGENT_LEVELS: AgentLevel[] = ['self', 'l1', 'l2', 'l3'];
+const PRODUCT_CATEGORIES: ProductCategory[] = ['translation', 'notary', 'idp'];
+const EXTRA_IDP_PENDING_ORDER_COUNT = 5;
+const NOTARY_PENDING_REVIEW_ORDER_COUNT = 20;
+const PRODUCT_SEEDS: Array<{
+  title: string;
+  category: ProductCategory;
+  weight: number;
+  status: Product['status'];
+}> = [
+  { title: '驾照翻译国际认证件（小白本）', category: 'translation', weight: 29, status: 'active' },
+  { title: 'NAATI 澳大利亚认证（电子版）', category: 'translation', weight: 28, status: 'active' },
+  { title: 'NAATI 澳大利亚认证（原件）', category: 'translation', weight: 27, status: 'active' },
+  { title: 'NZTA 新西兰认证(电子版)', category: 'translation', weight: 26, status: 'active' },
+  { title: 'NZTA 新西兰认证(原件)', category: 'translation', weight: 25, status: 'active' },
+  { title: '西班牙语言宣誓翻译(电子版)', category: 'translation', weight: 24, status: 'active' },
+  { title: '德语宣誓翻译(电子版)', category: 'translation', weight: 23, status: 'active' },
+  { title: '法语宣誓翻译(电子版)', category: 'translation', weight: 22, status: 'active' },
+  { title: '公证办理服务', category: 'notary', weight: 18, status: 'active' },
+  { title: 'IDP', category: 'idp', weight: 16, status: 'active' },
+  { title: 'IDP（加急）', category: 'idp', weight: 15, status: 'active' },
+  { title: 'IDD国际驾照', category: 'idp', weight: 14, status: 'active' },
+  { title: 'IDD国际驾照（加急）', category: 'idp', weight: 13, status: 'active' },
+];
+
+const PROCESS_TYPE_ESTIMATED_DAYS: Record<ProcessType, number> = {
+  normal: 15,
+  priority: 7,
+  urgent: 3,
+};
+
+const NOTARY_ORDER_NAMES = ['公证单号', '公证双号', '公证海牙单号', '公证海牙双号'];
+
+const isBrowser = () => typeof window !== 'undefined';
+
+const randomDate = (daysBack: number) => {
+  const date = new Date();
+  date.setDate(date.getDate() - Math.floor(Math.random() * daysBack));
+  date.setHours(Math.floor(Math.random() * 12) + 8, Math.floor(Math.random() * 60));
+  return formatBeijingTimestamp(date);
+};
+
+const getCurrentTimestamp = () => formatBeijingTimestamp();
+
+const getDefaultEstimatedDays = (name: string) => {
+  if (name === 'normal') return PROCESS_TYPE_ESTIMATED_DAYS.normal;
+  if (name === 'priority') return PROCESS_TYPE_ESTIMATED_DAYS.priority;
+  if (name === 'urgent') return PROCESS_TYPE_ESTIMATED_DAYS.urgent;
+  return 3;
+};
+
+const getDefaultProcessTypeDescription = (estimatedDays: number) => `${estimatedDays}个工作日`;
+
+const toStringOrFallback = (value: unknown, fallback = '') =>
+  typeof value === 'string' && value.trim() ? value.trim() : fallback;
+
+const toNonNegativeInteger = (value: unknown, fallback = 0) => {
+  const nextValue = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(nextValue)) return fallback;
+  return Math.max(0, Math.trunc(nextValue));
+};
+
+const toPositiveInteger = (value: unknown, fallback: number) => {
+  const nextValue = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(nextValue) || nextValue <= 0) return fallback;
+  return Math.max(1, Math.trunc(nextValue));
+};
+
+const toNonNegativeNumber = (value: unknown, fallback = 0) => {
+  const nextValue = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(nextValue)) return fallback;
+  return Math.max(0, nextValue);
+};
+
+const isProductCategory = (value: unknown): value is ProductCategory =>
+  typeof value === 'string' && PRODUCT_CATEGORIES.includes(value as ProductCategory);
+
+const isProductStatus = (value: unknown): value is Product['status'] => value === 'active' || value === 'inactive';
+
+const clonePricing = (pricing: PriceTier[]): PriceTier[] => pricing.map((item) => ({ ...item }));
+
+const cloneProcessType = (processType: ProductProcessType): ProductProcessType => ({
+  ...processType,
+  pricing: clonePricing(processType.pricing),
+});
+
+const cloneProduct = (product: Product): Product => ({
+  ...product,
+  processTypes: product.processTypes.map(cloneProcessType),
+});
+
+const cloneOrder = (order: Order): Order => ({
+  ...order,
+  logs: order.logs.map((log) => ({ ...log })),
+});
+
+const excludeRemovedOrders = (orders: Order[]) => orders.filter((order) => !REMOVED_ORDER_IDS.has(order.orderId));
+
+const getPushTimeliness = (processType: ProductProcessType, index: number): PushTimeliness => {
+  const tone = getProcessTypeTone(processType.name, processType.estimatedDays);
+
+  if (tone === 'urgent') {
+    return PUSH_TIMELINESS_OPTIONS[index % 2];
+  }
+
+  if (tone === 'priority') {
+    return PUSH_TIMELINESS_OPTIONS[(index % 2) + 1];
+  }
+
+  return PUSH_TIMELINESS_OPTIONS[(index % 2) + 2];
+};
+
+const getPriceByAgentLevel = (pricing: PriceTier[], agentLevel: AgentLevel) =>
+  pricing.find((item) => item.agentLevel === agentLevel)?.price || 0;
+
+const buildProcessTypeWithPricing = (
+  typeId: string,
+  template: {
+    name: string;
+    description: string;
+    weight: number;
+    estimatedDays: number;
+  },
+  getPrice: (agentIndex: number) => number,
+): ProductProcessType => ({
+  typeId,
+  name: template.name,
+  description: template.description,
+  weight: template.weight,
+  estimatedDays: template.estimatedDays,
+  pricing: AGENT_LEVELS.map((agentLevel, agentIndex) => ({
+    agentLevel,
+    price: Math.max(getPrice(agentIndex), 0),
+  })),
+});
+
+const buildSeedProcessTypes = (productIndex: number, productTitle: string): ProductProcessType[] =>
+  getDefaultProcessTypeTemplatesForProduct(productTitle).map((template, processIndex) => {
+    const basePrice = template.defaultPrice ?? 289 + processIndex * 100 + (productIndex % 4) * 20;
+
+    return buildProcessTypeWithPricing(`PT-${productIndex}-${processIndex}`, template, (agentIndex) => basePrice - agentIndex * 30);
+  });
+
+function createProducts(): Product[] {
+  return PRODUCT_SEEDS.map((seed, index) => {
+    const processTypes = buildSeedProcessTypes(index, seed.title);
+
+    return {
+      productId: `MK-${index + 1}`,
+      title: seed.title,
+      category: seed.category,
+      description: `${seed.title}，覆盖多语种与多国家地区场景。`,
+      defaultPrice: processTypes[0]?.pricing[0]?.price || 0,
+      weight: seed.weight,
+      status: seed.status,
+      processTypes,
+      createdAt: randomDate(180),
+      updatedAt: randomDate(30),
+    };
+  });
+}
+
+const normalizePricing = (pricing: unknown, fallbackBasePrice: number): PriceTier[] => {
+  const pricingList = Array.isArray(pricing) ? pricing : [];
+
+  return AGENT_LEVELS.map((agentLevel, index) => {
+    const matchedPricing = pricingList.find((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+      return (item as Partial<PriceTier>).agentLevel === agentLevel;
+    }) as Partial<PriceTier> | undefined;
+
+    return {
+      agentLevel,
+      price: toNonNegativeNumber(matchedPricing?.price, Math.max(fallbackBasePrice - index * 20, 0)),
+    };
+  });
+};
+
+const normalizeProcessType = (value: unknown, productId: string, index: number): ProductProcessType => {
+  const record = value && typeof value === 'object' && !Array.isArray(value) ? (value as Partial<ProductProcessType>) : {};
+  const fallbackName = PROCESS_TYPES[index] || `办理类型 ${index + 1}`;
+  const name = toStringOrFallback(record.name, fallbackName);
+  const estimatedDays = toPositiveInteger(record.estimatedDays, getDefaultEstimatedDays(name));
+  const defaultPrice =
+    normalizePricing(record.pricing, 0).find((pricing) => pricing.agentLevel === 'self')?.price || 0;
+
+  return {
+    typeId: toStringOrFallback(record.typeId, `PT-${productId}-${index + 1}`),
+    name,
+    description: toStringOrFallback(record.description, getDefaultProcessTypeDescription(estimatedDays)),
+    weight: toNonNegativeInteger(record.weight, 0),
+    estimatedDays,
+    pricing: normalizePricing(record.pricing, defaultPrice),
+  };
+};
+
+const matchesPricingPattern = (pricing: PriceTier[], basePrice: number, priceGap: number) =>
+  AGENT_LEVELS.every(
+    (agentLevel, agentIndex) => getPriceByAgentLevel(pricing, agentLevel) === Math.max(basePrice - agentIndex * priceGap, 0),
+  );
+
+const hasDefaultBuiltInMetadata = (processType: ProductProcessType) => {
+  if (!PROCESS_TYPES.includes(processType.name as ProcessType)) {
+    return false;
+  }
+
+  const estimatedDays = getDefaultEstimatedDays(processType.name);
+  return (
+    (processType.weight ?? 0) === 0 &&
+    processType.estimatedDays === estimatedDays &&
+    processType.description.trim() === getDefaultProcessTypeDescription(estimatedDays)
+  );
+};
+
+const isExactBuiltInProfile = (processTypes: ProductProcessType[], expectedNames: string[]) =>
+  processTypes.length === expectedNames.length && expectedNames.every((name, index) => processTypes[index]?.name === name);
+
+const shouldMigrateDefaultProfileProcessTypes = (
+  productTitle: string,
+  processTypes: ProductProcessType[],
+  defaultPrice: number,
+) => {
+  if (!isDefaultProcessTypeProfileProduct(productTitle) || processTypes.length === 0) {
+    return false;
+  }
+
+  const currentBasePrice = getPriceByAgentLevel(processTypes[0]?.pricing || [], 'self') || defaultPrice;
+
+  const matchesLegacyThreeTypeProfile =
+    isExactBuiltInProfile(processTypes, BUILT_IN_PROCESS_TYPE_KEYS) &&
+    processTypes.every(hasDefaultBuiltInMetadata) &&
+    processTypes.every((processType, index) => matchesPricingPattern(processType.pricing, 289 + index * 100, 30));
+
+  const matchesLegacyTwoTypeProfile =
+    isExactBuiltInProfile(processTypes, DEFAULT_STANDARD_PROCESS_TYPE_KEYS) &&
+    processTypes.every(hasDefaultBuiltInMetadata) &&
+    processTypes.every((processType, index) => matchesPricingPattern(processType.pricing, currentBasePrice + index * 80, 20));
+
+  return matchesLegacyThreeTypeProfile || matchesLegacyTwoTypeProfile;
+};
+
+const buildFallbackProcessTypes = (productId: string, productTitle: string, defaultPrice: number): ProductProcessType[] =>
+  getDefaultProcessTypeTemplatesForProduct(productTitle).map((template, index) => {
+    const basePrice = template.defaultPrice ?? defaultPrice + index * 80;
+
+    return buildProcessTypeWithPricing(`PT-${productId}-${index + 1}`, template, (agentIndex) => basePrice - agentIndex * 20);
+  });
+
+const normalizeProcessTypesForProduct = (
+  productTitle: string,
+  productId: string,
+  defaultPrice: number,
+  processTypes: ProductProcessType[],
+): ProductProcessType[] => {
+  const defaultProcessTypeKeys = getDefaultProcessTypeKeysForProduct(productTitle);
+  const hasLegacyBuiltInProfile =
+    processTypes.length === PROCESS_TYPES.length &&
+    PROCESS_TYPES.every((processType) => processTypes.some((item) => item.name === processType)) &&
+    processTypes.every((item) => PROCESS_TYPES.includes(item.name as ProcessType));
+
+  if (shouldMigrateDefaultProfileProcessTypes(productTitle, processTypes, defaultPrice)) {
+    return buildFallbackProcessTypes(productId, productTitle, defaultPrice);
+  }
+
+  if (defaultProcessTypeKeys.length < PROCESS_TYPES.length && hasLegacyBuiltInProfile) {
+    return processTypes
+      .filter((processType): processType is ProductProcessType & { name: ProcessType } =>
+        defaultProcessTypeKeys.includes(processType.name as ProcessType),
+      )
+      .sort(
+        (a, b) =>
+          defaultProcessTypeKeys.indexOf(a.name as ProcessType) - defaultProcessTypeKeys.indexOf(b.name as ProcessType),
+      );
+  }
+
+  if (processTypes.length === 0) {
+    return buildFallbackProcessTypes(productId, productTitle, defaultPrice);
+  }
+
+  return processTypes;
+};
+
+const normalizeProduct = (value: unknown, index: number): Product => {
+  const record = value && typeof value === 'object' && !Array.isArray(value) ? (value as Partial<Product>) : {};
+  const fallbackSeed = PRODUCT_SEEDS[index];
+  const fallbackId = `MK-${index + 1}`;
+  const productId = toStringOrFallback(record.productId, fallbackId);
+  const title = toStringOrFallback(record.title, fallbackSeed?.title || `产品 ${index + 1}`);
+  const category = isProductCategory(record.category) ? record.category : fallbackSeed?.category || 'translation';
+  const weight = toNonNegativeInteger(record.weight, fallbackSeed?.weight ?? 0);
+  const status = isProductStatus(record.status) ? record.status : fallbackSeed?.status || 'inactive';
+  const defaultPrice = toNonNegativeNumber(record.defaultPrice, 299);
+  const rawProcessTypes = Array.isArray(record.processTypes) ? record.processTypes : [];
+  const processTypes = normalizeProcessTypesForProduct(
+    title,
+    productId,
+    defaultPrice,
+    rawProcessTypes.map((processType, processIndex) => normalizeProcessType(processType, productId, processIndex)),
+  );
+
+  return {
+    productId,
+    title,
+    category,
+    description: toStringOrFallback(record.description, `${title}，覆盖多语种与多国家地区场景。`),
+    coverImage: typeof record.coverImage === 'string' && record.coverImage ? record.coverImage : undefined,
+    defaultPrice: toNonNegativeNumber(record.defaultPrice, getPriceByAgentLevel(processTypes[0]?.pricing || [], 'self')),
+    weight,
+    status,
+    processTypes,
+    createdAt: toStringOrFallback(record.createdAt, getCurrentTimestamp()),
+    updatedAt: toStringOrFallback(record.updatedAt, getCurrentTimestamp()),
+  };
+};
+
+const persistProducts = () => {
+  if (!isBrowser()) return;
+  window.localStorage.setItem(PRODUCT_STORAGE_KEY, JSON.stringify(_products));
+};
+
+const persistOrders = () => {
+  if (!isBrowser()) return;
+  window.localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(_orders));
+  window.localStorage.setItem(ORDER_DATA_VERSION_STORAGE_KEY, ORDER_DATA_VERSION);
+};
+
+const loadProducts = (): Product[] => {
+  const defaultProducts = createProducts();
+
+  if (!isBrowser()) {
+    return defaultProducts;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(PRODUCT_STORAGE_KEY);
+    if (!rawValue) {
+      return defaultProducts;
+    }
+
+    const parsedValue = JSON.parse(rawValue) as unknown;
+    if (!Array.isArray(parsedValue)) {
+      return defaultProducts;
+    }
+
+    const normalizedProducts = parsedValue.map((product, index) => normalizeProduct(product, index));
+    window.localStorage.setItem(PRODUCT_STORAGE_KEY, JSON.stringify(normalizedProducts));
+    return normalizedProducts;
+  } catch {
+    return defaultProducts;
+  }
+};
+
+const loadOrders = (products: Product[]): Order[] => {
+  const defaultOrders = excludeRemovedOrders(createOrders(products));
+  const defaultNotaryOrders = defaultOrders.filter((order) => order.productCategory === 'notary');
+  const defaultNonNotaryOrders = defaultOrders.filter((order) => order.productCategory !== 'notary');
+
+  if (!isBrowser()) {
+    return defaultOrders;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(ORDER_STORAGE_KEY);
+    const storedOrderDataVersion = window.localStorage.getItem(ORDER_DATA_VERSION_STORAGE_KEY);
+    if (!rawValue) {
+      window.localStorage.setItem(ORDER_DATA_VERSION_STORAGE_KEY, ORDER_DATA_VERSION);
+      return defaultOrders;
+    }
+
+    const parsedValue = JSON.parse(rawValue) as unknown;
+    if (!Array.isArray(parsedValue)) {
+      return defaultOrders;
+    }
+
+    const storedOrders = excludeRemovedOrders(parsedValue as Order[]);
+    const storedNonNotaryOrders = storedOrders.filter((order) => order.productCategory !== 'notary');
+    const shouldResetNotaryOrders = storedOrderDataVersion !== ORDER_DATA_VERSION;
+    const existingNonNotaryOrderIds = new Set(storedNonNotaryOrders.map((order) => order.orderId));
+    const missingDefaultNonNotaryOrders = defaultNonNotaryOrders.filter(
+      (order) => !existingNonNotaryOrderIds.has(order.orderId),
+    );
+    const mergedOrders = shouldResetNotaryOrders
+      ? [...storedNonNotaryOrders, ...missingDefaultNonNotaryOrders, ...defaultNotaryOrders]
+      : [...storedOrders, ...missingDefaultNonNotaryOrders];
+    window.localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(mergedOrders));
+    window.localStorage.setItem(ORDER_DATA_VERSION_STORAGE_KEY, ORDER_DATA_VERSION);
+    return mergedOrders;
+  } catch {
+    return defaultOrders;
+  }
+};
+
+const findMatchingProcessType = (product: Product, order: Pick<Order, 'processType' | 'processTypeId'>) => {
+  if (order.processTypeId) {
+    const matchedById = product.processTypes.find((processType) => processType.typeId === order.processTypeId);
+    if (matchedById) {
+      return matchedById;
+    }
+  }
+
+  return product.processTypes.find((processType) => processType.name === order.processType) || product.processTypes[0];
+};
+
+const syncOrderWithProduct = (order: Order, productsById: Map<string, Product>): Order => {
+  const product = productsById.get(order.productId);
+  if (!product) {
+    return order;
+  }
+
+  const matchedProcessType = findMatchingProcessType(product, order);
+
+  return {
+    ...order,
+    productName: product.category === 'notary' ? order.productName : product.title,
+    productCategory: product.category,
+    processType: matchedProcessType?.name || order.processType,
+    processTypeId: matchedProcessType?.typeId || order.processTypeId,
+  };
+};
+
+const syncOrdersWithProducts = () => {
+  const productsById = new Map(_products.map((product) => [product.productId, product] as const));
+  _orders = _orders.map((order) => syncOrderWithProduct(order, productsById));
+};
+
+function createOrders(products: Product[]): Order[] {
+  if (products.length === 0) {
+    return [];
+  }
+
+  const orders: Order[] = [];
+  const translationProductOrderCounts = new Map<string, number>();
+  const standardProducts = products.filter((product) => product.category !== 'notary' && product.processTypes.length > 0);
+
+  for (let index = 0; index < 56 && standardProducts.length > 0; index += 1) {
+    const product = standardProducts[index % standardProducts.length];
+    const productOrderCount = translationProductOrderCounts.get(product.productId) || 0;
+    const processType = product.processTypes[productOrderCount % product.processTypes.length] || product.processTypes[0];
+    translationProductOrderCounts.set(product.productId, productOrderCount + 1);
+    const pushTimeliness = getPushTimeliness(processType, index);
+    const status = STATUSES[index % STATUSES.length];
+    const channel = CHANNELS[index % 4];
+    const agentLevel = AGENT_LEVELS[index % 4];
+    const customerName = NAMES[index % NAMES.length];
+    const createdAt = randomDate(60);
+    const updatedAt = randomDate(10);
+    const shippedAt = status === 'shipped' || status === 'completed' ? updatedAt : undefined;
+
+    const logs = [{ time: createdAt, operator: '系统', action: '订单创建' }];
+
+    if (status !== 'pending_review') {
+      logs.push({ time: randomDate(30), operator: '运营-小王', action: '审核通过' });
+    }
+    if (status === 'shipped' || status === 'completed') {
+      logs.push({ time: randomDate(15), operator: '运营-小张', action: `录入物流单号 SF${1000000000 + index}` });
+    }
+    if (status === 'completed') {
+      logs.push({ time: randomDate(5), operator: '系统', action: '确认签收，订单完成' });
+    }
+    if (status === 'cancelled') {
+      logs.push({ time: randomDate(30), operator: '运营-小李', action: '审核拒绝：资料不完整' });
+    }
+
+    const lockedPrice =
+      processType?.pricing.find((item) => item.agentLevel === agentLevel)?.price ||
+      product.processTypes[index % product.processTypes.length]?.pricing.find((item) => item.agentLevel === agentLevel)?.price ||
+      299;
+
+    const orderProductName = product.category === 'notary' ? NOTARY_ORDER_NAMES[index % NOTARY_ORDER_NAMES.length] : product.title;
+
+    orders.push({
+      orderId: `MK${String(2026).substring(2)}${String(index + 1).padStart(5, '0')}`,
+      customerName,
+      customerPhone: PHONES[index % PHONES.length],
+      customerPassport: PASSPORTS[index % PASSPORTS.length],
+      customerEmail: `user${index + 1}@example.com`,
+      productId: product.productId,
+      productName: orderProductName,
+      productCategory: product.category,
+      processType: processType?.name || '',
+      processTypeId: processType?.typeId,
+      pushTimeliness,
+      channel,
+      agentLevel,
+      lockedPrice,
+      status,
+      deliveryAddress: ADDRESSES[index % ADDRESSES.length],
+      logisticsCompany: status === 'shipped' || status === 'completed' ? '顺丰速运' : '',
+      trackingNumber: status === 'shipped' || status === 'completed' ? `SF${1000000000 + index}` : '',
+      remark: '',
+      licenseName: product.category === 'notary' ? customerName : undefined,
+      licenseNo: product.category === 'notary' ? `D${10000000 + index}` : undefined,
+      licenseCategory: product.category === 'notary' ? (index % 2 === 0 ? 'C1' : 'A1') : undefined,
+      language: product.category === 'notary' ? ['英语', '法语', '德语', '日语'][index % 4] : undefined,
+      createdAt,
+      updatedAt,
+      shippedAt,
+      logs,
+    });
+  }
+
+  const notaryProduct = products.find((product) => product.category === 'notary') || products[0];
+  for (let index = 0; index < NOTARY_PENDING_REVIEW_ORDER_COUNT && notaryProduct.processTypes.length > 0; index += 1) {
+    const processType = notaryProduct.processTypes[index % notaryProduct.processTypes.length] || notaryProduct.processTypes[0];
+    const pushTimeliness = getPushTimeliness(processType, index + orders.length);
+    const customerName = NAMES[orders.length % NAMES.length];
+    const createdAt = randomDate(10);
+    const orderNum = orders.length + 1;
+    const logs = [{ time: createdAt, operator: '系统', action: '订单批量创建' }];
+
+    orders.push({
+      orderId: `MK${String(2026).substring(2)}${String(orderNum).padStart(5, '0')}`,
+      customerName,
+      customerPhone: PHONES[index % PHONES.length],
+      customerPassport: PASSPORTS[index % PASSPORTS.length],
+      customerEmail: `notary${orderNum}@example.com`,
+      productId: notaryProduct.productId,
+      productName: NOTARY_ORDER_NAMES[index % NOTARY_ORDER_NAMES.length],
+      productCategory: 'notary',
+      processType: processType.name,
+      processTypeId: processType.typeId,
+      pushTimeliness,
+      channel: CHANNELS[index % 4],
+      agentLevel: AGENT_LEVELS[index % 4],
+      lockedPrice: 299,
+      status: 'pending_review',
+      deliveryAddress: ADDRESSES[index % ADDRESSES.length],
+      logisticsCompany: '',
+      trackingNumber: '',
+      remark: '批量生成测试订单',
+      licenseName: customerName,
+      licenseNo: `D${20000000 + index}`,
+      licenseCategory: index % 2 === 0 ? 'C1' : 'C2',
+      language: ['英语', '法语', '德语', '日语'][index % 4],
+      createdAt,
+      updatedAt: createdAt,
+      shippedAt: undefined,
+      logs,
+    });
+  }
+
+  const idpProducts = products.filter((product) => product.category === 'idp' && product.processTypes.length > 0);
+
+  for (let index = 0; index < EXTRA_IDP_PENDING_ORDER_COUNT && idpProducts.length > 0; index += 1) {
+    const product = idpProducts[index % idpProducts.length];
+    const processType = product.processTypes[index % product.processTypes.length] || product.processTypes[0];
+
+    if (!processType) {
+      continue;
+    }
+
+    const orderNum = orders.length + 1;
+    const seed = orderNum - 1;
+    const createdAt = randomDate(7);
+    const customerName = NAMES[seed % NAMES.length];
+    const agentLevel = AGENT_LEVELS[seed % AGENT_LEVELS.length];
+    const lockedPrice =
+      processType.pricing.find((item) => item.agentLevel === agentLevel)?.price ||
+      product.processTypes[index % product.processTypes.length]?.pricing.find((item) => item.agentLevel === agentLevel)?.price ||
+      299;
+
+    orders.push({
+      orderId: `MK${String(2026).substring(2)}${String(orderNum).padStart(5, '0')}`,
+      customerName,
+      customerPhone: PHONES[seed % PHONES.length],
+      customerPassport: PASSPORTS[seed % PASSPORTS.length],
+      customerEmail: `idp${orderNum}@example.com`,
+      productId: product.productId,
+      productName: product.title,
+      productCategory: 'idp',
+      processType: processType.name,
+      processTypeId: processType.typeId,
+      pushTimeliness: getPushTimeliness(processType, seed),
+      channel: CHANNELS[seed % CHANNELS.length],
+      agentLevel,
+      lockedPrice,
+      status: 'pending_review',
+      deliveryAddress: ADDRESSES[seed % ADDRESSES.length],
+      logisticsCompany: '',
+      trackingNumber: '',
+      remark: 'IDP待审核补充数据',
+      createdAt,
+      updatedAt: createdAt,
+      shippedAt: undefined,
+      logs: [{ time: createdAt, operator: '系统', action: '订单创建' }],
+    });
+  }
+
+  return orders;
+}
+
+let _products = loadProducts();
+let _orders = loadOrders(_products);
+
+export function getOrders() {
+  syncOrdersWithProducts();
+  return _orders.map(cloneOrder);
+}
+
+export function getOrderById(id: string) {
+  syncOrdersWithProducts();
+  const order = _orders.find((item) => item.orderId === id);
+  return order ? cloneOrder(order) : undefined;
+}
+
+export function updateOrder(id: string, updates: Partial<Order>) {
+  _orders = _orders.map((order) => {
+    if (order.orderId !== id) {
+      return order;
+    }
+
+    const isShippingTransition = order.status === 'in_production' && updates.status === 'shipped';
+    if (!isShippingTransition || updates.shippedAt) {
+      return { ...order, ...updates };
+    }
+
+    const shippedTime = getCurrentTimestamp();
+    return {
+      ...order,
+      ...updates,
+      shippedAt: shippedTime,
+      updatedAt: updates.updatedAt || shippedTime,
+    };
+  });
+  persistOrders();
+}
+
+export function getProducts() {
+  return _products.map(cloneProduct);
+}
+
+export function getProductById(id: string) {
+  const product = _products.find((item) => item.productId === id);
+  return product ? cloneProduct(product) : undefined;
+}
+
+export function updateProduct(id: string, updates: Partial<Product>) {
+  _products = _products.map((product) => (product.productId === id ? normalizeProduct({ ...product, ...updates }, 0) : product));
+  syncOrdersWithProducts();
+  persistProducts();
+  persistOrders();
+}
+
+export function addProduct(product: Product) {
+  _products = [..._products, normalizeProduct(product, _products.length)];
+  syncOrdersWithProducts();
+  persistProducts();
+  persistOrders();
+}
+
+export function deleteProduct(id: string) {
+  _products = _products.filter((product) => product.productId !== id);
+  syncOrdersWithProducts();
+  persistProducts();
+  persistOrders();
+}
+
+export function getNextProductId() {
+  const maxId = _products.reduce((max, product) => {
+    const num = parseInt(product.productId.split('-')[1] || '0', 10);
+    return Math.max(max, num);
+  }, 0);
+
+  return `MK-${maxId + 1}`;
+}

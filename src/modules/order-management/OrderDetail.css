@@ -1,0 +1,1102 @@
+.order-audit-page {
+  background:
+    linear-gradient(180deg, rgba(226, 239, 255, 0.68) 0, rgba(245, 246, 250, 0) 240px),
+    var(--color-bg-body);
+}
+
+.order-audit-topbar {
+  width: 100%;
+}
+
+.order-audit-topbar__heading {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.order-audit-topbar__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.order-audit-topbar__return-btn {
+  min-height: 38px;
+  padding: 0 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.notary-order-management-preview .order-audit-topbar__action-btn {
+  min-width: 132px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.12);
+}
+
+.notary-order-management-preview .order-audit-topbar__action-btn:hover {
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.notary-order-management-preview .order-audit-topbar__action-btn--power {
+  background: linear-gradient(180deg, #f59e0b 0%, #ea580c 100%);
+}
+
+.notary-order-management-preview .order-audit-topbar__action-btn--power:hover {
+  background: linear-gradient(180deg, #fbbf24 0%, #f97316 100%);
+  box-shadow: 0 14px 28px rgba(234, 88, 12, 0.28);
+}
+
+.notary-order-management-preview .order-audit-topbar__action-btn--foreign-affairs {
+  background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
+}
+
+.notary-order-management-preview .order-audit-topbar__action-btn--foreign-affairs:hover {
+  background: linear-gradient(180deg, #4ade80 0%, #16a34a 100%);
+  box-shadow: 0 14px 28px rgba(21, 128, 61, 0.24);
+}
+
+.notary-order-management-preview .order-audit-topbar__action-btn--beibu-gulf {
+  background: linear-gradient(180deg, #14b8a6 0%, #0f766e 100%);
+}
+
+.notary-order-management-preview .order-audit-topbar__action-btn--beibu-gulf:hover {
+  background: linear-gradient(180deg, #2dd4bf 0%, #0f766e 100%);
+  box-shadow: 0 14px 28px rgba(15, 118, 110, 0.24);
+}
+
+.notary-order-management-preview .order-audit-topbar__action-btn--images {
+  background: linear-gradient(180deg, #38bdf8 0%, #0ea5e9 100%);
+}
+
+.notary-order-management-preview .order-audit-topbar__action-btn--images:hover {
+  background: linear-gradient(180deg, #67e8f9 0%, #38bdf8 100%);
+  box-shadow: 0 14px 28px rgba(14, 165, 233, 0.24);
+}
+
+.notary-order-management-preview .order-audit-topbar__action-btn--return {
+  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+}
+
+.notary-order-management-preview .order-audit-topbar__action-btn--return:hover {
+  background: linear-gradient(180deg, #60a5fa 0%, #3b82f6 100%);
+  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.24);
+}
+
+.notary-order-management-preview .order-audit-topbar__action-btn:disabled {
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.order-audit-topbar__back {
+  border: none;
+  background: transparent;
+  color: var(--color-primary);
+  font-size: var(--font-size-sm);
+  padding: 0;
+}
+
+.order-audit-topbar__back:hover {
+  color: var(--color-primary-hover);
+}
+
+.order-audit-layout {
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 268px;
+  gap: 14px;
+  align-items: start;
+}
+
+.order-audit-layout--single-column {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.order-audit-main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.order-detail-view-topbar-wrap {
+  padding-bottom: 8px;
+  padding-inline: 0;
+}
+
+.order-detail-view-topbar {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+.order-detail-view-topbar .order-audit-topbar__heading {
+  min-height: 60px;
+  padding: 0 16px;
+  border: 1px solid #e6edf5;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 6px 18px rgba(148, 163, 184, 0.12);
+}
+
+.order-detail-view-page {
+  padding-top: 12px;
+}
+
+.order-detail-view-layout {
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.order-detail-view-card {
+  overflow: hidden;
+  border-color: #e6edf5;
+  box-shadow: 0 6px 18px rgba(148, 163, 184, 0.12);
+}
+
+.order-detail-view-card__header {
+  min-height: 58px;
+  padding: 0 18px;
+  border-bottom: 1px solid #eef2f6;
+}
+
+.order-detail-view-card__body {
+  padding: 38px 18px 46px;
+}
+
+.order-detail-view-grid {
+  display: grid;
+  gap: 34px 120px;
+}
+
+.order-detail-view-grid--delivery {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-height: 108px;
+}
+
+.order-detail-view-grid--product {
+  grid-template-columns: minmax(0, 420px);
+}
+
+.order-detail-view-field {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  align-items: start;
+  gap: 28px;
+}
+
+.order-detail-view-field--full {
+  grid-column: 1 / -1;
+}
+
+.order-detail-view-field__label {
+  color: #334155;
+  font-size: 14px;
+  line-height: 1.9;
+}
+
+.order-detail-view-field__value {
+  min-width: 0;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.9;
+  word-break: break-word;
+}
+
+.order-audit-card,
+.order-audit-image-card {
+  border-color: #dfe7f1;
+  box-shadow: 0 10px 24px rgba(148, 163, 184, 0.15);
+}
+
+.order-audit-card__header {
+  min-height: 40px;
+  padding: 0 16px;
+}
+
+.order-audit-card__title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.order-audit-editing-tip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.order-audit-card__body {
+  padding: 18px 16px 20px;
+}
+
+.order-audit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 40px;
+}
+
+.order-audit-grid--idp-personal .order-audit-field,
+.order-audit-grid--idp-personal .order-audit-field--full {
+  grid-template-columns: 116px minmax(0, 1fr);
+}
+
+.order-audit-field {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+}
+
+.order-audit-field--full {
+  grid-column: 1 / -1;
+}
+
+.order-audit-field--wide-label {
+  grid-template-columns: 138px minmax(0, 1fr);
+}
+
+.order-audit-field__label {
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.order-audit-field__label--nowrap {
+  white-space: nowrap;
+}
+
+.order-audit-field__value {
+  min-width: 0;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.8;
+  word-break: break-word;
+}
+
+.order-audit-field__editor {
+  width: 100%;
+}
+
+.order-audit-field__editor--textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.notary-review-card {
+  border-color: #d9e4f0;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.notary-review-card .order-audit-card__header {
+  min-height: 56px;
+  padding: 0 18px;
+  border-bottom: 1px solid #edf2f7;
+  background: #ffffff;
+}
+
+.notary-review-card .order-audit-card__title {
+  font-size: 16px;
+}
+
+.notary-review-card .order-audit-card__body {
+  padding: 34px 20px 36px;
+}
+
+.notary-review-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px 118px;
+}
+
+.notary-review-grid--license {
+  gap: 26px 118px;
+}
+
+.notary-review-field {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  align-items: start;
+  gap: 18px;
+}
+
+.notary-review-field--full {
+  grid-column: 1 / -1;
+}
+
+.notary-review-field--wide-label {
+  grid-template-columns: 154px minmax(0, 1fr);
+}
+
+.notary-review-field__label {
+  color: #55657d;
+  font-size: 14px;
+  line-height: 2;
+}
+
+.notary-review-field__label--nowrap {
+  white-space: nowrap;
+}
+
+.notary-review-field__value {
+  min-width: 0;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 2;
+  word-break: break-word;
+}
+
+.notary-review-field__value .order-audit-field__editor {
+  max-width: 360px;
+}
+
+.notary-review-field--full .order-audit-field__editor {
+  max-width: none;
+}
+
+.notary-review-field__value .order-audit-field__editor--textarea {
+  min-height: 92px;
+}
+
+.notary-review-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 2;
+}
+
+.notary-review-status--pending_review {
+  color: #a16207;
+}
+
+.notary-review-status--pending_production,
+.notary-review-status--in_production {
+  color: #1d4ed8;
+}
+
+.notary-review-status--shipped,
+.notary-review-status--completed {
+  color: #047857;
+}
+
+.notary-review-status--cancelled,
+.notary-review-status--rejected {
+  color: #b91c1c;
+}
+
+.klook-review-card {
+  border-color: #d8e2ee;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.klook-review-card .order-audit-card__header {
+  min-height: 46px;
+  padding: 0 16px;
+  border-bottom: 1px solid #edf2f7;
+  background: #ffffff;
+}
+
+.klook-review-card .order-audit-card__body {
+  padding: 22px 18px 24px;
+}
+
+.klook-review-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 26px 92px;
+}
+
+.klook-review-grid--license {
+  gap: 24px 92px;
+}
+
+.klook-review-field {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 98px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+
+.klook-review-field--full {
+  grid-column: 1 / -1;
+}
+
+.klook-review-field--wide-label {
+  grid-template-columns: 138px minmax(0, 1fr);
+}
+
+.klook-review-field__label {
+  color: #51627b;
+  font-size: 14px;
+  line-height: 1.9;
+}
+
+.klook-review-field__label--nowrap {
+  white-space: nowrap;
+}
+
+.klook-review-field__value {
+  min-width: 0;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.9;
+  word-break: break-word;
+}
+
+.klook-review-field__value .order-audit-field__editor {
+  max-width: 320px;
+}
+
+.klook-review-field--full .order-audit-field__editor {
+  max-width: none;
+}
+
+.klook-review-field__value .order-audit-field__editor--textarea {
+  min-height: 92px;
+}
+
+.klook-review-card .order-audit-status-tag {
+  min-height: 24px;
+  padding-inline: 12px;
+  border-radius: 999px;
+  box-shadow: none;
+}
+
+.order-audit-status-tag {
+  min-height: 24px;
+  padding-inline: 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.order-audit-status-tag.tag--pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.order-audit-status-tag.tag--processing {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.order-audit-status-tag.tag--cancelled,
+.order-audit-status-tag.tag--rejected {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.order-audit-image-card {
+  position: sticky;
+  top: 72px;
+  overflow: hidden;
+}
+
+.order-audit-image-card.order-audit-image-card--inline {
+  position: static;
+  overflow: hidden;
+  order: 0;
+}
+
+.order-audit-image-card.order-audit-image-card--hidden {
+  display: none;
+}
+
+.order-audit-image-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  padding: 14px;
+}
+
+.order-audit-image-grid--four-up {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.notary-order-management-preview .order-audit-image-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.order-audit-image-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.order-audit-image-slot__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.order-audit-image-slot__meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.order-audit-image-slot__label {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.order-audit-image-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid #86efac;
+  border-radius: 999px;
+  background: #f0fdf4;
+  color: #166534;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.order-audit-image-upload-btn:hover {
+  border-color: #4ade80;
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.order-audit-image-upload-input {
+  display: none;
+}
+
+.order-audit-image-frame {
+  min-height: 134px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.92) 0%, rgba(255, 255, 255, 0.98) 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.order-audit-image-slot--empty .order-audit-image-frame {
+  border-style: dashed;
+  border-color: #cbd5e1;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.88) 0%, rgba(241, 245, 249, 0.96) 100%);
+}
+
+.order-audit-image-trigger {
+  width: 100%;
+  height: 100%;
+  min-height: 134px;
+  border: none;
+  border-radius: inherit;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  cursor: zoom-in;
+  transition: background-color var(--transition-fast);
+}
+
+.order-audit-image-trigger:hover {
+  background: rgba(15, 23, 42, 0.03);
+}
+
+.order-audit-image-trigger:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: -2px;
+}
+
+.order-audit-image {
+  width: 100%;
+  height: 100%;
+  max-height: 180px;
+  object-fit: contain;
+  border-radius: 2px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+}
+
+.order-audit-image-placeholder {
+  min-height: 134px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px;
+  text-align: center;
+}
+
+.order-audit-image-placeholder strong {
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.order-audit-image-placeholder span {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.order-audit-image-modal {
+  width: min(92vw, 1080px);
+  max-height: 92vh;
+  background: #ffffff;
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
+  overflow: hidden;
+}
+
+.order-audit-image-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.order-audit-image-modal__title {
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.order-audit-image-modal__body {
+  padding: 18px;
+  max-height: calc(92vh - 72px);
+  overflow: auto;
+  background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+}
+
+/* ── 审核通过：选择推送公证处弹窗 ── */
+.approve-notary-modal {
+  width: min(92vw, 560px);
+}
+
+.approve-notary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.approve-notary-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: border-color 0.18s, background 0.18s, box-shadow 0.18s;
+  position: relative;
+  user-select: none;
+}
+
+.approve-notary-item:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  box-shadow: 0 2px 10px rgba(59, 130, 246, 0.08);
+}
+
+.approve-notary-item--selected {
+  border-color: #3b82f6;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.14);
+}
+
+.approve-notary-item__radio {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.approve-notary-item__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.approve-notary-item__name {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.approve-notary-item--selected .approve-notary-item__name {
+  color: #1d4ed8;
+}
+
+.approve-notary-item__district {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.approve-notary-item--selected .approve-notary-item__district {
+  color: #3b82f6;
+}
+
+.approve-notary-item__check {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #3b82f6;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.32);
+}
+
+.order-audit-image-modal__image {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.14);
+}
+
+.order-audit-card--warning {
+  border-color: #fecaca;
+  background: linear-gradient(180deg, rgba(254, 242, 242, 0.7) 0%, rgba(255, 255, 255, 1) 100%);
+}
+
+.order-audit-warning-text {
+  color: #991b1b;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.order-audit-logistics__button {
+  min-height: 36px;
+  padding-inline: 16px;
+  border-radius: 10px;
+}
+
+.order-audit-logistics__button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.order-audit-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 90;
+  border-top: 1px solid #dfe7f1;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.order-audit-footer__inner {
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.order-audit-footer__meta {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.order-audit-footer__meta span {
+  white-space: nowrap;
+}
+
+.order-audit-footer__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.order-audit-footer__actions .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.order-audit-modal__hint {
+  margin-bottom: 14px;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.order-audit-empty-card {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+@media (max-width: 1280px) {
+  .order-audit-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .order-audit-image-card {
+    position: static;
+    order: -1;
+  }
+
+  .order-audit-layout--single-column .order-audit-image-card {
+    order: 0;
+  }
+
+  .notary-order-management-preview .order-audit-image-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .order-audit-image-grid--four-up {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 960px) {
+  .order-detail-view-grid--delivery {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .order-detail-view-field,
+  .order-detail-view-field--full {
+    grid-template-columns: 96px minmax(0, 1fr);
+    grid-column: auto;
+    gap: 18px;
+  }
+
+  .order-audit-footer__inner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .order-audit-footer__actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .order-audit-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .notary-review-grid {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .klook-review-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .order-audit-field,
+  .order-audit-field--full {
+    grid-template-columns: 92px minmax(0, 1fr);
+    grid-column: auto;
+  }
+
+  .order-audit-field--wide-label {
+    grid-template-columns: 138px minmax(0, 1fr);
+  }
+
+  .notary-review-field,
+  .notary-review-field--full {
+    grid-template-columns: 118px minmax(0, 1fr);
+    grid-column: auto;
+  }
+
+  .notary-review-field--wide-label {
+    grid-template-columns: 154px minmax(0, 1fr);
+  }
+
+  .klook-review-field,
+  .klook-review-field--full {
+    grid-template-columns: 104px minmax(0, 1fr);
+    grid-column: auto;
+  }
+
+  .klook-review-field--wide-label {
+    grid-template-columns: 138px minmax(0, 1fr);
+  }
+
+  .order-audit-grid--idp-personal .order-audit-field,
+  .order-audit-grid--idp-personal .order-audit-field--full {
+    grid-template-columns: 104px minmax(0, 1fr);
+  }
+
+  .order-audit-image-grid--four-up {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .order-detail-view-topbar .order-audit-topbar__heading {
+    padding: 12px 14px;
+  }
+
+  .order-detail-view-card__header {
+    padding: 0 14px;
+  }
+
+  .order-detail-view-card__body {
+    padding: 24px 14px 28px;
+  }
+
+  .order-detail-view-field {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .order-audit-topbar__heading {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .order-audit-topbar__actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .order-audit-image-grid--four-up {
+    grid-template-columns: 1fr;
+  }
+
+  .notary-order-management-preview .order-audit-topbar__action-btn {
+    min-width: 120px;
+  }
+
+  .order-audit-page {
+    padding: 16px;
+  }
+
+  .order-audit-card__header {
+    padding: 0 14px;
+  }
+
+  .order-audit-card__body {
+    padding: 16px 14px 18px;
+  }
+
+  .notary-review-card .order-audit-card__body {
+    padding: 22px 14px 24px;
+  }
+
+  .klook-review-card .order-audit-card__body {
+    padding: 16px 14px 18px;
+  }
+
+  .order-audit-field {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .notary-review-field,
+  .notary-review-field--full {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .klook-review-field,
+  .klook-review-field--full {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .order-audit-footer {
+    position: static;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+
+  .order-audit-footer__inner {
+    padding: 16px;
+  }
+
+  .order-audit-footer__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .order-audit-footer__actions .btn {
+    width: 100%;
+  }
+
+  .order-audit-image-modal {
+    width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px);
+    border-radius: 14px;
+  }
+
+  .notary-order-management-preview .order-audit-image-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .order-audit-image-modal__header {
+    padding: 14px 16px;
+  }
+
+  .order-audit-image-modal__body {
+    padding: 12px;
+    max-height: calc(100vh - 88px);
+  }
+}

@@ -1,0 +1,428 @@
+.klook-page {
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0, rgba(245, 247, 250, 0) 180px),
+    #f6f8fb;
+}
+
+.klook-page__shell {
+  gap: 20px;
+}
+
+.klook-filter-card,
+.klook-table-card {
+  border-radius: 20px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.05);
+}
+
+.klook-filter-card {
+  padding: 24px;
+}
+
+.klook-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.klook-field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.klook-field__label {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.klook-field .form-input,
+.klook-field .form-select {
+  width: 100%;
+  height: 42px;
+  border-radius: 12px;
+  border-color: #d7dfeb;
+  background-color: #ffffff;
+  font-size: 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.klook-field .form-input::placeholder {
+  color: #a3afbf;
+}
+
+.klook-field .form-input:focus,
+.klook-field .form-select:focus {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.16);
+}
+
+.klook-field--agent,
+.klook-field--product,
+.klook-field--process,
+.klook-field--keyword {
+  grid-column: span 3;
+}
+
+.klook-field--date {
+  grid-column: span 6;
+}
+
+.klook-date-range {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.klook-date-range__divider {
+  color: #64748b;
+  font-size: 13px;
+  text-align: center;
+}
+
+.klook-filter-actions {
+  grid-column: 7 / -1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.klook-filter-actions .btn {
+  min-width: 72px;
+  height: 42px;
+  padding: 0 18px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.klook-filter-actions .btn--primary {
+  background: linear-gradient(135deg, #2563eb 0%, #1677ff 100%);
+  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.18);
+}
+
+.klook-filter-actions .btn--primary:hover {
+  background: linear-gradient(135deg, #1d4ed8 0%, #0958d9 100%);
+}
+
+.klook-table-card {
+  overflow: hidden;
+}
+
+.klook-table-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.klook-status-tabs {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.klook-status-tabs__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.klook-status-tabs__item:hover {
+  background: rgba(15, 23, 42, 0.04);
+  color: #0f172a;
+}
+
+.klook-status-tabs__item--active {
+  background: rgba(37, 99, 235, 0.1);
+  border-color: rgba(96, 165, 250, 0.25);
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.klook-status-tabs__count {
+  min-width: 18px;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.klook-status-tabs__item--active .klook-status-tabs__count {
+  color: #1d4ed8;
+}
+
+.klook-order-table {
+  min-width: 1240px;
+}
+
+.klook-order-table thead {
+  background: linear-gradient(180deg, #fbfcfe 0%, #f8fafc 100%);
+}
+
+.klook-order-table th {
+  padding-top: 16px;
+  padding-bottom: 16px;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 400;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.88);
+}
+
+.klook-order-table td {
+  padding-top: 22px;
+  padding-bottom: 22px;
+  vertical-align: middle;
+  border-bottom-color: rgba(226, 232, 240, 0.72);
+}
+
+.klook-order-table tbody tr:hover td {
+  background: rgba(59, 130, 246, 0.03);
+}
+
+.klook-order-id-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.klook-order-id {
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.klook-process-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #475569;
+  font-size: 13px;
+}
+
+.klook-process-type__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #94a3b8;
+  flex: 0 0 auto;
+}
+
+.klook-process-type--normal {
+  color: #475569;
+}
+
+.klook-process-type--normal .klook-process-type__dot {
+  background: #94a3b8;
+}
+
+.klook-process-type--priority {
+  color: #1677ff;
+}
+
+.klook-process-type--priority .klook-process-type__dot {
+  background: #1677ff;
+}
+
+.klook-process-type--urgent {
+  color: #ef4444;
+}
+
+.klook-process-type--urgent .klook-process-type__dot {
+  background: #ef4444;
+}
+
+.klook-order-status-cell {
+  justify-content: center;
+  min-height: 52px;
+}
+
+.klook-status-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.klook-status-tag--pending-review {
+  background: #fff7e8;
+  border-color: #f6c36f;
+  color: #d97706;
+}
+
+.klook-status-tag--pending-production {
+  background: #edf5ff;
+  border-color: #9ec5fe;
+  color: #1677ff;
+}
+
+.klook-status-tag--shipped {
+  background: #ecfdf3;
+  border-color: #86efac;
+  color: #16a34a;
+}
+
+.klook-status-tag--cancelled {
+  background: #f8fafc;
+  border-color: #dbe4ee;
+  color: #64748b;
+}
+
+.klook-record {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  line-height: 1.6;
+}
+
+.klook-record__label {
+  color: #334155;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.klook-record__time {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.klook-record__empty {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.klook-table-card__pagination {
+  padding: 0 24px;
+}
+
+.klook-order-table .order-cell-primary,
+.klook-order-table .order-cell-value,
+.klook-order-table .order-time-cell,
+.klook-order-table .order-license-badge,
+.klook-order-table .order-text-action {
+  font-weight: 400;
+}
+
+.klook-order-actions-cell {
+  white-space: nowrap;
+}
+
+.klook-order-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.klook-order-actions .order-text-action {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+@media (max-width: 1260px) {
+  .klook-table-card__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .klook-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .klook-field--agent,
+  .klook-field--product,
+  .klook-field--process,
+  .klook-field--keyword,
+  .klook-field--date,
+  .klook-filter-actions {
+    grid-column: span 2;
+  }
+
+  .klook-filter-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 768px) {
+  .klook-page__shell {
+    gap: 16px;
+  }
+
+  .klook-filter-card {
+    padding: 18px;
+  }
+
+  .klook-filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .klook-field--agent,
+  .klook-field--product,
+  .klook-field--process,
+  .klook-field--keyword,
+  .klook-field--date,
+  .klook-filter-actions {
+    grid-column: span 1;
+  }
+
+  .klook-date-range {
+    grid-template-columns: 1fr;
+  }
+
+  .klook-date-range__divider {
+    display: none;
+  }
+
+  .klook-filter-actions {
+    flex-wrap: wrap;
+  }
+
+  .klook-filter-actions .btn {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .klook-order-actions-cell {
+    white-space: normal;
+  }
+
+  .klook-order-actions {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .klook-table-card__header,
+  .klook-table-card__pagination {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
