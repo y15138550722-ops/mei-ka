@@ -7,7 +7,7 @@ import { useTranslation } from '../../shared/i18n/config';
 import { getProductById, updateProduct, addProduct, getNextProductId } from '../../services/mockDataService';
 import FormPageShell, { FormSection } from '../../shared/components/form/FormPageShell';
 import type { ProductCategory, AgentLevel, ProductProcessType } from '../../shared/types';
-import { getDefaultProcessTypeTemplatesForProduct, getProductProcessTypeLabel } from '../../shared/utils/productProcessType';
+import { getProductProcessTypeLabel } from '../../shared/utils/productProcessType';
 
 const AGENT_LEVELS: AgentLevel[] = ['self', 'l1', 'l2', 'l3'];
 const getDefaultProcessTypeDescription = (estimatedDays: number) => `${estimatedDays}个工作日`;
@@ -32,21 +32,7 @@ const ProductForm: React.FC = () => {
     existingProduct?.processTypes.map((processType) => ({
       ...processType,
       description: processType.description || getDefaultProcessTypeDescription(processType.estimatedDays),
-    })) ||
-    getDefaultProcessTypeTemplatesForProduct(existingProduct?.title).map((template, i) => {
-      const basePrice = template.defaultPrice ?? 0;
-      return {
-        typeId: `PT-new-${i}`,
-        name: template.name,
-        description: template.description || getDefaultProcessTypeDescription(template.estimatedDays),
-        weight: template.weight,
-        estimatedDays: template.estimatedDays,
-        pricing: AGENT_LEVELS.map((agentLevel, index) => ({
-          agentLevel,
-          price: Math.max(basePrice - index * 20, 0),
-        })),
-      };
-    });
+    })) || [];
   const [processTypes, setProcessTypes] = useState<ProductProcessType[]>(defaultProcessTypes);
 
   // ── Toast ──
@@ -83,8 +69,8 @@ const ProductForm: React.FC = () => {
       showToast('error', t('product.toast.incompleteFields'));
       return;
     }
-    const hasPricing = processTypes.some(pt => pt.pricing.some(p => p.price > 0));
-    if (!hasPricing) {
+    const hasInvalidPricing = processTypes.some(pt => !pt.pricing.some(p => p.price > 0));
+    if (hasInvalidPricing) {
       showToast('error', t('product.toast.incompleteFields'));
       return;
     }
@@ -152,21 +138,29 @@ const ProductForm: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {processTypes.map((pt, i) => (
-                <tr key={pt.typeId}>
-                  <td style={{ fontWeight: 500 }}>{getProductProcessTypeLabel(pt.name, t)}</td>
-                  <td>
-                    <input
-                      className="form-input"
-                      type="number"
-                      min={1}
-                      value={pt.estimatedDays}
-                      onChange={e => updateEstimatedDays(i, parseInt(e.target.value) || 1)}
-                      style={{ width: '80px' }}
-                    />
+              {processTypes.length === 0 ? (
+                <tr>
+                  <td colSpan={2} className="empty-state">
+                    暂无办理类型，保存产品后请在办理类型管理中新增。
                   </td>
                 </tr>
-              ))}
+              ) : (
+                processTypes.map((pt, i) => (
+                  <tr key={pt.typeId}>
+                    <td style={{ fontWeight: 500 }}>{getProductProcessTypeLabel(pt.name, t)}</td>
+                    <td>
+                      <input
+                        className="form-input"
+                        type="number"
+                        min={1}
+                        value={pt.estimatedDays}
+                        onChange={e => updateEstimatedDays(i, parseInt(e.target.value) || 1)}
+                        style={{ width: '80px' }}
+                      />
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -187,26 +181,34 @@ const ProductForm: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {processTypes.map((pt, ptIdx) => (
-                <tr key={pt.typeId}>
-                  <td style={{ fontWeight: 600, textAlign: 'left', background: 'var(--color-bg-body)' }}>
-                    {getProductProcessTypeLabel(pt.name, t)}
+              {processTypes.length === 0 ? (
+                <tr>
+                  <td colSpan={AGENT_LEVELS.length + 1} className="empty-state">
+                    暂无办理类型，保存产品后请在办理类型管理中新增。
                   </td>
-                  {AGENT_LEVELS.map(al => {
-                    const tier = pt.pricing.find(p => p.agentLevel === al);
-                    return (
-                      <td key={al}>
-                        <input
-                          type="number"
-                          min={0}
-                          value={tier?.price || 0}
-                          onChange={e => updatePricing(ptIdx, al, parseFloat(e.target.value) || 0)}
-                        />
-                      </td>
-                    );
-                  })}
                 </tr>
-              ))}
+              ) : (
+                processTypes.map((pt, ptIdx) => (
+                  <tr key={pt.typeId}>
+                    <td style={{ fontWeight: 600, textAlign: 'left', background: 'var(--color-bg-body)' }}>
+                      {getProductProcessTypeLabel(pt.name, t)}
+                    </td>
+                    {AGENT_LEVELS.map(al => {
+                      const tier = pt.pricing.find(p => p.agentLevel === al);
+                      return (
+                        <td key={al}>
+                          <input
+                            type="number"
+                            min={0}
+                            value={tier?.price || 0}
+                            onChange={e => updatePricing(ptIdx, al, parseFloat(e.target.value) || 0)}
+                          />
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
           <div style={{ marginTop: '12px', fontSize: '13px', color: 'var(--color-text-tertiary)' }}>

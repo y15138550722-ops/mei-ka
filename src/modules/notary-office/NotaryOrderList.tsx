@@ -1,15 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from '../../shared/i18n/config';
-import { getNotaryOfficeOrders, updateNotaryOfficeOrder } from '../../services/notaryOfficeOrderService';
+import {
+  getNotaryOfficeOrders,
+  syncNotaryOfficeCompletionToManagement,
+  updateNotaryOfficeOrder,
+} from '../../services/notaryOfficeOrderService';
 import ListUnifiedPagination from '../../shared/components/list/ListUnifiedPagination';
 import type { Order, OrderStatus } from '../../shared/types';
 import { formatBeijingTimestamp } from '../../shared/utils/dateTime';
 
 const NOTARY_SOURCE_STATUSES: OrderStatus[] = [
-  'translating',
   'pending_review',
-  'pending_production',
   'in_production',
   'shipped',
   'completed',
@@ -17,9 +19,7 @@ const NOTARY_SOURCE_STATUSES: OrderStatus[] = [
 ];
 
 const NOTARY_VISIBLE_STATUSES: OrderStatus[] = [
-  'translating',
   'pending_review',
-  'pending_production',
   'in_production',
   'completed',
   'rejected',
@@ -41,10 +41,15 @@ const NOTARY_LANGUAGE_COUNTRY_MAP: Record<string, string> = {
 
 const getCurrentTimestamp = () => formatBeijingTimestamp();
 
-const getNotaryVisibleStatus = (status: OrderStatus): OrderStatus => (status === 'shipped' ? 'completed' : status);
+const getNotaryVisibleStatus = (status: OrderStatus): OrderStatus => {
+  if (status === 'translating' || status === 'pending_production') return 'in_production';
+  if (status === 'shipped') return 'completed';
+  return status;
+};
 
 const getInitialNotaryFilterStatus = (status: string | null): OrderStatus | '' => {
   if (!status) return '';
+  if (status === 'translating' || status === 'pending_production') return 'in_production';
   if (status === 'shipped') return 'completed';
   return NOTARY_VISIBLE_STATUSES.includes(status as OrderStatus) ? (status as OrderStatus) : '';
 };
@@ -192,12 +197,14 @@ const NotaryOrderList: React.FC = () => {
     return filteredOrders.slice(start, start + pageSize);
   }, [currentPage, filteredOrders, pageSize]);
 
-  const activeBatchStatus: OrderStatus | null =
-    filterStatus === 'pending_production' ? 'pending_production' : filterStatus === 'in_production' ? 'in_production' : null;
+  const activeBatchStatus: OrderStatus | null = filterStatus === 'in_production' ? 'in_production' : null;
   const showBatchSelection = activeBatchStatus !== null;
   const selectedOrderIdSet = useMemo(() => new Set(selectedOrderIds), [selectedOrderIds]);
   const selectableOrdersOnPage = useMemo(
-    () => (activeBatchStatus ? paginatedOrders.filter((order) => order.status === activeBatchStatus) : []),
+    () =>
+      activeBatchStatus
+        ? paginatedOrders.filter((order) => getNotaryVisibleStatus(order.status) === activeBatchStatus)
+        : [],
     [activeBatchStatus, paginatedOrders],
   );
   const selectableOrderIdsOnPage = useMemo(
@@ -208,7 +215,7 @@ const NotaryOrderList: React.FC = () => {
     () =>
       activeBatchStatus
         ? filteredOrders.filter(
-            (order) => order.status === activeBatchStatus && selectedOrderIdSet.has(order.orderId),
+            (order) => getNotaryVisibleStatus(order.status) === activeBatchStatus && selectedOrderIdSet.has(order.orderId),
           )
         : [],
     [activeBatchStatus, filteredOrders, selectedOrderIdSet],
@@ -234,7 +241,7 @@ const NotaryOrderList: React.FC = () => {
       }
 
       return prev.filter((orderId) =>
-        allOrders.some((order) => order.orderId === orderId && order.status === activeBatchStatus),
+        allOrders.some((order) => order.orderId === orderId && getNotaryVisibleStatus(order.status) === activeBatchStatus),
       );
     });
   }, [activeBatchStatus, allOrders]);
@@ -294,19 +301,18 @@ const NotaryOrderList: React.FC = () => {
     };
   };
 
-  const buildCompletedOrderPatch = (order: Order): Partial<Order> => {
-    const currentTime = getCurrentTimestamp();
+  const buildCompletedOrderPatch = (order: Order, completedAt = getCurrentTimestamp()): Partial<Order> => {
+    const currentTime = completedAt;
 
     return {
       status: 'completed',
-      shippedAt: order.shippedAt || currentTime,
       updatedAt: currentTime,
       logs: [
         ...order.logs,
         {
           time: currentTime,
           operator: '公证专员',
-          action: '订单已完成',
+          action: '制作完成',
         },
       ],
     };
@@ -340,7 +346,7 @@ const NotaryOrderList: React.FC = () => {
       window.setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 0);
 
       applyOrderPatches({
-        [orderId]: buildProductionOrderPatch(targetOrder, '下载模板并进入制作中'),
+        [orderId]: buildProductionOrderPatch(targetOrder, '下载制作文件'),
       });
     } catch {
       window.alert('压缩包模板下载失败，请稍后重试');
@@ -350,10 +356,22 @@ const NotaryOrderList: React.FC = () => {
   const handleMarkCompleted = (orderId: string) => {
     const targetOrder = allOrders.find((order) => order.orderId === orderId);
     if (!targetOrder) return;
+    const completedAt = getCurrentTimestamp();
+    const completedPatch = buildCompletedOrderPatch(targetOrder, completedAt);
 
     applyOrderPatches({
-      [orderId]: buildCompletedOrderPatch(targetOrder),
+      [orderId]: completedPatch,
     });
+    syncNotaryOfficeCompletionToManagement(
+      {
+        ...targetOrder,
+        ...completedPatch,
+      } as Order,
+      {
+        operator: '公证专员',
+        completedAt,
+      },
+    );
   };
 
   const handleToggleOrderSelection = (orderId: string) => {
@@ -384,15 +402,33 @@ const NotaryOrderList: React.FC = () => {
       return;
     }
 
-    applyOrderPatches(
-      Object.fromEntries(selectedOrders.map((order) => [order.orderId, buildCompletedOrderPatch(order)])),
+    const completedPatches = Object.fromEntries(
+      selectedOrders.map((order) => {
+        const completedAt = getCurrentTimestamp();
+        const completedPatch = buildCompletedOrderPatch(order, completedAt);
+
+        syncNotaryOfficeCompletionToManagement(
+          {
+            ...order,
+            ...completedPatch,
+          } as Order,
+          {
+            operator: '公证专员',
+            completedAt,
+          },
+        );
+
+        return [order.orderId, completedPatch];
+      }),
     );
+
+    applyOrderPatches(completedPatches);
     setSelectedOrderIds([]);
   };
 
   const handleBatchProduceAndDownload = async () => {
     if (selectedOrders.length === 0) {
-      window.alert('请先选择待制作订单');
+      window.alert('请先选择制作中的订单');
       return;
     }
 
@@ -410,7 +446,7 @@ const NotaryOrderList: React.FC = () => {
         Object.fromEntries(
           selectedOrders.map((order) => [
             order.orderId,
-            buildProductionOrderPatch(order, '批量下载模板并进入制作中'),
+            buildProductionOrderPatch(order, '批量下载制作文件'),
           ]),
         ),
       );
@@ -430,9 +466,7 @@ const NotaryOrderList: React.FC = () => {
 
   const statusTabs: Array<{ label: string; value: OrderStatus | '' }> = [
     { label: t('common.all'), value: '' },
-    { label: t('order.status.translating'), value: 'translating' },
     { label: t('order.status.pending_review'), value: 'pending_review' },
-    { label: t('order.status.pending_production'), value: 'pending_production' },
     { label: t('order.status.in_production'), value: 'in_production' },
     { label: t('order.status.completed'), value: 'completed' },
     { label: t('order.status.rejected'), value: 'rejected' },
@@ -515,22 +549,6 @@ const NotaryOrderList: React.FC = () => {
               ))}
             </div>
 
-            {filterStatus === 'pending_production' && (
-              <div className="order-list-tabs__action notary-order-list__batch-action">
-                <span className="notary-order-list__batch-summary">
-                  已选择 <strong>{selectedOrders.length}</strong> 条待制作订单
-                </span>
-                <button
-                  type="button"
-                  className="btn btn--warning"
-                  disabled={selectedOrders.length === 0}
-                  onClick={() => void handleBatchProduceAndDownload()}
-                >
-                  批量下载
-                </button>
-              </div>
-            )}
-
             {filterStatus === 'in_production' && (
               <div className="order-list-tabs__action notary-order-list__batch-action">
                 <span className="notary-order-list__batch-summary">
@@ -542,7 +560,7 @@ const NotaryOrderList: React.FC = () => {
                   disabled={selectedOrders.length === 0}
                   onClick={handleBatchMarkCompleted}
                 >
-                  批量完成
+                  批量制作完成
                 </button>
               </div>
             )}
@@ -673,7 +691,7 @@ const NotaryOrderList: React.FC = () => {
                               </button>
                             )}
 
-                            {order.status === 'pending_production' && (
+                            {visibleStatus === 'in_production' && (
                               <button
                                 type="button"
                                 className="btn btn--warning btn--sm"
@@ -683,13 +701,13 @@ const NotaryOrderList: React.FC = () => {
                               </button>
                             )}
 
-                            {order.status === 'in_production' && (
+                            {visibleStatus === 'in_production' && (
                               <button
                                 type="button"
                                 className="btn btn--primary btn--sm"
                                 onClick={() => handleMarkCompleted(order.orderId)}
                               >
-                                已完成
+                                制作完成
                               </button>
                             )}
                           </div>

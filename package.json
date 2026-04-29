@@ -2,7 +2,7 @@
   "name": "meika-root",
   "private": true,
   "scripts": {
-    "dev": "cd src && npm run dev",
+    "dev": "cd src && npm run dev --",
     "install:src": "cd src && npm install",
     "build": "cd src && npm run build",
     "deploy:vercel": "npx vercel deploy --prod --yes"

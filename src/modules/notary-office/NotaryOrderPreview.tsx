@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from '../../shared/i18n/config';
 import {
   getNotaryOfficeOrderById,
+  syncNotaryOfficeApprovalToManagement,
   syncNotaryOfficeRejectionToManagement,
   updateNotaryOfficeOrder,
 } from '../../services/notaryOfficeOrderService';
@@ -34,6 +35,7 @@ const PREVIEW_FOLDER = '丁一然 意大利 意大利语 单号';
 const PREVIEW_BASE = buildPreviewFilePath(PREVIEW_FOLDER);
 const WORD_TEMPLATE_FALLBACK_IMAGE = buildPreviewFilePath(PREVIEW_FOLDER, '丁一然.files', '丁一然217.png');
 const NOTARY_PENDING_REVIEW_PATH = '/notary/orders?status=pending_review';
+const NOTARY_IN_PRODUCTION_PATH = '/notary/orders?status=in_production';
 
 const PREVIEW_ASSET_FOLDER = '丁一然.files';
 const PREVIEW_ASSET_IMAGE = '丁一然217.png';
@@ -959,10 +961,32 @@ const NotaryOrderPreview: React.FC = () => {
         {
           time: currentTimestamp,
           operator: '审核员',
-          action: status === 'pending_production' ? '审核通过' : `审核驳回：${nextRejectReason}`,
+          action: status === 'in_production' ? '审核通过，进入制作中' : `审核驳回：${nextRejectReason}`,
         },
       ],
     });
+
+    if (status === 'in_production') {
+      syncNotaryOfficeApprovalToManagement(
+        {
+          ...order,
+          status,
+          updatedAt: currentTimestamp,
+          logs: [
+            ...order.logs,
+            {
+              time: currentTimestamp,
+              operator: '公证处审核员',
+              action: '公证处审核通过，进入制作中',
+            },
+          ],
+        },
+        {
+          operator: '公证处审核员',
+          approvedAt: currentTimestamp,
+        },
+      );
+    }
 
     if (status === 'rejected' && nextRejectReason) {
       syncNotaryOfficeRejectionToManagement(
@@ -989,13 +1013,13 @@ const NotaryOrderPreview: React.FC = () => {
       );
     }
 
-    if (status === 'pending_production') {
-      showToastMessage('success', '审核通过，订单已进入待制作状态');
+    if (status === 'in_production') {
+      showToastMessage('success', '审核通过，订单已进入制作中状态');
     } else {
       showToastMessage('error', '订单已驳回，并返回列表');
     }
 
-    window.setTimeout(() => navigate(NOTARY_PENDING_REVIEW_PATH), 1400);
+    window.setTimeout(() => navigate(status === 'in_production' ? NOTARY_IN_PRODUCTION_PATH : NOTARY_PENDING_REVIEW_PATH), 1400);
   };
 
   const renderWordFallback = () => {
@@ -1103,7 +1127,7 @@ const NotaryOrderPreview: React.FC = () => {
           <button
             className="btn btn--success"
             type="button"
-            onClick={() => handleAuditAction('pending_production')}
+            onClick={() => handleAuditAction('in_production')}
             disabled={!isAuditable}
           >
             审核通过

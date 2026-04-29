@@ -7,10 +7,9 @@ import { useTranslation } from '../../shared/i18n/config';
 import { addProduct, deleteProduct, getNextProductId, getProducts, updateProduct } from '../../services/mockDataService';
 import ListUnifiedPagination from '../../shared/components/list/ListUnifiedPagination';
 import type { AgentLevel, Product, ProductCategory, ProductProcessType } from '../../shared/types';
-import { getDefaultProcessTypeTemplatesForProduct, getProductProcessTypeLabel } from '../../shared/utils/productProcessType';
+import { getProductProcessTypeLabel } from '../../shared/utils/productProcessType';
 import './ProductList.css';
 
-const AGENT_LEVELS: AgentLevel[] = ['self', 'l1', 'l2', 'l3'];
 const PRICE_MATRIX_AGENT_LEVELS: AgentLevel[] = ['l1', 'l2', 'l3', 'self'];
 const PRODUCT_STATUS_PRIORITY: Record<Product['status'], number> = {
   active: 1,
@@ -93,23 +92,6 @@ const sortProducts = (products: Product[]) =>
     if (weightDiff !== 0) return weightDiff;
 
     return b.createdAt.localeCompare(a.createdAt);
-  });
-
-const buildDefaultProcessTypes = (productId: string, productTitle: string, defaultPrice: number): ProductProcessType[] =>
-  getDefaultProcessTypeTemplatesForProduct(productTitle).map((template, processIndex) => {
-    const basePrice = template.defaultPrice ?? defaultPrice + processIndex * 80;
-
-    return {
-      typeId: `PT-${productId}-${processIndex + 1}`,
-      name: template.name,
-      description: template.description,
-      weight: template.weight,
-      estimatedDays: template.estimatedDays,
-      pricing: AGENT_LEVELS.map((agentLevel, agentIndex) => ({
-        agentLevel,
-        price: Math.max(basePrice - agentIndex * 20, 0),
-      })),
-    };
   });
 
 const createEditorDraft = (product?: Product): ProductEditorDraft => {
@@ -287,7 +269,7 @@ const ProductList: React.FC = () => {
         defaultPrice,
         weight,
         status: editorDraft.status,
-        processTypes: buildDefaultProcessTypes(productId, title, defaultPrice),
+        processTypes: [],
         createdAt: timestamp,
         updatedAt: timestamp,
       });
@@ -367,7 +349,9 @@ const ProductList: React.FC = () => {
 
     updateProduct(priceEditorProduct.productId, {
       processTypes: nextProcessTypes,
-      defaultPrice: getProductDefaultPriceFromProcessTypes(nextProcessTypes),
+      defaultPrice: nextProcessTypes.length > 0
+        ? getProductDefaultPriceFromProcessTypes(nextProcessTypes)
+        : getProductDefaultPrice(priceEditorProduct),
       updatedAt: getCurrentTimestamp(),
     });
 
@@ -784,36 +768,44 @@ const ProductList: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {priceEditorProduct.processTypes.map((processType) => {
-                      const draft = priceMatrixDraft.find((item) => item.typeId === processType.typeId);
+                    {priceEditorProduct.processTypes.length === 0 ? (
+                      <tr>
+                        <td colSpan={PRICE_MATRIX_AGENT_LEVELS.length + 1} className="empty-state">
+                          暂无办理类型，请先在办理类型中新增。
+                        </td>
+                      </tr>
+                    ) : (
+                      priceEditorProduct.processTypes.map((processType) => {
+                        const draft = priceMatrixDraft.find((item) => item.typeId === processType.typeId);
 
-                      return (
-                        <tr key={processType.typeId}>
-                          <td style={{ fontWeight: 600, textAlign: 'left', background: 'var(--color-bg-body)' }}>
-                            {getProductProcessTypeLabel(processType.name, t)}
-                          </td>
-                          {PRICE_MATRIX_AGENT_LEVELS.map((agentLevel) => {
-                            const tier = draft?.pricing.find((pricing) => pricing.agentLevel === agentLevel);
+                        return (
+                          <tr key={processType.typeId}>
+                            <td style={{ fontWeight: 600, textAlign: 'left', background: 'var(--color-bg-body)' }}>
+                              {getProductProcessTypeLabel(processType.name, t)}
+                            </td>
+                            {PRICE_MATRIX_AGENT_LEVELS.map((agentLevel) => {
+                              const tier = draft?.pricing.find((pricing) => pricing.agentLevel === agentLevel);
 
-                            return (
-                              <td key={agentLevel}>
-                                <div className="product-price-detail-field">
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    step="0.01"
-                                    className="product-price-detail-field__input"
-                                    value={tier?.price ?? 0}
-                                    onChange={(event) => handlePriceMatrixChange(processType.typeId, agentLevel, event.target.value)}
-                                  />
-                                  <span className="product-price-detail-field__unit">元</span>
-                                </div>
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      );
-                    })}
+                              return (
+                                <td key={agentLevel}>
+                                  <div className="product-price-detail-field">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      step="0.01"
+                                      className="product-price-detail-field__input"
+                                      value={tier?.price ?? 0}
+                                      onChange={(event) => handlePriceMatrixChange(processType.typeId, agentLevel, event.target.value)}
+                                    />
+                                    <span className="product-price-detail-field__unit">元</span>
+                                  </div>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -857,21 +849,29 @@ const ProductList: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {priceDetailProduct.processTypes.map((processType) => (
-                      <tr key={processType.typeId}>
-                        <td className="product-price-modal__label-cell">
-                          {getProductProcessTypeLabel(processType.name, t)}
+                    {priceDetailProduct.processTypes.length === 0 ? (
+                      <tr>
+                        <td colSpan={PRICE_MATRIX_AGENT_LEVELS.length + 1} className="empty-state">
+                          暂无办理类型，请先在办理类型中新增。
                         </td>
-                        {PRICE_MATRIX_AGENT_LEVELS.map((agentLevel) => (
-                          <td key={`${processType.typeId}-${agentLevel}`}>
-                            <div className="product-price-modal__readonly-value">
-                              <span>{formatPriceValue(getProcessTypePriceByAgentLevel(processType, agentLevel))}</span>
-                              <span className="product-price-modal__readonly-unit">元</span>
-                            </div>
-                          </td>
-                        ))}
                       </tr>
-                    ))}
+                    ) : (
+                      priceDetailProduct.processTypes.map((processType) => (
+                        <tr key={processType.typeId}>
+                          <td className="product-price-modal__label-cell">
+                            {getProductProcessTypeLabel(processType.name, t)}
+                          </td>
+                          {PRICE_MATRIX_AGENT_LEVELS.map((agentLevel) => (
+                            <td key={`${processType.typeId}-${agentLevel}`}>
+                              <div className="product-price-modal__readonly-value">
+                                <span>{formatPriceValue(getProcessTypePriceByAgentLevel(processType, agentLevel))}</span>
+                                <span className="product-price-modal__readonly-unit">元</span>
+                              </div>
+                            </td>
+                          ))}
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>

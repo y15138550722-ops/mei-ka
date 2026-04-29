@@ -21,6 +21,7 @@ import {
 import { formatBeijingTimestamp } from '../shared/utils/dateTime';
 
 const PRODUCT_STORAGE_KEY = 'meika-products';
+const PRODUCT_NEXT_ID_STORAGE_KEY = 'meika-products-next-id';
 const ORDER_STORAGE_KEY = 'meika-orders';
 const ORDER_DATA_VERSION_STORAGE_KEY = 'meika-order-data-version';
 const ORDER_DATA_VERSION = 'notary-pending-review-plus-10-v1';
@@ -78,6 +79,29 @@ const PROCESS_TYPE_ESTIMATED_DAYS: Record<ProcessType, number> = {
 const NOTARY_ORDER_NAMES = ['公证单号', '公证双号', '公证海牙单号', '公证海牙双号'];
 
 const isBrowser = () => typeof window !== 'undefined';
+
+const getProductNumericId = (productId: string) => {
+  const matchedValue = productId.match(/^MK-(\d+)$/)?.[1];
+  const numericValue = Number(matchedValue);
+  return Number.isFinite(numericValue) ? numericValue : 0;
+};
+
+const getNextProductNumericIdFromProducts = (products: Product[]) =>
+  products.reduce((max, product) => Math.max(max, getProductNumericId(product.productId)), 0) + 1;
+
+const getStoredNextProductNumericId = () => {
+  if (!isBrowser()) return 0;
+
+  const numericValue = Number(window.localStorage.getItem(PRODUCT_NEXT_ID_STORAGE_KEY));
+  return Number.isFinite(numericValue) && numericValue > 0 ? Math.trunc(numericValue) : 0;
+};
+
+const persistNextProductNumericId = (products: Product[]) => {
+  if (!isBrowser()) return;
+
+  const nextNumericId = Math.max(getStoredNextProductNumericId(), getNextProductNumericIdFromProducts(products));
+  window.localStorage.setItem(PRODUCT_NEXT_ID_STORAGE_KEY, String(nextNumericId));
+};
 
 const randomDate = (daysBack: number) => {
   const date = new Date();
@@ -158,6 +182,29 @@ const getPushTimeliness = (processType: ProductProcessType, index: number): Push
 
 const getPriceByAgentLevel = (pricing: PriceTier[], agentLevel: AgentLevel) =>
   pricing.find((item) => item.agentLevel === agentLevel)?.price || 0;
+
+const buildNextOrderId = () => {
+  const currentYearSuffix = getCurrentTimestamp().slice(2, 4) || String(new Date().getFullYear()).slice(-2);
+  const orderIdPrefix = `MK${currentYearSuffix}`;
+  const existingOrderIds = new Set(_orders.map((order) => order.orderId));
+  let nextSerial =
+    _orders.reduce((maxSerial, order) => {
+      if (!order.orderId.startsWith(orderIdPrefix)) {
+        return maxSerial;
+      }
+
+      const serial = Number(order.orderId.slice(orderIdPrefix.length));
+      return Number.isFinite(serial) ? Math.max(maxSerial, serial) : maxSerial;
+    }, 0) + 1;
+  let nextOrderId = `${orderIdPrefix}${String(nextSerial).padStart(5, '0')}`;
+
+  while (existingOrderIds.has(nextOrderId)) {
+    nextSerial += 1;
+    nextOrderId = `${orderIdPrefix}${String(nextSerial).padStart(5, '0')}`;
+  }
+
+  return nextOrderId;
+};
 
 const buildProcessTypeWithPricing = (
   typeId: string,
@@ -298,6 +345,10 @@ const normalizeProcessTypesForProduct = (
   defaultPrice: number,
   processTypes: ProductProcessType[],
 ): ProductProcessType[] => {
+  if (processTypes.length === 0) {
+    return [];
+  }
+
   const defaultProcessTypeKeys = getDefaultProcessTypeKeysForProduct(productTitle);
   const hasLegacyBuiltInProfile =
     processTypes.length === PROCESS_TYPES.length &&
@@ -317,10 +368,6 @@ const normalizeProcessTypesForProduct = (
         (a, b) =>
           defaultProcessTypeKeys.indexOf(a.name as ProcessType) - defaultProcessTypeKeys.indexOf(b.name as ProcessType),
       );
-  }
-
-  if (processTypes.length === 0) {
-    return buildFallbackProcessTypes(productId, productTitle, defaultPrice);
   }
 
   return processTypes;
@@ -362,6 +409,7 @@ const normalizeProduct = (value: unknown, index: number): Product => {
 const persistProducts = () => {
   if (!isBrowser()) return;
   window.localStorage.setItem(PRODUCT_STORAGE_KEY, JSON.stringify(_products));
+  persistNextProductNumericId(_products);
 };
 
 const persistOrders = () => {
@@ -380,6 +428,8 @@ const loadProducts = (): Product[] => {
   try {
     const rawValue = window.localStorage.getItem(PRODUCT_STORAGE_KEY);
     if (!rawValue) {
+      window.localStorage.setItem(PRODUCT_STORAGE_KEY, JSON.stringify(defaultProducts));
+      persistNextProductNumericId(defaultProducts);
       return defaultProducts;
     }
 
@@ -390,6 +440,7 @@ const loadProducts = (): Product[] => {
 
     const normalizedProducts = parsedValue.map((product, index) => normalizeProduct(product, index));
     window.localStorage.setItem(PRODUCT_STORAGE_KEY, JSON.stringify(normalizedProducts));
+    persistNextProductNumericId(normalizedProducts);
     return normalizedProducts;
   } catch {
     return defaultProducts;
@@ -671,6 +722,17 @@ export function updateOrder(id: string, updates: Partial<Order>) {
   persistOrders();
 }
 
+export function addOrder(order: Omit<Order, 'orderId'> & { orderId?: string }) {
+  const nextOrder: Order = {
+    ...order,
+    orderId: order.orderId || buildNextOrderId(),
+  };
+
+  _orders = [nextOrder, ..._orders];
+  persistOrders();
+  return cloneOrder(nextOrder);
+}
+
 export function getProducts() {
   return _products.map(cloneProduct);
 }
@@ -702,10 +764,5 @@ export function deleteProduct(id: string) {
 }
 
 export function getNextProductId() {
-  const maxId = _products.reduce((max, product) => {
-    const num = parseInt(product.productId.split('-')[1] || '0', 10);
-    return Math.max(max, num);
-  }, 0);
-
-  return `MK-${maxId + 1}`;
+  return `MK-${Math.max(getStoredNextProductNumericId(), getNextProductNumericIdFromProducts(_products))}`;
 }

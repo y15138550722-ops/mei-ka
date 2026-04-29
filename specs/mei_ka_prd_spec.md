@@ -1,14 +1,15 @@
-# 美卡管理后台 Specification
+# 总PRD只能怪美卡管理后台 Specification
 
 > **模块**: 美卡管理后台
-> **版本**: v1.0
-> **最后更新**: 2026-04-21
+> **版本**: v1.1
+> **最后更新**: 2026-04-28
 > **作者**: Codex
 
 ---
 
 ## 更新日志
 
+- **v1.1 (2026-04-28)**: 同步公证链路当前实现口径：管理页“送审”进入公证处待审核；公证处审核通过后同步管理页制作中并隐藏再次送审；公证处完成后管理页显示物流发货；物流发货后同步查看订单物流信息；补充 Vercel 演示部署信息
 - **v1.0 (2026-04-17)**:产出为标准 Specification 文档，补齐用户故事、逻辑视图、数据契约、Tracking Events 与 i18n 规范
 
 ---
@@ -94,14 +95,16 @@
 #### US-3: 公证专员推进制作链路
 
 > **作为** 公证专员
-> **我希望** 在公证处工作台中批量下载模板、推进制作状态、标记完成
+> **我希望** 在公证处工作台中审核待审订单、下载制作模板、标记完成
 > **以便于** 提升公证订单的处理效率
 
 **验收标准**:
 
-- 待制作订单支持勾选与批量下载
-- 下载模板后订单进入制作中状态
-- 批量完成后订单进入已完成状态
+- 管理页点击“送审”后，公证处工作台同订单进入待审核
+- 公证处待审核订单审核通过后进入制作中，并同步管理页进入制作中且隐藏“送审”按钮
+- 制作中订单支持单条下载模板，下载后仍保持制作中状态
+- 制作中订单支持单条或批量完成，完成后管理页显示“物流发货”入口
+- 管理页填写物流信息后，查看订单中的物流信息同步显示物流公司与物流单号
 
 #### US-4: 产品管理员维护商品与时效
 
@@ -119,30 +122,30 @@
 
 ## 4. 术语表（Terminology）
 
-| 术语         | 英文                    | 定义                                                                                   |
-| ------------ | ----------------------- | -------------------------------------------------------------------------------------- |
-| 美卡管理后台 | Mei Ka Admin Console    | 当前演示级运营后台系统，统一承载订单、产品、模板与导出能力。                           |
-| 翻译订单     | Translation Order       | `productCategory = translation` 的订单，支持列表筛选、审核、Excel 导出。             |
-| IDP 订单     | IDP Order               | `productCategory = idp` 的订单，支持资料编辑与 IDD 模板入口。                        |
-| IDD 模板     | IDD Template            | IDP 订单对应的 PDF 模板预览与下载能力，含卡片、完整、信息页三种模板。                  |
-| 公证订单     | Notary Order            | 需要经过审核、预览、委托书 / PDF 导出的订单。                                          |
-| 公证处工作台 | Notary Office Workbench | 面向公证专员的制作工作区，支持翻译中、待审核、待制作、制作中、已完成、已驳回状态管理。 |
-| Klook 订单   | Klook Order             | 独立持久化的 API 来源订单，仅当前匹配“小白本”产品场景。                              |
-| 锁价         | Locked Price            | 订单创建时固化的价格快照，后续产品改价不影响历史订单金额。                             |
-| 审核模式     | Audit Mode              | 详情页中的可编辑模式，允许通过、驳回或修订资料。                                       |
-| 查看模式     | View Mode               | 详情页中的只读模式，仅查看订单、商品、收货与审核信息。                                 |
-| 推送时效     | Push Timeliness         | 按 `productId + processTypeId` 维度配置的时效信息，支持天 / 小时。                   |
-| 准入校验     | Admission Guard         | 动作执行前的前置判断，例如登录校验、驳回原因必填、导出前勾选校验。                     |
+| 术语         | 英文                    | 定义                                                                                                                              |
+| ------------ | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 美卡管理后台 | Mei Ka Admin Console    | 当前演示级运营后台系统，统一承载订单、产品、模板与导出能力。                                                                      |
+| 翻译订单     | Translation Order       | `productCategory = translation` 的订单，支持列表筛选、审核、Excel 导出。                                                        |
+| IDP 订单     | IDP Order               | `productCategory = idp` 的订单，支持资料编辑与 IDD 模板入口。                                                                   |
+| IDD 模板     | IDD Template            | IDP 订单对应的 PDF 模板预览与下载能力，含卡片、完整、信息页三种模板。                                                             |
+| 公证订单     | Notary Order            | 需要经过审核、预览、委托书 / PDF 导出的订单。                                                                                     |
+| 公证处工作台 | Notary Office Workbench | 面向公证专员的制作工作区，支持待审核、制作中、已完成、已驳回状态管理；历史 `translating`、`pending_production` 仅作兼容映射。 |
+| Klook 订单   | Klook Order             | 独立持久化的 API 来源订单，仅当前匹配“小白本”产品场景。                                                                         |
+| 锁价         | Locked Price            | 订单创建时固化的价格快照，后续产品改价不影响历史订单金额。                                                                        |
+| 审核模式     | Audit Mode              | 详情页中的可编辑模式，允许通过、驳回或修订资料。                                                                                  |
+| 查看模式     | View Mode               | 详情页中的只读模式，仅查看订单、商品、收货与审核信息。                                                                            |
+| 推送时效     | Push Timeliness         | 按 `productId + processTypeId` 维度配置的时效信息，支持天 / 小时。                                                              |
+| 准入校验     | Admission Guard         | 动作执行前的前置判断，例如登录校验、驳回原因必填、导出前勾选校验。                                                                |
 
 ---
 
 ## 5. 角色与权限
 
-| 角色              | 权限范围       | 说明                                                                   |
-| ----------------- | -------------- | ---------------------------------------------------------------------- |
-| 管理员 / 运营人员 | 全局模块访问   | 统一登录后进入后台，查看 Dashboard、订单中心、产品中心、公证处工作台。 |
-| 审核人员          | 订单审核与预览 | 进入订单详情、预览页执行审核通过、驳回、资料修订。                     |
-| 公证专员          | 公证制作工作区 | 在公证处工作台下载模板、推进制作中、标记完成。                         |
+| 角色              | 权限范围       | 说明                                                                           |
+| ----------------- | -------------- | ------------------------------------------------------------------------------ |
+| 管理员 / 运营人员 | 全局模块访问   | 统一登录后进入后台，查看 Dashboard、订单中心、产品中心、公证处工作台。         |
+| 审核人员          | 订单审核与预览 | 进入订单详情、预览页执行审核通过、驳回、资料修订。                             |
+| 公证专员          | 公证制作工作区 | 在公证处工作台审核待审订单、下载模板、标记完成。                               |
 
 **权限规则**:
 
@@ -247,7 +250,7 @@ interface MeikaAdminConsoleView {
     klook: KlookWorkspaceView; // Stored from meika-klook-orders
   };
 
-  notaryOffice: NotaryWorkbenchView; // Derived from meika-orders where productCategory=notary
+  notaryOffice: NotaryWorkbenchView; // Stored from meika-notary-office-orders and synced with notary orders
 
   productCenter: {
     products: ProductCardView[]; // Stored from meika-products
@@ -278,6 +281,9 @@ interface OrderCardView {
   statusLabel: string; // Mapped from status enum
   canAudit: boolean; // Derived from current mode and order status
   canOpenTemplatePreview: boolean; // Derived: idp and completed-like status only
+  canSendToNotaryOffice?: boolean; // Derived: notary pending_production and not yet approved by office
+  canShip?: boolean; // Derived: notary office completed and management order pending logistics
+  logisticsSummary?: string; // Derived from main order logistics fields, fallback to notary office order
 }
 
 interface AuthSessionView {
@@ -289,12 +295,12 @@ interface AuthSessionView {
 
 #### 6.2.2 计算字段与虚字段
 
-| 数据库存储                | 逻辑视图字段               | Spec 写法                                                    | AI 行为                                                 |
-| ------------------------- | -------------------------- | ------------------------------------------------------------ | ------------------------------------------------------- |
-| `status`                | `statusLabel`            | `statusLabel: string` *(Mapped from status enum)*        | 自动统一翻译订单、IDP、公证、Klook 列表中的状态显示口径 |
-| `productCategory`       | `orderTypeLabel`         | `orderTypeLabel: string` *(Mapped from productCategory)* | 自动渲染“翻译 / IDP / 公证 / Klook”可读文案           |
-| `selectedDate + orders` | `dashboard.summaryCards` | `summaryCards: SummaryCardView[]` *(Derived)*            | 自动计算成交金额、待发货金额、异常订单量等指标          |
-| `status + route + mode` | `canAudit`               | `canAudit: boolean` *(Derived)*                          | 自动控制详情页按钮与可编辑状态                          |
+| 数据库存储                | 逻辑视图字段                            | Spec 写法                                                    | AI 行为                                                 |
+| ------------------------- | --------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------- |
+| `status`                | `statusLabel`                         | `statusLabel: string` *(Mapped from status enum)*        | 自动统一翻译订单、IDP、公证、Klook 列表中的状态显示口径 |
+| `productCategory`       | `orderTypeLabel`                      | `orderTypeLabel: string` *(Mapped from productCategory)* | 自动渲染“翻译 / IDP / 公证 / Klook”可读文案           |
+| `selectedDate + orders` | `dashboard.summaryCards`              | `summaryCards: SummaryCardView[]` *(Derived)*            | 自动计算成交金额、待发货金额、异常订单量等指标          |
+| `status + route + mode` | `canAudit`                            | `canAudit: boolean` *(Derived)*                          | 自动控制详情页按钮与可编辑状态                          |
 
 ---
 
@@ -302,28 +308,29 @@ interface AuthSessionView {
 
 ### 7.1 核心业务规则
 
-| 规则编号 | 规则名称             | 规则描述                                                                                                                                                                                                               |
-| -------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| BR-001   | 受保护路由           | `/login` 之外的页面需要存在登录会话才能进入。                                                                                                                                                                        |
-| BR-002   | 演示会话预置         | 浏览器首次无会话存储时自动注入默认演示登录态；退出后写入 `__logged_out__` 哨兵值，需重新登录。                                                                                                                       |
-| BR-003   | 登录凭证固定         | 演示账号固定为 `admin / 123456`；用户名按 `trim + lowercase` 校验，且需通过 4 位大写字母数字验证码校验。                                                                                                           |
-| BR-004   | 锁价规则             | 订单创建后锁定 `lockedPrice`，后续产品改价不影响历史订单。                                                                                                                                                           |
-| BR-005   | 产品元数据同步展示   | 产品与办理类型修改后，订单展示字段可同步为最新元数据，但不回写历史锁价。                                                                                                                                               |
-| BR-006   | 翻译订单状态聚合     | `pending_production` 与 `in_production` 在列表聚合展示为“待制作”；`shipped` 与 `completed` 聚合为“已发货”。                                                                                                |
-| BR-007   | IDP 订单状态聚合     | `pending_review` 之外的状态统一在 IDP 列表显示为“已完成”。                                                                                                                                                         |
-| BR-008   | 公证订单状态聚合     | 公证订单管理列表中，`pending_review` 显示为“待审核”；`pending_production` 与 `in_production` 显示为“待制作”；`rejected` 与 `cancelled` 显示为“已取消”；`shipped` 与 `completed` 显示为“已完成”。 |
-| BR-009   | 公证处状态口径       | 公证处工作台中使用独立状态口径：`translating` 显示为“翻译中”，`shipped` 与 `completed` 统一按“已完成”展示。                                                                                                  |
-| BR-010   | 审核留痕             | 审核通过、驳回、资料修改、制作推进等动作必须写入 `logs`。                                                                                                                                                            |
-| BR-011   | 驳回原因必填         | 翻译、公证、Klook 订单执行驳回时必须填写原因。                                                                                                                                                                         |
-| BR-012   | 办理类型唯一         | 同一产品下不允许出现重名办理类型。                                                                                                                                                                                     |
-| BR-013   | 推送时效粒度         | 推送时效按 `productId + processTypeId` 维度持久化，底层结构为 `productId -> processTypeId -> { value, unit }`。                                                                                                    |
-| BR-014   | 持久化边界           | 主订单使用 `meika-orders`，Klook 使用 `meika-klook-orders`，产品使用 `meika-products`。                                                                                                                          |
-| BR-015   | 导出方式固定         | 翻译 / IDP / 公证列表导出为 Excel，Klook 列表导出为 CSV，公证预览导出为 DOCX / PDF，公证处导出为 ZIP，IDD 模板导出为 PDF。                                                                                             |
-| BR-016   | 默认办理类型模板     | 产品标题为 `驾照翻译国际认证件（小白本）` 时默认初始化 5 个办理/配送组合；其他产品默认初始化 `normal` 与 `urgent` 两类。                                                                                         |
-| BR-017   | 推送时效精度         | 推送时效 `value` 底层以字符串存储，支持正数且最多保留 2 位小数，单位仅允许 `day` 或 `hour`。                                                                                                                     |
-| BR-018   | Klook 状态边界       | Klook 订单仅允许 `pending_review`、`pending_production`、`shipped`、`cancelled` 四种状态；驳回结果映射为 `cancelled`。                                                                                       |
-| BR-019   | 公证审核通过双向流转 | 公证订单管理页审核通过并选择公证处后，管理页订单进入 `pending_production`；公证订单页接收同订单并进入 `translating`。                                                                                              |
-| BR-020   | 公证订单页默认排序   | 公证订单页列表按时间倒序展示，`completed` 优先使用 `shippedAt`，其余状态优先使用 `updatedAt`，缺失时回退 `createdAt`。                                                                                         |
+| 规则编号 | 规则名称           | 规则描述                                                                                                                                                                                                                               |
+| -------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BR-001   | 受保护路由         | `/login` 之外的页面需要存在登录会话才能进入。                                                                                                                                                                                        |
+| BR-002   | 演示会话预置       | 浏览器首次无会话存储时自动注入默认演示登录态；退出后写入 `__logged_out__` 哨兵值，需重新登录。                                                                                                                                       |
+| BR-003   | 登录凭证固定       | 演示账号固定为 `admin / 123456`；用户名按 `trim + lowercase` 校验，且需通过 4 位大写字母数字验证码校验。                                                                                                                           |
+| BR-004   | 锁价规则           | 订单创建后锁定 `lockedPrice`，后续产品改价不影响历史订单。                                                                                                                                                                           |
+| BR-005   | 产品元数据同步展示 | 产品与办理类型修改后，订单展示字段可同步为最新元数据，但不回写历史锁价。                                                                                                                                                               |
+| BR-006   | 翻译订单状态聚合   | `pending_production` 与 `in_production` 在列表聚合展示为“待制作”；`shipped` 与 `completed` 聚合为“已发货”。                                                                                                                |
+| BR-007   | IDP 订单状态聚合   | `pending_review` 之外的状态统一在 IDP 列表显示为“已完成”。                                                                                                                                                                         |
+| BR-008   | 公证订单状态聚合   | 公证订单管理列表中，`pending_review` 显示为“待审核”；`pending_production` 与 `in_production` 显示为“待制作”；`rejected` 与 `cancelled` 显示为“已取消”；`shipped` 与 `completed` 显示为“已完成”。                 |
+| BR-009   | 公证处状态口径     | 公证处工作台可见状态为 `pending_review`、`in_production`、`completed`、`rejected`；`shipped` 按“已完成”展示，历史 `translating`、`pending_production` 仅在 query / 缓存兼容中映射。                                    |
+| BR-010   | 审核留痕           | 审核通过、驳回、资料修改、制作推进等动作必须写入 `logs`。                                                                                                                                                                            |
+| BR-011   | 驳回原因必填       | 翻译、公证、Klook 订单执行驳回时必须填写原因。                                                                                                                                                                                         |
+| BR-012   | 办理类型唯一       | 同一产品下不允许出现重名办理类型。                                                                                                                                                                                                     |
+| BR-013   | 推送时效粒度       | 推送时效按 `productId + processTypeId` 维度持久化，底层结构为 `productId -> processTypeId -> { value, unit }`。                                                                                                                    |
+| BR-014   | 持久化边界         | 主订单使用 `meika-orders`，公证处工作台使用 `meika-notary-office-orders`，Klook 使用 `meika-klook-orders`，产品使用 `meika-products`。                                                                                         |
+| BR-015   | 导出方式固定       | 翻译 / IDP / 公证列表导出为 Excel，Klook 列表导出为 CSV，公证预览导出为 DOCX / PDF，公证处导出为 ZIP，IDD 模板导出为 PDF。                                                                                                             |
+| BR-016   | 默认办理类型模板   | 产品标题为 `驾照翻译国际认证件（小白本）` 时默认初始化 5 个办理/配送组合；其他产品默认初始化 `normal` 与 `urgent` 两类。                                                                                                         |
+| BR-017   | 推送时效精度       | 推送时效 `value` 底层以字符串存储，支持正数且最多保留 2 位小数，单位仅允许 `day` 或 `hour`。                                                                                                                                     |
+| BR-018   | Klook 状态边界     | Klook 订单仅允许 `pending_review`、`pending_production`、`shipped`、`cancelled` 四种状态；驳回结果映射为 `cancelled`。                                                                                                       |
+| BR-019   | 公证送审与审核同步 | 公证订单管理页审核通过后管理页订单进入 `pending_production`；管理页点击“送审”并选择公证处后，公证处订单进入 `pending_review`；公证处审核通过后同步两侧为 `in_production`，管理页隐藏“送审”按钮。                             |
+| BR-020   | 公证订单页默认排序 | 公证订单页列表按时间倒序展示，`completed` 优先使用 `shippedAt`，其余状态优先使用 `updatedAt`，缺失时回退 `createdAt`。                                                                                                         |
+| BR-021   | 公证物流同步       | 公证处制作完成后同步管理页为 `pending_production` 并显示“物流发货”；管理页填写物流后同步主订单与公证处订单的 `status/shippedAt/logisticsCompany/trackingNumber/logs`，查看订单物流信息优先读取主订单，缺失时使用公证处订单兜底。 |
 
 ### 7.2 数据验证规则
 
@@ -337,43 +344,47 @@ interface AuthSessionView {
 | [ADD] product.defaultPrice | 必填，数值必须大于 `0`                        | 默认价格必须大于 0   |
 | [ADD] processType.name     | 同一产品下必填且不可重名                        | 办理类型名称已存在   |
 | [ADD] timeliness.value     | 必填，必须为正数且最多 2 位小数                 | 请输入有效的推送时效 |
-| [ADD] selectedOrderIds     | 批量下载 / 导出前至少选择一条数据               | 请至少选择一条订单   |
+| [ADD] selectedOrderIds     | 批量完成 / 导出前至少选择一条数据               | 请至少选择一条订单   |
 
 ### 7.3 状态机（如适用）
 
 ```mermaid
 stateDiagram-v2
     [*] --> PendingReview
-    state "翻译中" as Translating
     state "待审核" as PendingReview
     state "待制作" as PendingProduction
+    state "公证处待审核" as OfficePendingReview
     state "制作中" as InProduction
+    state "公证处已完成" as OfficeCompleted
     state "已发货" as Shipped
     state "已完成" as Completed
     state "已取消" as Cancelled
     state "已驳回" as Rejected
-    PendingReview --> PendingProduction: 翻译/Klook审核通过
-    PendingReview --> Translating: 公证管理页审核通过并推送公证处
-    Translating --> PendingReview: 公证处进入审核阶段
+    PendingReview --> PendingProduction: 翻译/Klook/公证管理页审核通过
+    PendingProduction --> OfficePendingReview: 公证管理页送审并选择公证处
+    OfficePendingReview --> InProduction: 公证处审核通过
+    OfficePendingReview --> Rejected: 公证处审核驳回
     PendingReview --> Cancelled: 翻译订单或Klook驳回
     PendingReview --> Rejected: 公证订单驳回
-    PendingProduction --> InProduction: 公证处制作并下载
-    InProduction --> Completed: 标记完成
-    PendingProduction --> Shipped: 录入物流并发货
+    InProduction --> OfficeCompleted: 公证处标记完成
+    OfficeCompleted --> PendingProduction: 同步管理页待物流发货
+    PendingProduction --> Shipped: 管理页录入物流并发货
     Shipped --> Completed: 签收或履约完成
 ```
 
 **状态转换规则**:
 
-| 当前状态 | 目标状态 | 触发条件                       | 操作权限          |
-| -------- | -------- | ------------------------------ | ----------------- |
-| 待审核   | 待制作   | 翻译或 Klook 审核通过          | 管理员 / 审核人员 |
-| 待审核   | 翻译中   | 公证管理页审核通过并选择公证处 | 管理员 / 审核人员 |
-| 待审核   | 已取消   | 翻译订单或 Klook 驳回          | 管理员 / 审核人员 |
-| 待审核   | 已驳回   | 公证订单驳回                   | 管理员 / 审核人员 |
-| 待制作   | 制作中   | 公证处下载制作模板             | 公证专员          |
-| 制作中   | 已完成   | 公证处单条或批量完成           | 公证专员          |
-| 待制作   | 已发货   | 完成制作并录入物流信息         | 管理员 / 运营人员 |
+| 当前状态     | 目标状态     | 触发条件                           | 操作权限            |
+| ------------ | ------------ | ---------------------------------- | ------------------- |
+| 待审核       | 待制作       | 翻译、Klook 或公证管理页审核通过   | 管理员 / 审核人员   |
+| 待制作       | 公证处待审核 | 公证管理页点击“送审”并选择公证处 | 管理员 / 运营人员   |
+| 公证处待审核 | 制作中       | 公证处预览页审核通过               | 公证专员 / 审核人员 |
+| 公证处待审核 | 已驳回       | 公证处预览页审核驳回               | 公证专员 / 审核人员 |
+| 待审核       | 已取消       | 翻译订单或 Klook 驳回              | 管理员 / 审核人员   |
+| 待审核       | 已驳回       | 公证订单管理页驳回                 | 管理员 / 审核人员   |
+| 制作中       | 公证处已完成 | 公证处单条或批量完成               | 公证专员            |
+| 公证处已完成 | 待制作       | 同步管理页待物流发货口径           | 系统同步            |
+| 待制作       | 已发货       | 管理页完成制作后录入物流信息       | 管理员 / 运营人员   |
 
 ---
 
@@ -693,34 +704,33 @@ flowchart TD
 
 #### 8.4.1 功能描述
 
-公证处工作台面向公证专员，提供翻译中、待审核、待制作、制作中、已完成、已驳回状态管理，以及单条 / 批量下载模板、单条 / 批量完成制作、预览页审核摘要与导出能力。
+公证处工作台面向公证专员，提供待审核、制作中、已完成、已驳回状态管理，以及预览页审核摘要、制作中单条下载模板、单条 / 批量完成制作能力。管理页“送审”后订单进入公证处待审核；公证处审核通过后同步管理页制作中并隐藏再次送审入口；公证处完成后管理页负责物流发货并同步物流信息到查看订单。
 
 #### 8.4.2 筛选条件
 
 **筛选字段定义**:
 
-| 筛选字段           | 类型   | 必填 | 默认值  | 取值来源 | 说明                                                       |
-| ------------------ | ------ | ---- | ------- | -------- | ---------------------------------------------------------- |
-| [ADD] productName  | String | 否   | 无      | 用户输入 | 按产品名称筛选                                             |
-| [ADD] customerName | String | 否   | 无      | 用户输入 | 按客户姓名筛选                                             |
-| [ADD] statusTab    | Enum   | 否   | `all` | 系统预设 | 全部 / 翻译中 / 待审核 / 待制作 / 制作中 / 已完成 / 已驳回 |
+| 筛选字段           | 类型   | 必填 | 默认值  | 取值来源 | 说明                                     |
+| ------------------ | ------ | ---- | ------- | -------- | ---------------------------------------- |
+| [ADD] productName  | String | 否   | 无      | 用户输入 | 按产品名称筛选                           |
+| [ADD] customerName | String | 否   | 无      | 用户输入 | 按客户姓名筛选                           |
+| [ADD] statusTab    | Enum   | 否   | `all` | 系统预设 | 全部 / 待审核 / 制作中 / 已完成 / 已驳回 |
 
 **枚举值定义**（如适用）:
 
-| 值                     | 名称   | 说明                         |
-| ---------------------- | ------ | ---------------------------- |
-| `all`                | 全部   | 显示全部公证订单             |
-| `translating`        | 翻译中 | 展示推送后进入公证链路的订单 |
-| `pending_review`     | 待审核 | 进入预览审核                 |
-| `pending_production` | 待制作 | 支持下载模板                 |
-| `in_production`      | 制作中 | 支持批量完成                 |
-| `completed`          | 已完成 | 展示已完成结果               |
-| `rejected`           | 已驳回 | 展示已驳回订单               |
+| 值                 | 名称   | 说明                                             |
+| ------------------ | ------ | ------------------------------------------------ |
+| `all`            | 全部   | 显示全部公证处订单                               |
+| `pending_review` | 待审核 | 管理页送审后进入，可进入预览审核                 |
+| `in_production`  | 制作中 | 公证处审核通过后进入，支持制作并下载、批量完成   |
+| `completed`      | 已完成 | 展示已完成结果；`shipped` 在界面层折叠为已完成 |
+| `rejected`       | 已驳回 | 展示已驳回订单                                   |
 
 **筛选逻辑**:
 
 - 多个筛选条件之间关系为 AND
 - `statusTab` 使用公证处工作台专属聚合口径
+- 历史 `translating`、`pending_production` query 或缓存数据仅用于兼容映射，不作为当前可见标签
 
 #### 8.4.3 列表字段定义
 
@@ -731,7 +741,7 @@ flowchart TD
 | [ADD] orderId         | String  | 公证订单数据    | 订单号           | `NT20260417011`              |
 | [ADD] customerName    | String  | 公证订单数据    | 客户姓名         | `李四`                       |
 | [ADD] productName     | String  | 公证订单数据    | 产品名称         | `驾照公证`                   |
-| [ADD] statusLabel     | Enum    | 状态聚合映射    | 工作台状态       | `待制作`                     |
+| [ADD] statusLabel     | Enum    | 状态聚合映射    | 工作台状态       | `制作中`                     |
 | [ADD] batchSelectable | Boolean | 状态 + 列表模式 | 是否允许批量勾选 | `true`                       |
 | [ADD] previewEntry    | String  | 路由映射        | 预览页入口       | `/notary/orders/:id/preview` |
 
@@ -748,43 +758,46 @@ flowchart TD
 
 **字段行为矩阵 (Field Behavior Matrix)**:
 
-| 字段（含变更标识）               | 创建模式      | 编辑模式       | 查看模式    | 依赖/逻辑说明                 |
-| :------------------------------- | :------------ | :------------- | :---------- | :---------------------------- |
-| **[ADD] selectedOrderIds** | Hidden (隐藏) | Checkbox Group | Text (文本) | 仅待制作 / 制作中支持批量勾选 |
-| **[ADD] exportAction**     | Hidden (隐藏) | Button Trigger | Text (文本) | 可触发 ZIP、DOCX、PDF 导出    |
-| **[ADD] completionAction** | Hidden (隐藏) | Button Trigger | Text (文本) | 仅制作中支持标记完成          |
+| 字段（含变更标识）               | 创建模式      | 编辑模式       | 查看模式    | 依赖/逻辑说明              |
+| :------------------------------- | :------------ | :------------- | :---------- | :------------------------- |
+| **[ADD] selectedOrderIds** | Hidden (隐藏) | Checkbox Group | Text (文本) | 仅制作中支持批量勾选       |
+| **[ADD] exportAction**     | Hidden (隐藏) | Button Trigger | Text (文本) | 可触发 ZIP、DOCX、PDF 导出 |
+| **[ADD] completionAction** | Hidden (隐藏) | Button Trigger | Text (文本) | 仅制作中支持标记完成       |
 
 #### 8.4.5 业务流程
 
 ```mermaid
 flowchart TD
-    A["管理页审核通过并选择公证处"] --> B["管理页订单进入待制作"]
-    A --> C["公证订单页订单进入翻译中"]
+    A["管理页审核通过"] --> B["管理页订单进入待制作"]
+    B -->|"送审并选择公证处"| C["公证处订单进入待审核"]
     C --> D["按状态标签查看订单"]
-    D --> E{"点击预览或批量操作"}
-    E -->|"预览"| F["进入公证处预览页"]
-    E -->|"批量下载"| G["生成 ZIP 模板并下载"]
-    G --> H["订单更新为制作中"]
-    E -->|"批量完成"| I["订单更新为已完成"]
-    F --> J{"执行审核动作"}
-    J -->|"通过"| K["更新状态并返回列表"]
-    J -->|"驳回"| L["记录原因并更新为已驳回"]
+    D --> E{"执行公证处动作"}
+    E -->|"预览审核通过"| F["公证处与管理页进入制作中"]
+    E -->|"预览审核驳回"| G["公证处已驳回 / 管理页已取消"]
+    F -->|"制作并下载"| H["触发 ZIP 下载，状态保持制作中"]
+    F -->|"单条或批量完成"| I["公证处已完成 / 管理页待物流发货"]
+    I --> J["管理页填写物流并确认发货"]
+    J --> K["查看订单物流信息同步回显"]
 ```
 
 **流程说明**:
 
 1. 公证专员从工作台按状态切换查看订单。
-2. 公证订单管理页审核通过并选择公证处后，管理页订单进入待制作，公证订单页同步进入翻译中。
-3. 待制作订单支持下载模板，下载后进入制作中。
-4. 制作中订单支持单条或批量完成，完成后进入已完成。
+2. 公证订单管理页审核通过后，管理页订单进入待制作；运营人员点击“送审”并选择公证处后，公证处订单进入待审核。
+3. 公证处待审核订单审核通过后，两侧订单进入制作中；管理页待制作聚合仍展示该订单，但不再显示“送审”按钮。
+4. 制作中订单支持单条下载模板，下载后保持制作中。
+5. 制作中订单支持单条或批量完成，完成后公证处订单进入已完成，管理页显示“物流发货”入口。
+6. 管理页填写物流公司与物流单号后，同步主订单与公证处订单物流字段，并在查看订单物流信息中回显。
 
 #### 8.4.6 边界场景处理
 
-| 场景                     | 处理方式                                         |
-| ------------------------ | ------------------------------------------------ |
-| 批量下载时未勾选订单     | 阻断操作并提示先选择订单                         |
-| 某订单模板文件缺失       | 仅跳过异常订单并提示失败名单，不中断其他订单下载 |
-| 已驳回订单被误操作为完成 | 阻断状态推进并提示当前状态不可执行该动作         |
+| 场景                       | 处理方式                                               |
+| -------------------------- | ------------------------------------------------------ |
+| 批量完成时未勾选订单       | 阻断操作并提示先选择制作中的订单                       |
+| 某订单模板文件缺失         | 仅跳过异常订单并提示失败名单，不中断其他订单下载       |
+| 已驳回订单被误操作为完成   | 阻断状态推进并提示当前状态不可执行该动作               |
+| 公证处已审核通过后重复送审 | 管理页隐藏“送审”按钮，避免重复推送                   |
+| 管理页物流发货后详情未回显 | 查看订单优先读取主订单物流字段，缺失时用公证处订单兜底 |
 
 ### 8.5 产品中心
 
@@ -1045,8 +1058,6 @@ flowchart TD
 | 本地存储满或写入失败     | 提示保存失败，不静默吞错       |
 | 导出文件名包含非法字符   | 自动清洗文件名后再下载         |
 
----
-
 ## 9. 非功能需求
 
 ### 9.1 性能要求
@@ -1067,9 +1078,15 @@ flowchart TD
 
 ### 9.3 可用性要求
 
-- 页面刷新后需保留登录态、侧边栏折叠状态、产品数据、主订单数据、Klook 订单数据、推送时效配置
+- 页面刷新后需保留登录态、侧边栏折叠状态、产品数据、主订单数据、公证处订单数据、Klook 订单数据、推送时效配置
 - 核心操作必须有显式反馈，不能出现无响应点击
 - 空状态、无数据状态、异常状态需提供明确占位文案
+
+### 9.4 演示部署
+
+- 当前 Demo 已部署到 Vercel Production，用于开发人员演示和试用。
+- 演示访问地址：`https://meika-admin-demo-20260408.vercel.app`
+- 部署不改变本地 Demo 数据边界；业务数据仍以浏览器 `localStorage` 初始化和持久化为主。
 
 ---
 
@@ -1079,21 +1096,23 @@ flowchart TD
 
 - 单元测试：订单状态聚合、导出工具、推送时效配置、登录校验
 - 集成测试：受保护路由、详情审核动作、产品与订单展示联动
-- E2E 测试：登录、订单审核、模板预览、批量下载、产品新增
+- E2E 测试：登录、订单审核、模板预览、公证送审、物流同步、产品新增
 - 性能测试：本地大列表筛选与导出场景
 
 ### 10.2 测试用例（关键场景）
 
-| 用例编号 | 测试场景                       | 前置条件                  | 操作步骤                         | 预期结果                                         |
-| -------- | ------------------------------ | ------------------------- | -------------------------------- | ------------------------------------------------ |
-| TC-001   | 登录成功                       | 位于 `/login`           | 输入正确账号、密码、验证码后提交 | 进入首页并生成登录会话                           |
-| TC-002   | 翻译订单审核通过               | 存在待审核翻译订单        | 进入审核页点击通过               | 订单进入待制作并写入日志                         |
-| TC-003   | Klook 订单驳回                 | 存在待审核 Klook 订单     | 不填原因直接点击驳回             | 阻断提交并提示原因必填                           |
-| TC-004   | IDD 模板预览                   | 存在可预览的 IDP 完成订单 | 点击“更多”进入模板页并切换模板 | 三套模板均可预览与下载                           |
-| TC-005   | 公证处批量下载                 | 存在待制作公证订单        | 勾选多条订单并执行批量下载       | ZIP 下载成功，订单转为制作中                     |
-| TC-006   | 产品新增                       | 位于产品中心              | 新增产品并保存                   | 自动生成 `productId` 与默认办理类型            |
-| TC-007   | 办理类型重名校验               | 当前产品下已存在“加急”  | 新增同名办理类型                 | 保存失败并提示名称重复                           |
-| TC-008   | 公证管理页审核通过并选择公证处 | 存在待审核公证订单        | 在审核页点击通过并选择公证处     | 管理页订单进入待制作，公证订单页同订单进入翻译中 |
+| 用例编号 | 测试场景                   | 前置条件                  | 操作步骤                           | 预期结果                                                   |
+| -------- | -------------------------- | ------------------------- | ---------------------------------- | ---------------------------------------------------------- |
+| TC-001   | 登录成功                   | 位于 `/login`           | 输入正确账号、密码、验证码后提交   | 进入首页并生成登录会话                                     |
+| TC-002   | 翻译订单审核通过           | 存在待审核翻译订单        | 进入审核页点击通过                 | 订单进入待制作并写入日志                                   |
+| TC-003   | Klook 订单驳回             | 存在待审核 Klook 订单     | 不填原因直接点击驳回               | 阻断提交并提示原因必填                                     |
+| TC-004   | IDD 模板预览               | 存在可预览的 IDP 完成订单 | 点击“更多”进入模板页并切换模板   | 三套模板均可预览与下载                                     |
+| TC-005   | 公证处制作中下载与完成     | 存在制作中公证处订单      | 点击“制作并下载”后再标记完成     | ZIP 下载成功，下载后仍为制作中；完成后公证处订单进入已完成 |
+| TC-006   | 产品新增                   | 位于产品中心              | 新增产品并保存                     | 自动生成 `productId` 与默认办理类型                      |
+| TC-007   | 办理类型重名校验           | 当前产品下已存在“加急”  | 新增同名办理类型                   | 保存失败并提示名称重复                                     |
+| TC-008   | 公证管理页送审至公证处     | 存在待制作公证管理页订单  | 点击“送审”并选择公证处           | 公证处订单页同订单进入待审核                               |
+| TC-009   | 公证处审核通过隐藏送审     | 公证处存在待审核订单      | 在公证处预览页点击审核通过         | 公证处和管理页同订单进入制作中，管理页不再显示“送审”按钮 |
+| TC-010   | 管理页物流发货同步查看订单 | 公证处订单已完成          | 管理页填写物流公司与物流单号并发货 | 查看订单物流信息显示同一物流公司与物流单号                 |
 
 ---
 
@@ -1128,22 +1147,38 @@ Then 系统展示对应 PDF 预览
 And 支持下载当前模板文件
 ```
 
-**场景4: 公证处批量制作**
+**场景4: 公证处制作中下载与完成**
 
 ```gherkin
-Given 公证处工作台存在待制作订单
-When 公证专员勾选多条订单并执行批量下载
+Given 公证处工作台存在制作中订单
+When 公证专员点击制作并下载
 Then 系统生成 ZIP 模板并触发浏览器下载
-And 选中订单更新为制作中状态
+And 订单保持制作中状态
+When 公证专员将订单标记为已完成
+Then 公证处订单进入已完成
+And 管理页同订单显示物流发货入口
 ```
 
-**场景4-补充: 公证审核通过双向流转**
+**场景4-补充: 公证送审与审核通过同步**
 
 ```gherkin
-Given 管理员在公证订单管理页打开一条待审核订单
-When 点击通过并选择推送公证处
+Given 管理员在公证订单管理页存在一条待制作订单
+When 点击送审并选择公证处
 Then 订单在公证订单管理页进入待制作
-And 同订单在公证订单页进入翻译中
+And 同订单在公证订单页进入待审核
+When 公证处预览页审核通过
+Then 同订单在公证订单页进入制作中
+And 管理页不再显示送审按钮
+```
+
+**场景4-补充2: 物流发货同步查看订单**
+
+```gherkin
+Given 公证处工作台存在一条已完成订单
+And 公证订单管理页同订单显示物流发货入口
+When 运营人员填写物流公司和物流单号并确认发货
+Then 管理页和公证处订单同步为已发货
+And 查看订单中的物流信息显示同一物流公司和物流单号
 ```
 
 **场景5: 产品与办理类型联动**
@@ -1233,21 +1268,63 @@ And 推送时效按 productId 和 processTypeId 持久化
 
 **字段定义**:
 
-| 字段名          | 类型   | 必填 | 默认值             | 说明           | 约束                                   |
-| --------------- | ------ | ---- | ------------------ | -------------- | -------------------------------------- |
-| orderId         | string | 是   | 无                 | 订单号         | 唯一                                   |
-| productId       | string | 是   | 无                 | 产品 ID        | 关联产品                               |
-| productCategory | string | 是   | 无                 | 订单分类       | `translation` / `idp` / `notary` |
-| status          | string | 是   | `pending_review` | 底层状态       | 受状态机约束                           |
-| lockedPrice     | number | 是   | `0`              | 锁定价格       | 不受后续产品改价影响                   |
-| logs            | array  | 否   | `[]`             | 审核与操作日志 | 动作留痕                               |
+| 字段名           | 类型   | 必填 | 默认值             | 说明           | 约束                                   |
+| ---------------- | ------ | ---- | ------------------ | -------------- | -------------------------------------- |
+| orderId          | string | 是   | 无                 | 订单号         | 唯一                                   |
+| productId        | string | 是   | 无                 | 产品 ID        | 关联产品                               |
+| productCategory  | string | 是   | 无                 | 订单分类       | `translation` / `idp` / `notary` |
+| status           | string | 是   | `pending_review` | 底层状态       | 受状态机约束                           |
+| lockedPrice      | number | 是   | `0`              | 锁定价格       | 不受后续产品改价影响                   |
+| logs             | array  | 否   | `[]`             | 审核与操作日志 | 动作留痕                               |
+| shippedAt        | string | 否   | 无                 | 发货时间       | 物流发货时写入                         |
+| logisticsCompany | string | 否   | 空字符串           | 物流公司       | 公证管理页发货时必填                   |
+| trackingNumber   | string | 否   | 空字符串           | 物流单号       | 公证管理页发货时必填                   |
+
+**业务约束**:
+
+- 公证订单管理页“送审”不会直接改写主订单为公证处待审核，而是写入公证处订单数据源。
+- 公证处审核通过后，主订单同订单同步为 `in_production`，管理页不再显示“送审”按钮。
+- 公证处制作完成后，主订单同订单同步为 `pending_production`，用于展示“物流发货”入口。
+- 管理页物流发货后，主订单与公证处订单同步 `status/shippedAt/logisticsCompany/trackingNumber/logs`。
+- 查看订单物流信息优先读取主订单物流字段；主订单缺失时从公证处订单同名字段兜底。
 
 **索引**:
 
 - INDEX: `productCategory`
 - INDEX: `status`
 
-#### 13.2.3 存储对象：`meika-klook-orders`
+#### 13.2.3 存储对象：`meika-notary-office-orders`
+
+**表说明**: 公证处工作台独立订单数据源，承接管理页送审后的公证处审核、制作、完成与物流同步状态。
+
+**字段定义**:
+
+| 字段名           | 类型   | 必填 | 默认值             | 说明       | 约束                                         |
+| ---------------- | ------ | ---- | ------------------ | ---------- | -------------------------------------------- |
+| orderId          | string | 是   | 无                 | 订单号     | 与主订单同号或使用公证处种子订单号           |
+| productCategory  | string | 是   | `notary`         | 订单分类   | 固定为公证订单                               |
+| status           | string | 是   | `pending_review` | 公证处状态 | 当前可见口径为待审核、制作中、已完成、已驳回 |
+| officeId         | string | 否   | 无                 | 公证处 ID  | 管理页送审选择公证处后写入                   |
+| officeName       | string | 否   | 无                 | 公证处名称 | 管理页送审选择公证处后写入                   |
+| shippedAt        | string | 否   | 无                 | 发货时间   | 管理页物流发货时同步                         |
+| logisticsCompany | string | 否   | 空字符串           | 物流公司   | 管理页物流发货时同步                         |
+| trackingNumber   | string | 否   | 空字符串           | 物流单号   | 管理页物流发货时同步                         |
+| logs             | array  | 否   | `[]`             | 操作日志   | 审核、下载、完成、物流动作留痕               |
+
+**业务约束**:
+
+- 管理页送审后，公证处订单进入 `pending_review`。
+- 公证处审核通过后，公证处订单进入 `in_production`，并同步主订单为 `in_production`。
+- 制作中模板下载不会改变状态，仅追加日志。
+- 公证处单条或批量完成后，公证处订单进入 `completed`，并同步主订单回到可物流发货口径。
+- 历史 `translating`、`pending_production` 数据仅作兼容映射，不作为当前新流程入口。
+
+**索引**:
+
+- INDEX: `status`
+- INDEX: `officeId`
+
+#### 13.2.4 存储对象：`meika-klook-orders`
 
 **表说明**: Klook 订单独立数据源。
 
@@ -1267,7 +1344,7 @@ And 推送时效按 productId 和 processTypeId 持久化
 - Klook 状态仅允许 `pending_review`、`pending_production`、`shipped`、`cancelled`
 - Klook 驳回结果写入 `cancelled`，并保留 `rejectReason`
 
-#### 13.2.4 存储对象：`meika-products`
+#### 13.2.5 存储对象：`meika-products`
 
 **表说明**: 产品与办理类型主数据。
 
@@ -1282,7 +1359,7 @@ And 推送时效按 productId 和 processTypeId 持久化
 | status       | string | 是   | `active` | 上下架状态   |                  |
 | processTypes | array  | 否   | `[]`     | 办理类型列表 | 子项名称不可重名 |
 
-#### 13.2.5 存储对象：`meika-push-timeliness-config`
+#### 13.2.6 存储对象：`meika-push-timeliness-config`
 
 **表说明**: 按产品与办理类型维度保存推送时效。
 
@@ -1312,16 +1389,20 @@ type PushTimelinessConfig = Record<string, Record<string, { value: string; unit:
 > [!TIP]
 > 本节为建议项，用于提升行为可观测性，不作为功能上线阻断条件。
 
-| 事件名                       | 触发时机                   | 关键属性                                                       |
-| ---------------------------- | -------------------------- | -------------------------------------------------------------- |
-| `auth_login_submit`        | 用户提交登录表单           | `username`, `success`, `failure_reason`                  |
-| `dashboard_page_view`      | 用户进入 Dashboard         | `selected_date`, `user_role`                               |
-| `order_filter_apply`       | 用户应用订单筛选条件       | `workspace_type`, `filter_fields`, `result_count`        |
-| `order_audit_submit`       | 用户提交审核动作           | `workspace_type`, `order_id`, `action_type`, `success` |
-| `idd_template_download`    | 用户下载 IDD 模板          | `order_id`, `template_name`                                |
-| `notary_batch_download`    | 公证处批量下载模板         | `order_count`, `success_count`                             |
-| `product_save_submit`      | 用户保存产品               | `product_id`, `is_new`, `success`                        |
-| `process_type_save_submit` | 用户保存办理类型或推送时效 | `product_id`, `process_type_id`, `success`               |
+| 事件名                       | 触发时机                   | 关键属性                                                                  |
+| ---------------------------- | -------------------------- | ------------------------------------------------------------------------- |
+| `auth_login_submit`        | 用户提交登录表单           | `username`, `success`, `failure_reason`                             |
+| `dashboard_page_view`      | 用户进入 Dashboard         | `selected_date`, `user_role`                                          |
+| `order_filter_apply`       | 用户应用订单筛选条件       | `workspace_type`, `filter_fields`, `result_count`                   |
+| `order_audit_submit`       | 用户提交审核动作           | `workspace_type`, `order_id`, `action_type`, `success`            |
+| `idd_template_download`    | 用户下载 IDD 模板          | `order_id`, `template_name`                                           |
+| `notary_send_review`       | 管理页送审至公证处         | `order_id`, `office_id`, `office_name`, `success`                 |
+| `notary_office_audit`      | 公证处提交审核动作         | `order_id`, `action_type`, `success`                                |
+| `notary_template_download` | 公证处制作中下载模板       | `order_id`, `success`                                                 |
+| `notary_batch_complete`    | 公证处批量完成制作         | `order_count`, `success_count`                                        |
+| `notary_logistics_submit`  | 管理页提交物流发货         | `order_id`, `logistics_company`, `has_tracking_number`, `success` |
+| `product_save_submit`      | 用户保存产品               | `product_id`, `is_new`, `success`                                   |
+| `process_type_save_submit` | 用户保存办理类型或推送时效 | `product_id`, `process_type_id`, `success`                          |
 
 ### 13.4 i18n 资源规范（建议项）
 
@@ -1378,4 +1459,5 @@ type PushTimelinessConfig = Record<string, Record<string, { value: string; unit:
 
 | 日期       | 版本 | 变更内容                                          | 变更人 |
 | ---------- | ---- | ------------------------------------------------- | ------ |
+| 2026-04-28 | v1.1 | 同步公证链路送审、审核通过、制作完成与物流发货当前实现口径 | Codex  |
 | 2026-04-21 | v1.0 | 基于现有美卡主 PRD 重构为标准模板版 Specification | Codex  |

@@ -486,6 +486,10 @@
   background: #f5f6f8;
 }
 
+.sidebar-user-dropdown__item + .sidebar-user-dropdown__item {
+  margin-top: 4px;
+}
+
 .sidebar-user-dropdown__item:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.08);

@@ -152,6 +152,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, currentUser, onLogout
     onLogout?.();
   };
 
+  const handleSwitchSystemClick = () => {
+    setIsUserMenuOpen(false);
+    navigate('/agent-system');
+  };
+
   const renderFlyoutItems = (items: MenuItem[], depth = 0): React.ReactNode =>
     items.map(item => {
       const itemLabel = t(item.labelKey);
@@ -363,6 +368,14 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, currentUser, onLogout
                   <strong>{displayName}</strong>
                   <span>{displayRole}</span>
                 </div>
+                <button
+                  type="button"
+                  className="sidebar-user-dropdown__item"
+                  onClick={handleSwitchSystemClick}
+                  role="menuitem"
+                >
+                  切换系统
+                </button>
                 <button
                   type="button"
                   className="sidebar-user-dropdown__item sidebar-user-dropdown__item--danger"

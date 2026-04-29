@@ -1,16 +1,73 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import JSZip from 'jszip';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { getOrders } from '../../services/mockDataService';
+import { getOrders, updateOrder } from '../../services/mockDataService';
+import {
+  getNotaryOfficeOrderById,
+  pushNotaryOrderToOffice,
+  syncNotaryManagementShipment,
+} from '../../services/notaryOfficeOrderService';
 import ListUnifiedPagination from '../../shared/components/list/ListUnifiedPagination';
+import { orderPreviewAssets } from '../../shared/config/orderPreviewAssets';
 import { useTranslation } from '../../shared/i18n/config';
 import type { AgentLevel, Order, OrderStatus, ProcessType } from '../../shared/types';
+import { getCurrentAuthAccountId } from '../../shared/utils/auth';
 import { formatBeijingTimestamp } from '../../shared/utils/dateTime';
 import { exportTranslationOrders } from '../../shared/utils/exportTranslationOrders';
 import { getProcessTypeTone, getProductProcessTypeLabel } from '../../shared/utils/productProcessType';
 
 type NotaryManagementStatus = 'pending_review' | 'pending_production' | 'shipped' | 'cancelled';
 
+type SubmissionMaterialImage = {
+  key: string;
+  label: string;
+  src: string;
+};
+
+type SubmissionMaterialFile = {
+  key: string;
+  label: string;
+  name: string;
+  path: string;
+  type: string;
+};
+
+type SubmissionFilePreviewKind = 'image' | 'pdf' | 'docx' | 'spreadsheet' | 'unsupported';
+type SubmissionFilePreviewStatus = 'idle' | 'loading' | 'ready' | 'error';
+
+type NotaryOrderRecordItem = {
+  action: string;
+  time?: string;
+};
+
+type LogisticsForm = {
+  logisticsCompany: string;
+  trackingNumber: string;
+};
+
 const NOTARY_ORDER_MANAGEMENT_PATH = '/order-management/notary-orders';
+const PREVIEW_ASSET_BASE_PATH = '/Notary%20Office%20Template/Preview%20file/yulan';
+const IMAGE_MATERIAL_ACCEPT = 'image/*';
+const FILE_MATERIAL_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp,image/*';
+const LOGISTICS_COMPANY_OPTIONS = ['顺丰速运', '京东物流', '邮政EMS', '圆通速递', '中通快递', '申通快递'];
+const NOTARY_OFFICES = [
+  { id: 'beibu-gulf', name: '北部湾公证处', district: '送审公证处' },
+  { id: 'zhangjiang', name: '张江公证处', district: '送审公证处' },
+  { id: 'dongbo', name: '东博公证处', district: '送审公证处' },
+];
+
+const SUBMISSION_MATERIAL_IMAGES: SubmissionMaterialImage[] = [
+  { key: 'license-front', label: '驾驶证正面', src: orderPreviewAssets.licenseFront },
+  { key: 'license-back', label: '驾驶证反面', src: orderPreviewAssets.licenseBack },
+  { key: 'extra-front', label: '副页正面', src: orderPreviewAssets.extraFront },
+  { key: 'extra-back', label: '副页反面', src: orderPreviewAssets.extraBack },
+  { key: 'identity-front', label: '身份证正面', src: orderPreviewAssets.identityFront },
+  { key: 'identity-back', label: '身份证反面', src: orderPreviewAssets.identityBack },
+  { key: 'digital-license', label: '电子驾照', src: orderPreviewAssets.digitalLicense },
+  { key: 'signature', label: '签名', src: orderPreviewAssets.signature },
+];
+
+const buildPreviewAssetPath = (fileName: string) => `${PREVIEW_ASSET_BASE_PATH}/${encodeURIComponent(fileName)}`;
 
 const STATUS_TABS: Array<{ label: string; value: NotaryManagementStatus | '' }> = [
   { label: '全部订单', value: '' },
@@ -85,6 +142,33 @@ const getAgentName = (order: Order) => AGENT_NAMES[order.agentLevel] || '美卡�
 const getLicenseName = (order: Order) => order.licenseName || order.customerName || '--';
 const getLicenseNo = (order: Order) => order.licenseNo || order.customerPassport || '--';
 const getLicenseCategory = (order: Order) => order.licenseCategory || '--';
+const getSubmissionMaterialFiles = (order: Order): SubmissionMaterialFile[] => {
+  const baseName = getLicenseName(order) === '--' ? order.orderId : getLicenseName(order);
+
+  return [
+    {
+      key: 'power-of-attorney',
+      label: '委托书',
+      name: `${baseName}委托书.docx`,
+      path: buildPreviewAssetPath('Power of Attorney.docx'),
+      type: 'DOCX',
+    },
+    {
+      key: 'scanned-copy',
+      label: '证件扫描件',
+      name: `${baseName}证件扫描件.pdf`,
+      path: buildPreviewAssetPath('Scanned copy.pdf'),
+      type: 'PDF',
+    },
+    {
+      key: 'notarized-document',
+      label: '公证模板文件',
+      name: `${baseName}公证模板文件.pdf`,
+      path: buildPreviewAssetPath('Notarized Document.pdf'),
+      type: 'PDF',
+    },
+  ];
+};
 
 const joinSegments = (segments: Array<string | undefined>) =>
   segments.filter((segment): segment is string => Boolean(segment && segment.trim())).join('，');
@@ -111,14 +195,33 @@ const getLogisticsInfo = (order: Order) =>
 
 const getPushedNotaryOfficeName = (order: Order) => {
   const directName = order.pushedNotaryOfficeName?.trim();
-  if (directName) {
+  const hasSubmissionLog = order.logs.some((log) => /送审/.test(log.action));
+  if (directName && hasSubmissionLog) {
     return directName;
   }
 
-  const pushLog = [...order.logs].reverse().find((log) => /推送至/.test(log.action));
-  const matchedName = pushLog?.action.match(/推送至(.+)$/)?.[1]?.trim();
+  const pushLog = [...order.logs].reverse().find((log) => /送审至/.test(log.action));
+  const matchedName = pushLog?.action.match(/送审至(.+?)(?:，|,|$)/)?.[1]?.trim();
   return matchedName || '--';
 };
+
+const hasNotaryOfficeCompletion = (order: Order) => {
+  const officeOrder = getNotaryOfficeOrderById(order.orderId);
+  return (
+    order.logs.some((log) => /制作完成|待物流发货/.test(log.action)) ||
+    officeOrder?.status === 'completed' ||
+    officeOrder?.status === 'shipped' ||
+    Boolean(officeOrder?.logs.some((log) => /制作完成|待物流发货/.test(log.action)))
+  );
+};
+
+const hasNotaryOfficeApproval = (order: Order) => {
+  const officeOrder = getNotaryOfficeOrderById(order.orderId);
+  return order.status === 'in_production' || officeOrder?.status === 'in_production' || hasNotaryOfficeCompletion(order);
+};
+
+const shouldShowNotarySubmissionAction = (order: Order) =>
+  order.status === 'pending_production' && !hasNotaryOfficeApproval(order);
 
 const getRejectReason = (order: Order) => {
   const directReason = order.rejectReason?.trim();
@@ -137,6 +240,110 @@ const getRejectReason = (order: Order) => {
 
   const matchedReason = rejectLog.action.match(/(?:驳回|拒绝)[：:]\s*(.+)$/)?.[1]?.trim();
   return matchedReason || rejectLog.action;
+};
+
+const findLatestOrderLog = (logs: Order['logs'], pattern: RegExp) =>
+  [...logs].reverse().find((log) => pattern.test(log.action));
+
+const getOrderRecordTime = (...parts: Array<string | undefined>) =>
+  parts.map((part) => part?.trim()).find(Boolean);
+
+const getOrderRecordItems = (order: Order): NotaryOrderRecordItem[] => {
+  if (getManagementStatus(order.status) === 'pending_review') {
+    return [];
+  }
+
+  const officeOrder = getNotaryOfficeOrderById(order.orderId);
+  const combinedLogs = [...order.logs, ...(officeOrder?.logs || [])];
+  const translationLog = findLatestOrderLog(order.logs, /^审核通过(?:，|$)/);
+  const submissionLog = findLatestOrderLog(combinedLogs, /送审至|公证处已接收/);
+  const approvalLog = findLatestOrderLog(combinedLogs, /审核通过，进入制作中|公证处.*审核通过/);
+  const rejectionLog = findLatestOrderLog(combinedLogs, /审核驳回|公证处.*驳回/);
+  const completionLog = findLatestOrderLog(combinedLogs, /制作完成|待物流发货/);
+  const shipmentLog = findLatestOrderLog(combinedLogs, /^物流发货[:：]/);
+  const hasSubmission = Boolean(submissionLog || order.pushedNotaryOfficeId || officeOrder);
+  const hasOfficeRejection = Boolean(
+    rejectionLog ||
+      officeOrder?.status === 'rejected' ||
+      officeOrder?.status === 'cancelled' ||
+      (getManagementStatus(order.status) === 'cancelled' && hasSubmission),
+  );
+  const hasShipment = Boolean(shipmentLog);
+  const hasCompletion = Boolean(hasShipment || completionLog || officeOrder?.status === 'completed' || officeOrder?.status === 'shipped');
+  const hasApproval = Boolean(
+    hasCompletion ||
+      approvalLog ||
+      order.status === 'in_production' ||
+      officeOrder?.status === 'in_production' ||
+      officeOrder?.status === 'completed' ||
+      officeOrder?.status === 'shipped',
+  );
+  const hasTranslation = Boolean(
+    translationLog ||
+      order.status === 'pending_production' ||
+      order.status === 'in_production' ||
+      hasShipment ||
+      hasSubmission ||
+      hasApproval ||
+      hasCompletion,
+  );
+  const records: NotaryOrderRecordItem[] = [];
+
+  if (hasTranslation) {
+    records.push({
+      action: '已翻译',
+      time: getOrderRecordTime(translationLog?.time, order.updatedAt),
+    });
+  }
+
+  if (hasSubmission) {
+    records.push({
+      action: '已送审公证处',
+      time: getOrderRecordTime(submissionLog?.time, officeOrder?.createdAt, order.updatedAt),
+    });
+  }
+
+  if (hasOfficeRejection) {
+    records.push({
+      action: '公证处审核驳回',
+      time: getOrderRecordTime(rejectionLog?.time, officeOrder?.updatedAt, order.updatedAt),
+    });
+    return records;
+  }
+
+  if (hasSubmission && !hasApproval && !hasCompletion && !hasShipment) {
+    records.push({
+      action: '公证处审核中',
+      time: getOrderRecordTime(submissionLog?.time, officeOrder?.createdAt, order.updatedAt),
+    });
+  }
+
+  if (hasApproval) {
+    records.push({
+      action: '公证处审核通过',
+      time: getOrderRecordTime(approvalLog?.time, officeOrder?.updatedAt, order.updatedAt),
+    });
+    records.push({
+      action: '公证处制作中',
+      time: getOrderRecordTime(approvalLog?.time, officeOrder?.updatedAt, order.updatedAt),
+    });
+  }
+
+  if (hasCompletion) {
+    records.push({
+      action: '公证处制作完成',
+      time: getOrderRecordTime(completionLog?.time, officeOrder?.updatedAt, order.updatedAt),
+    });
+  }
+
+  if (hasShipment) {
+    records.push({
+      action: '已发货',
+      time: getOrderRecordTime(shipmentLog?.time, order.shippedAt, order.updatedAt),
+    });
+  }
+
+  return records;
 };
 
 const getShippedSortValue = (order: Order) => {
@@ -180,11 +387,308 @@ const getExportErrorMessage = (error: unknown) => {
   return '导出失败，请稍后重试';
 };
 
+const getUploadedFileType = (fileName: string) => {
+  const extension = fileName.split('.').pop()?.trim();
+
+  return extension ? extension.toUpperCase() : 'FILE';
+};
+
+const buildUploadedMaterialKey = (prefix: string, file: File, index: number) =>
+  `${prefix}-${Date.now()}-${index}-${file.name}`;
+
+const buildMaterialInputId = (prefix: string, key: string) =>
+  `${prefix}-${key.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+
+const IMAGE_FILE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg']);
+
+const getSubmissionFileExtension = (file: SubmissionMaterialFile) => {
+  const source = file.name || file.path || file.type;
+  const extension = source.split(/[?#]/)[0].split('.').pop()?.trim().toLowerCase();
+  return extension || file.type.toLowerCase();
+};
+
+const getSubmissionFilePreviewKind = (file: SubmissionMaterialFile): SubmissionFilePreviewKind => {
+  const extension = getSubmissionFileExtension(file);
+
+  if (IMAGE_FILE_EXTENSIONS.has(extension)) {
+    return 'image';
+  }
+
+  if (extension === 'pdf') {
+    return 'pdf';
+  }
+
+  if (extension === 'docx') {
+    return 'docx';
+  }
+
+  if (extension === 'xlsx') {
+    return 'spreadsheet';
+  }
+
+  return 'unsupported';
+};
+
+const escapePreviewHtml = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const getElementLocalName = (node: Element | Node) => {
+  if ('localName' in node && node.localName) {
+    return node.localName;
+  }
+
+  return node.nodeName.split(':').pop() || node.nodeName;
+};
+
+const getElementsByLocalName = (root: Document | Element, localName: string) =>
+  Array.from(root.getElementsByTagName('*')).filter((element) => getElementLocalName(element) === localName);
+
+const buildSubmissionPreviewDocument = (title: string, bodyContent: string) => `
+  <!doctype html>
+  <html lang="zh-CN">
+    <head>
+      <meta charset="utf-8" />
+      <style>
+        html,
+        body {
+          margin: 0;
+          min-height: 100%;
+          background: #eef2f7;
+          color: #0f172a;
+          font-family: "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+        }
+
+        body {
+          box-sizing: border-box;
+          padding: 24px;
+        }
+
+        .preview-page {
+          width: 840px;
+          max-width: 100%;
+          min-height: calc(100vh - 48px);
+          margin: 0 auto;
+          padding: 42px 52px;
+          box-sizing: border-box;
+          background: #ffffff;
+          box-shadow: 0 24px 70px rgba(15, 23, 42, 0.14);
+        }
+
+        .preview-title {
+          margin: 0 0 24px;
+          padding-bottom: 14px;
+          border-bottom: 1px solid #e2e8f0;
+          font-size: 18px;
+          line-height: 1.5;
+        }
+
+        .docx-paragraph {
+          margin: 0 0 14px;
+          font-size: 16px;
+          line-height: 1.9;
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
+
+        .docx-empty,
+        .spreadsheet-empty {
+          margin: 0;
+          color: #64748b;
+          font-size: 14px;
+          line-height: 1.8;
+        }
+
+        .spreadsheet-wrap {
+          overflow: auto;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+        }
+
+        .spreadsheet-table {
+          width: 100%;
+          min-width: 720px;
+          border-collapse: collapse;
+          font-size: 13px;
+        }
+
+        .spreadsheet-table th,
+        .spreadsheet-table td {
+          border: 1px solid #e2e8f0;
+          padding: 9px 10px;
+          text-align: left;
+          vertical-align: top;
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
+
+        .spreadsheet-table th {
+          background: #f8fafc;
+          color: #475569;
+          font-weight: 700;
+        }
+
+        @media (max-width: 768px) {
+          body {
+            padding: 12px;
+          }
+
+          .preview-page {
+            min-height: calc(100vh - 24px);
+            padding: 24px 18px;
+            box-shadow: none;
+          }
+        }
+      </style>
+    </head>
+    <body>
+      <main class="preview-page">
+        <h1 class="preview-title">${escapePreviewHtml(title)}</h1>
+        ${bodyContent}
+      </main>
+    </body>
+  </html>
+`;
+
+const fetchSubmissionFileBuffer = async (file: SubmissionMaterialFile) => {
+  const response = await fetch(file.path);
+  if (!response.ok) {
+    throw new Error(`Failed to load ${file.name}`);
+  }
+
+  return response.arrayBuffer();
+};
+
+const collectDocxText = (node: Node): string => {
+  if (node.nodeType !== Node.ELEMENT_NODE) {
+    return '';
+  }
+
+  const element = node as Element;
+  const localName = getElementLocalName(element);
+
+  if (localName === 't') {
+    return element.textContent || '';
+  }
+
+  if (localName === 'tab') {
+    return '    ';
+  }
+
+  if (localName === 'br') {
+    return '\n';
+  }
+
+  return Array.from(element.childNodes).map(collectDocxText).join('');
+};
+
+const buildDocxSubmissionPreviewHtml = async (file: SubmissionMaterialFile) => {
+  const buffer = await fetchSubmissionFileBuffer(file);
+  const zip = await JSZip.loadAsync(buffer);
+  const documentFile = zip.file('word/document.xml');
+
+  if (!documentFile) {
+    throw new Error('Missing DOCX document.xml');
+  }
+
+  const documentXml = await documentFile.async('string');
+  const document = new DOMParser().parseFromString(documentXml, 'application/xml');
+  const paragraphs = getElementsByLocalName(document, 'p');
+  const content = paragraphs
+    .map((paragraph) => collectDocxText(paragraph))
+    .map((text) => text.trim())
+    .filter(Boolean)
+    .map((text) => `<p class="docx-paragraph">${escapePreviewHtml(text)}</p>`)
+    .join('');
+
+  return buildSubmissionPreviewDocument(file.name, content || '<p class="docx-empty">未读取到可预览的文字内容。</p>');
+};
+
+const getSpreadsheetColumnIndex = (cellRef: string) => {
+  const columnName = cellRef.match(/^[A-Z]+/i)?.[0]?.toUpperCase() || '';
+  if (!columnName) {
+    return null;
+  }
+
+  return Array.from(columnName).reduce((result, char) => result * 26 + char.charCodeAt(0) - 64, 0) - 1;
+};
+
+const buildXlsxSubmissionPreviewHtml = async (file: SubmissionMaterialFile) => {
+  const buffer = await fetchSubmissionFileBuffer(file);
+  const zip = await JSZip.loadAsync(buffer);
+  const sharedStringsFile = zip.file('xl/sharedStrings.xml');
+  const sharedStrings: string[] = [];
+
+  if (sharedStringsFile) {
+    const sharedStringsXml = await sharedStringsFile.async('string');
+    const sharedStringsDocument = new DOMParser().parseFromString(sharedStringsXml, 'application/xml');
+    getElementsByLocalName(sharedStringsDocument, 'si').forEach((item) => {
+      sharedStrings.push(getElementsByLocalName(item, 't').map((textNode) => textNode.textContent || '').join(''));
+    });
+  }
+
+  const worksheetFile = zip.file('xl/worksheets/sheet1.xml');
+  if (!worksheetFile) {
+    throw new Error('Missing XLSX worksheet');
+  }
+
+  const worksheetXml = await worksheetFile.async('string');
+  const worksheetDocument = new DOMParser().parseFromString(worksheetXml, 'application/xml');
+  const rowElements = getElementsByLocalName(worksheetDocument, 'row').slice(0, 30);
+  let maxColumnCount = 0;
+
+  const rows = rowElements.map((rowElement) => {
+    const rowCells = new Map<number, string>();
+
+    getElementsByLocalName(rowElement, 'c').forEach((cellElement, fallbackIndex) => {
+      const columnIndex = getSpreadsheetColumnIndex(cellElement.getAttribute('r') || '') ?? fallbackIndex;
+      const cellType = cellElement.getAttribute('t') || '';
+      let value = getElementsByLocalName(cellElement, 'v')[0]?.textContent || '';
+
+      if (cellType === 's') {
+        value = sharedStrings[Number(value)] || '';
+      } else if (cellType === 'inlineStr') {
+        value = getElementsByLocalName(cellElement, 't').map((textNode) => textNode.textContent || '').join('');
+      }
+
+      rowCells.set(columnIndex, value);
+      maxColumnCount = Math.max(maxColumnCount, columnIndex + 1);
+    });
+
+    return rowCells;
+  });
+
+  const columnCount = Math.min(Math.max(maxColumnCount, 1), 12);
+  const tableRows = rows
+    .map((rowCells, rowIndex) => {
+      const cells = Array.from({ length: columnCount }, (_, columnIndex) => {
+        const cellValue = escapePreviewHtml(rowCells.get(columnIndex) || '');
+        const tag = rowIndex === 0 ? 'th' : 'td';
+        return `<${tag}>${cellValue}</${tag}>`;
+      }).join('');
+
+      return `<tr>${cells}</tr>`;
+    })
+    .join('');
+
+  const content = tableRows
+    ? `<div class="spreadsheet-wrap"><table class="spreadsheet-table">${tableRows}</table></div>`
+    : '<p class="spreadsheet-empty">未读取到可预览的表格内容。</p>';
+
+  return buildSubmissionPreviewDocument(file.name, content);
+};
+
 const NotaryOrderManagementList: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const currentAccountId = useMemo(() => getCurrentAuthAccountId(), []);
   const [searchParams, setSearchParams] = useSearchParams();
   const initialStatus = useMemo(() => getInitialStatus(searchParams.get('status')), [searchParams]);
+  const [ordersRevision, setOrdersRevision] = useState(0);
 
   const notaryOrders = useMemo(
     () =>
@@ -195,7 +699,7 @@ const NotaryOrderManagementList: React.FC = () => {
             NOTARY_SOURCE_STATUSES.includes(order.status),
         )
         .sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
-    [],
+    [ordersRevision],
   );
 
   const [activeStatus, setActiveStatus] = useState<NotaryManagementStatus | ''>(initialStatus);
@@ -209,6 +713,15 @@ const NotaryOrderManagementList: React.FC = () => {
   const [pageSize, setPageSize] = useState(20);
   const [isExporting, setIsExporting] = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [submissionPreviewOrder, setSubmissionPreviewOrder] = useState<Order | null>(null);
+  const [selectedSubmissionOfficeId, setSelectedSubmissionOfficeId] = useState('');
+  const [submissionImages, setSubmissionImages] = useState<SubmissionMaterialImage[]>(SUBMISSION_MATERIAL_IMAGES);
+  const [submissionFiles, setSubmissionFiles] = useState<SubmissionMaterialFile[]>([]);
+  const [previewSubmissionFileKey, setPreviewSubmissionFileKey] = useState<string | null>(null);
+  const [submissionFilePreviewHtml, setSubmissionFilePreviewHtml] = useState('');
+  const [submissionFilePreviewStatus, setSubmissionFilePreviewStatus] = useState<SubmissionFilePreviewStatus>('idle');
+  const [logisticsOrder, setLogisticsOrder] = useState<Order | null>(null);
+  const [logisticsForm, setLogisticsForm] = useState<LogisticsForm>({ logisticsCompany: '', trackingNumber: '' });
 
   useEffect(() => {
     setActiveStatus(initialStatus);
@@ -221,6 +734,59 @@ const NotaryOrderManagementList: React.FC = () => {
     const timeoutId = window.setTimeout(() => setToast(null), 3000);
     return () => window.clearTimeout(timeoutId);
   }, [toast]);
+
+  const previewSubmissionFile = useMemo(
+    () => submissionFiles.find((file) => file.key === previewSubmissionFileKey) || null,
+    [previewSubmissionFileKey, submissionFiles],
+  );
+
+  const previewSubmissionFileKind = previewSubmissionFile
+    ? getSubmissionFilePreviewKind(previewSubmissionFile)
+    : 'unsupported';
+
+  useEffect(() => {
+    if (!previewSubmissionFile) {
+      setSubmissionFilePreviewHtml('');
+      setSubmissionFilePreviewStatus('idle');
+      return;
+    }
+
+    if (previewSubmissionFileKind !== 'docx' && previewSubmissionFileKind !== 'spreadsheet') {
+      setSubmissionFilePreviewHtml('');
+      setSubmissionFilePreviewStatus('ready');
+      return;
+    }
+
+    let cancelled = false;
+    setSubmissionFilePreviewHtml('');
+    setSubmissionFilePreviewStatus('loading');
+
+    const loadPreview = async () => {
+      try {
+        const html =
+          previewSubmissionFileKind === 'docx'
+            ? await buildDocxSubmissionPreviewHtml(previewSubmissionFile)
+            : await buildXlsxSubmissionPreviewHtml(previewSubmissionFile);
+
+        if (!cancelled) {
+          setSubmissionFilePreviewHtml(html);
+          setSubmissionFilePreviewStatus('ready');
+        }
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setSubmissionFilePreviewHtml('');
+          setSubmissionFilePreviewStatus('error');
+        }
+      }
+    };
+
+    void loadPreview();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [previewSubmissionFile, previewSubmissionFileKind]);
 
   const filteredOrders = useMemo(() => {
     const agentKeyword = filterAgent.trim().toLowerCase();
@@ -297,7 +863,7 @@ const NotaryOrderManagementList: React.FC = () => {
   }, [notaryOrders]);
 
   const showRejectReasonColumn = activeStatus === 'cancelled';
-  const orderTableColumnCount = showRejectReasonColumn ? 10 : 9;
+  const orderTableColumnCount = showRejectReasonColumn ? 11 : 10;
   const activeFilterCount = [
     filterAgent.trim(),
     filterProduct,
@@ -359,6 +925,260 @@ const NotaryOrderManagementList: React.FC = () => {
     } finally {
       setIsExporting(false);
     }
+  };
+
+  const handleOpenSubmissionPreview = (order: Order) => {
+    setSubmissionPreviewOrder(order);
+    setSelectedSubmissionOfficeId(order.logs.some((log) => /送审/.test(log.action)) ? order.pushedNotaryOfficeId || '' : '');
+    setSubmissionImages(SUBMISSION_MATERIAL_IMAGES);
+    setSubmissionFiles(getSubmissionMaterialFiles(order));
+  };
+
+  const handleCloseSubmissionPreview = () => {
+    setSubmissionPreviewOrder(null);
+    setSelectedSubmissionOfficeId('');
+    setSubmissionImages(SUBMISSION_MATERIAL_IMAGES);
+    setSubmissionFiles([]);
+    setPreviewSubmissionFileKey(null);
+  };
+
+  const handleAddSubmissionImages = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) {
+      return;
+    }
+
+    setSubmissionImages((currentImages) => [
+      ...currentImages,
+      ...files.map((file, index) => ({
+        key: buildUploadedMaterialKey('uploaded-image', file, index),
+        label: file.name,
+        src: URL.createObjectURL(file),
+      })),
+    ]);
+    event.target.value = '';
+  };
+
+  const handleReplaceSubmissionImage = (key: string, event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setSubmissionImages((currentImages) =>
+      currentImages.map((item) =>
+        item.key === key
+          ? {
+              ...item,
+              label: file.name,
+              src: URL.createObjectURL(file),
+            }
+          : item,
+      ),
+    );
+    event.target.value = '';
+  };
+
+  const handleDeleteSubmissionImage = (key: string) => {
+    setSubmissionImages((currentImages) => currentImages.filter((item) => item.key !== key));
+  };
+
+  const handleAddSubmissionFiles = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) {
+      return;
+    }
+
+    setSubmissionFiles((currentFiles) => [
+      ...currentFiles,
+      ...files.map((file, index) => ({
+        key: buildUploadedMaterialKey('uploaded-file', file, index),
+        label: file.name,
+        name: file.name,
+        path: URL.createObjectURL(file),
+        type: getUploadedFileType(file.name),
+      })),
+    ]);
+    event.target.value = '';
+  };
+
+  const handleReplaceSubmissionFile = (key: string, event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setSubmissionFiles((currentFiles) =>
+      currentFiles.map((item) =>
+        item.key === key
+          ? {
+              ...item,
+              label: file.name,
+              name: file.name,
+              path: URL.createObjectURL(file),
+              type: getUploadedFileType(file.name),
+            }
+          : item,
+      ),
+    );
+    event.target.value = '';
+  };
+
+  const handleDeleteSubmissionFile = (key: string) => {
+    setSubmissionFiles((currentFiles) => currentFiles.filter((item) => item.key !== key));
+    setPreviewSubmissionFileKey((currentKey) => (currentKey === key ? null : currentKey));
+  };
+
+  const handleOpenSubmissionFilePreview = (file: SubmissionMaterialFile) => {
+    setPreviewSubmissionFileKey(file.key);
+  };
+
+  const handleCloseSubmissionFilePreview = () => {
+    setPreviewSubmissionFileKey(null);
+  };
+
+  const renderSubmissionFilePreview = () => {
+    if (!previewSubmissionFile) {
+      return null;
+    }
+
+    if (previewSubmissionFileKind === 'pdf') {
+      return (
+        <iframe
+          className="notary-review-file-preview-modal__frame"
+          src={previewSubmissionFile.path}
+          title={`${previewSubmissionFile.name}预览`}
+        />
+      );
+    }
+
+    if (previewSubmissionFileKind === 'image') {
+      return (
+        <div className="notary-review-file-preview-modal__image-wrap">
+          <img src={previewSubmissionFile.path} alt={`${previewSubmissionFile.name}预览`} />
+        </div>
+      );
+    }
+
+    if (submissionFilePreviewStatus === 'loading' || submissionFilePreviewStatus === 'idle') {
+      return (
+        <div className="notary-review-file-preview-modal__state">
+          <strong>{previewSubmissionFile.type}</strong>
+          <p>正在加载文件预览，请稍候。</p>
+        </div>
+      );
+    }
+
+    if (submissionFilePreviewStatus === 'ready' && submissionFilePreviewHtml) {
+      return (
+        <iframe
+          className="notary-review-file-preview-modal__frame"
+          srcDoc={submissionFilePreviewHtml}
+          title={`${previewSubmissionFile.name}预览`}
+        />
+      );
+    }
+
+    return (
+      <div className="notary-review-file-preview-modal__state">
+        <strong>{previewSubmissionFile.type}</strong>
+        <h4>{previewSubmissionFile.name}</h4>
+        <p>当前格式暂不支持解析为页面内容，可在弹层内确认文件名称与类型，并打开原件复核。</p>
+        <a href={previewSubmissionFile.path} target="_blank" rel="noreferrer">
+          打开原件
+        </a>
+      </div>
+    );
+  };
+
+  const handleConfirmSubmission = () => {
+    if (!submissionPreviewOrder) {
+      return;
+    }
+
+    const selectedOffice = NOTARY_OFFICES.find((office) => office.id === selectedSubmissionOfficeId);
+    if (!selectedOffice) {
+      showToast('error', '请选择送审公证处');
+      return;
+    }
+
+    const currentTimestamp = formatBeijingTimestamp();
+    const nextOrder: Order = {
+      ...submissionPreviewOrder,
+      pushedNotaryOfficeId: selectedOffice.id,
+      pushedNotaryOfficeName: selectedOffice.name,
+      updatedAt: currentTimestamp,
+      logs: [
+        ...submissionPreviewOrder.logs,
+        {
+          time: currentTimestamp,
+          operator: currentAccountId || '运营',
+          action: `送审至${selectedOffice.name}`,
+        },
+      ],
+    };
+
+    updateOrder(submissionPreviewOrder.orderId, {
+      pushedNotaryOfficeId: nextOrder.pushedNotaryOfficeId,
+      pushedNotaryOfficeName: nextOrder.pushedNotaryOfficeName,
+      updatedAt: nextOrder.updatedAt,
+      logs: nextOrder.logs,
+    });
+    pushNotaryOrderToOffice(nextOrder, {
+      operator: currentAccountId || '运营',
+      pushedAt: currentTimestamp,
+      targetStatus: 'pending_review',
+    });
+
+    handleCloseSubmissionPreview();
+    setOrdersRevision((currentRevision) => currentRevision + 1);
+    showToast('success', `已送审至${selectedOffice.name}`);
+  };
+
+  const handleOpenLogisticsModal = (order: Order) => {
+    setLogisticsOrder(order);
+    setLogisticsForm({
+      logisticsCompany: order.logisticsCompany?.trim() || '',
+      trackingNumber: order.trackingNumber.trim(),
+    });
+  };
+
+  const handleCloseLogisticsModal = () => {
+    setLogisticsOrder(null);
+    setLogisticsForm({ logisticsCompany: '', trackingNumber: '' });
+  };
+
+  const handleLogisticsFieldChange = (field: keyof LogisticsForm, value: string) => {
+    setLogisticsForm((currentForm) => ({
+      ...currentForm,
+      [field]: value,
+    }));
+  };
+
+  const handleSubmitLogistics = () => {
+    if (!logisticsOrder) {
+      return;
+    }
+
+    const logisticsCompany = logisticsForm.logisticsCompany.trim();
+    const trackingNumber = logisticsForm.trackingNumber.trim();
+
+    if (!logisticsCompany || !trackingNumber) {
+      showToast('error', '请完整填写物流公司和物流单号');
+      return;
+    }
+
+    const currentTimestamp = formatBeijingTimestamp();
+    syncNotaryManagementShipment(logisticsOrder, {
+      logisticsCompany,
+      trackingNumber,
+      operator: currentAccountId || '运营',
+      shippedAt: currentTimestamp,
+    });
+
+    handleCloseLogisticsModal();
+    setOrdersRevision((currentRevision) => currentRevision + 1);
+    showToast('success', '物流发货信息已提交');
   };
 
   const previewState = {
@@ -497,6 +1317,7 @@ const NotaryOrderManagementList: React.FC = () => {
                   <th style={{ minWidth: 180 }}>推送公证处</th>
                   {showRejectReasonColumn && <th style={{ minWidth: 220 }}>驳回原因</th>}
                   <th style={{ minWidth: 150 }}>订单状态</th>
+                  <th style={{ minWidth: 240 }}>订单记录</th>
                   <th style={{ minWidth: 168 }}>操作</th>
                 </tr>
               </thead>
@@ -515,6 +1336,7 @@ const NotaryOrderManagementList: React.FC = () => {
                     const viewPath = `${NOTARY_ORDER_MANAGEMENT_PATH}/${order.orderId}/preview?mode=view`;
                     const auditPath = `${NOTARY_ORDER_MANAGEMENT_PATH}/${order.orderId}/preview?mode=audit`;
                     const actionPath = auditPath;
+                    const orderRecordItems = getOrderRecordItems(order);
 
                     return (
                       <tr key={order.orderId} className="order-list-row">
@@ -609,6 +1431,21 @@ const NotaryOrderManagementList: React.FC = () => {
                           </div>
                         </td>
 
+                        <td>
+                          {orderRecordItems.length > 0 ? (
+                            <div className="notary-order-record">
+                              {orderRecordItems.map((record, index) => (
+                                <div key={`${record.action}-${index}`} className="notary-order-record__item">
+                                  <span className="notary-order-record__action">{record.action}</span>
+                                  {record.time && <span className="notary-order-record__meta">{record.time}</span>}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="notary-order-record__empty">--</span>
+                          )}
+                        </td>
+
                         <td className="order-actions-cell">
                           <button
                             type="button"
@@ -628,6 +1465,24 @@ const NotaryOrderManagementList: React.FC = () => {
                               {order.status === 'pending_review' ? '订单审核' : '查看审核'}
                             </button>
                           )}
+                          {visibleStatus === 'pending_production' &&
+                            (hasNotaryOfficeCompletion(order) ? (
+                              <button
+                                type="button"
+                                className="order-text-action order-text-action--push"
+                                onClick={() => handleOpenLogisticsModal(order)}
+                              >
+                                物流发货
+                              </button>
+                            ) : shouldShowNotarySubmissionAction(order) ? (
+                              <button
+                                type="button"
+                                className="order-text-action order-text-action--push"
+                                onClick={() => handleOpenSubmissionPreview(order)}
+                              >
+                                送审
+                              </button>
+                            ) : null)}
                         </td>
                       </tr>
                     );
@@ -651,6 +1506,257 @@ const NotaryOrderManagementList: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {submissionPreviewOrder && (
+        <div className="modal-overlay" onClick={handleCloseSubmissionPreview}>
+          <div className="modal notary-review-submission-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="modal__header">
+              <div>
+                <h3 className="modal__title">送审公证处材料</h3>
+              </div>
+              <button type="button" className="btn btn--ghost btn--sm" onClick={handleCloseSubmissionPreview}>
+                关闭
+              </button>
+            </div>
+
+            <div className="modal__body notary-review-submission-modal__body">
+              <div className="notary-review-submission-modal__office-selector">
+                <label htmlFor="notary-submission-office">送审公证处</label>
+                <select
+                  id="notary-submission-office"
+                  className="form-select"
+                  value={selectedSubmissionOfficeId}
+                  onChange={(event) => setSelectedSubmissionOfficeId(event.target.value)}
+                >
+                  <option value="">请选择公证处</option>
+                  {NOTARY_OFFICES.map((office) => (
+                    <option key={office.id} value={office.id}>
+                      {office.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <section className="notary-review-submission-modal__section">
+                <div className="notary-review-submission-modal__section-head">
+                  <h4>文件材料</h4>
+                  <div className="notary-review-submission-modal__section-actions">
+                    <span>{submissionFiles.length} 项</span>
+                    <label className="notary-review-submission-modal__upload-button" htmlFor="notary-submission-file-upload">
+                      上传
+                    </label>
+                    <input
+                      id="notary-submission-file-upload"
+                      className="notary-review-submission-modal__file-input"
+                      type="file"
+                      accept={FILE_MATERIAL_ACCEPT}
+                      multiple
+                      onChange={handleAddSubmissionFiles}
+                    />
+                  </div>
+                </div>
+                {submissionFiles.length > 0 ? (
+                  <div className="notary-review-submission-modal__file-list">
+                    {submissionFiles.map((file) => {
+                      const inputId = buildMaterialInputId('notary-submission-file-replace', file.key);
+
+                      return (
+                        <div key={file.key} className="notary-review-submission-modal__file-card">
+                          <span className="notary-review-submission-modal__file-type">{file.type}</span>
+                          <span className="notary-review-submission-modal__file-info">
+                            <strong>{file.name}</strong>
+                            <small>{file.label}</small>
+                          </span>
+                          <span className="notary-review-submission-modal__file-actions">
+                            <button
+                              type="button"
+                              className="notary-review-submission-modal__preview-button"
+                              onClick={() => handleOpenSubmissionFilePreview(file)}
+                            >
+                              查看
+                            </button>
+                            <label htmlFor={inputId}>修改</label>
+                            <button type="button" onClick={() => handleDeleteSubmissionFile(file.key)}>
+                              删除
+                            </button>
+                          </span>
+                          <input
+                            id={inputId}
+                            className="notary-review-submission-modal__file-input"
+                            type="file"
+                            accept={FILE_MATERIAL_ACCEPT}
+                            onChange={(event) => handleReplaceSubmissionFile(file.key, event)}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="notary-review-submission-modal__empty">暂无文件材料，请点击上传添加。</div>
+                )}
+              </section>
+
+              <section className="notary-review-submission-modal__section">
+                <div className="notary-review-submission-modal__section-head">
+                  <h4>图片材料</h4>
+                  <div className="notary-review-submission-modal__section-actions">
+                    <span>{submissionImages.length} 项</span>
+                    <label className="notary-review-submission-modal__upload-button" htmlFor="notary-submission-image-upload">
+                      上传
+                    </label>
+                    <input
+                      id="notary-submission-image-upload"
+                      className="notary-review-submission-modal__file-input"
+                      type="file"
+                      accept={IMAGE_MATERIAL_ACCEPT}
+                      multiple
+                      onChange={handleAddSubmissionImages}
+                    />
+                  </div>
+                </div>
+                {submissionImages.length > 0 ? (
+                  <div className="notary-review-submission-modal__image-grid">
+                    {submissionImages.map((item) => {
+                      const inputId = buildMaterialInputId('notary-submission-image-replace', item.key);
+
+                      return (
+                        <div key={item.key} className="notary-review-submission-modal__image-card">
+                          <a
+                            className="notary-review-submission-modal__image-preview"
+                            href={item.src}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <img src={item.src} alt={`${item.label}预览`} />
+                          </a>
+                          <div className="notary-review-submission-modal__material-title">{item.label}</div>
+                          <div className="notary-review-submission-modal__material-actions">
+                            <label htmlFor={inputId}>修改</label>
+                            <button type="button" onClick={() => handleDeleteSubmissionImage(item.key)}>
+                              删除
+                            </button>
+                          </div>
+                          <input
+                            id={inputId}
+                            className="notary-review-submission-modal__file-input"
+                            type="file"
+                            accept={IMAGE_MATERIAL_ACCEPT}
+                            onChange={(event) => handleReplaceSubmissionImage(item.key, event)}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="notary-review-submission-modal__empty">暂无图片材料，请点击上传添加。</div>
+                )}
+              </section>
+            </div>
+            <div className="modal__footer">
+              <div className="notary-review-submission-modal__footer-note">注：确认公证材料无误后送审</div>
+              <div className="notary-review-submission-modal__footer-actions">
+                <button type="button" className="btn btn--secondary" onClick={handleCloseSubmissionPreview}>
+                  取消
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  disabled={!selectedSubmissionOfficeId}
+                  onClick={handleConfirmSubmission}
+                >
+                  确认送审
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {previewSubmissionFile && (
+        <div className="modal-overlay" onClick={handleCloseSubmissionFilePreview}>
+          <div className="modal notary-review-file-preview-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="modal__header">
+              <div>
+                <h3 className="modal__title">文件预览</h3>
+                <p className="notary-review-file-preview-modal__subtitle">{previewSubmissionFile.name}</p>
+              </div>
+              <button type="button" className="btn btn--ghost btn--sm" onClick={handleCloseSubmissionFilePreview}>
+                关闭
+              </button>
+            </div>
+
+            <div className="notary-review-file-preview-modal__body">{renderSubmissionFilePreview()}</div>
+          </div>
+        </div>
+      )}
+
+      {logisticsOrder && (
+        <div className="modal-overlay" onClick={handleCloseLogisticsModal}>
+          <div className="modal notary-logistics-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="modal__header">
+              <div>
+                <h3 className="modal__title">物流发货</h3>
+              </div>
+              <button type="button" className="btn btn--ghost btn--sm" onClick={handleCloseLogisticsModal}>
+                关闭
+              </button>
+            </div>
+
+            <div className="modal__body notary-logistics-modal__body">
+              <div className="notary-logistics-modal__summary">
+                <span>订单ID：{logisticsOrder.orderId}</span>
+                <span>收件人：{logisticsOrder.customerName}</span>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="notary-logistics-company">
+                  物流公司
+                </label>
+                <select
+                  id="notary-logistics-company"
+                  className="form-select"
+                  value={logisticsForm.logisticsCompany}
+                  onChange={(event) => handleLogisticsFieldChange('logisticsCompany', event.target.value)}
+                >
+                  <option value="">请选择物流公司</option>
+                  {LOGISTICS_COMPANY_OPTIONS.map((company) => (
+                    <option key={company} value={company}>
+                      {company}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="notary-tracking-number">
+                  物流单号
+                </label>
+                <input
+                  id="notary-tracking-number"
+                  className="form-input"
+                  value={logisticsForm.trackingNumber}
+                  placeholder="请输入物流单号"
+                  onChange={(event) => handleLogisticsFieldChange('trackingNumber', event.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="modal__footer">
+              <button type="button" className="btn btn--secondary" onClick={handleCloseLogisticsModal}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="btn btn--primary"
+                disabled={!logisticsForm.logisticsCompany.trim() || !logisticsForm.trackingNumber.trim()}
+                onClick={handleSubmitLogistics}
+              >
+                确认发货
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

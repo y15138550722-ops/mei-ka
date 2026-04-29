@@ -1,10 +1,10 @@
-import type { Order } from '../shared/types';
+import type { Order, OrderStatus } from '../shared/types';
 import { formatBeijingTimestamp } from '../shared/utils/dateTime';
 import { getOrderById, getOrders, updateOrder } from './mockDataService';
 
 const NOTARY_OFFICE_ORDER_STORAGE_KEY = 'meika-notary-office-orders';
 const NOTARY_OFFICE_ORDER_DATA_VERSION_STORAGE_KEY = 'meika-notary-office-orders-version';
-const NOTARY_OFFICE_ORDER_DATA_VERSION = 'v3-translating-flow';
+const NOTARY_OFFICE_ORDER_DATA_VERSION = 'v4-notary-review-production-flow';
 const REMOVED_NOTARY_OFFICE_ORDER_IDS = new Set(['MK2600057', 'MK2600061']);
 
 const NOTARY_OFFICE_PENDING_REVIEW_SEEDS = [
@@ -171,22 +171,31 @@ const hasPushedNotaryOffice = (order: Order) =>
 
 const isManagementFlowOfficeOrder = (order: Order) => /^MK\d+$/.test(order.orderId) && hasPushedNotaryOffice(order);
 
+type NotaryOfficePushStatus = Extract<OrderStatus, 'pending_review'>;
+
 const normalizeDefaultPushedOrder = (order: Order): Order => {
   const nextOrder = cloneOrder(order);
 
   return nextOrder.status === 'pending_production'
     ? {
         ...nextOrder,
-        status: 'translating',
+        status: 'pending_review',
       }
     : nextOrder;
 };
 
 const normalizeStoredNotaryOfficeOrder = (order: Order): Order => {
-  if (order.status === 'pending_review' && isManagementFlowOfficeOrder(order)) {
+  if (order.status === 'translating' && isManagementFlowOfficeOrder(order)) {
     return {
       ...order,
-      status: 'translating',
+      status: 'pending_review',
+    };
+  }
+
+  if (order.status === 'pending_production') {
+    return {
+      ...order,
+      status: 'in_production',
     };
   }
 
@@ -313,14 +322,17 @@ const createNotaryOfficeOrderFromManagementOrder = (
   options: {
     operator?: string;
     pushedAt?: string;
+    targetStatus?: NotaryOfficePushStatus;
   } = {},
 ): Order => {
   const pushedAt = options.pushedAt?.trim() || getCurrentTimestamp();
   const operator = options.operator?.trim() || '系统';
+  const targetStatus = options.targetStatus || 'pending_review';
+  const officeName = managementOrder.pushedNotaryOfficeName || '未指定公证处';
 
   return {
     ...cloneOrder(managementOrder),
-    status: 'translating',
+    status: targetStatus,
     logisticsCompany: '',
     trackingNumber: '',
     shippedAt: undefined,
@@ -332,7 +344,7 @@ const createNotaryOfficeOrderFromManagementOrder = (
       {
         time: pushedAt,
         operator,
-        action: `公证处已接收：${managementOrder.pushedNotaryOfficeName || '未指定公证处'}，进入翻译中`,
+        action: `公证处已接收：${officeName}，进入待审核`,
       },
     ],
   };
@@ -377,11 +389,34 @@ export function pushNotaryOrderToOffice(
   options: {
     operator?: string;
     pushedAt?: string;
+    targetStatus?: NotaryOfficePushStatus;
   } = {},
 ) {
   const existingOrder = _notaryOfficeOrders.find((order) => order.orderId === managementOrder.orderId);
   if (existingOrder) {
-    return cloneOrder(existingOrder);
+    const pushedAt = options.pushedAt?.trim() || getCurrentTimestamp();
+    const operator = options.operator?.trim() || '系统';
+    const targetStatus = options.targetStatus || 'pending_review';
+    const officeName = managementOrder.pushedNotaryOfficeName || '未指定公证处';
+    const nextOrder: Order = {
+      ...existingOrder,
+      status: targetStatus,
+      pushedNotaryOfficeId: managementOrder.pushedNotaryOfficeId,
+      pushedNotaryOfficeName: managementOrder.pushedNotaryOfficeName,
+      updatedAt: pushedAt,
+      logs: [
+        ...existingOrder.logs,
+        {
+          time: pushedAt,
+          operator,
+          action: `送审至${officeName}，进入待审核`,
+        },
+      ],
+    };
+
+    _notaryOfficeOrders = _notaryOfficeOrders.map((order) => (order.orderId === managementOrder.orderId ? nextOrder : order));
+    persistNotaryOfficeOrders();
+    return cloneOrder(nextOrder);
   }
 
   if (REMOVED_NOTARY_OFFICE_ORDER_IDS.has(managementOrder.orderId)) {
@@ -430,5 +465,141 @@ export function syncNotaryOfficeRejectionToManagement(
   return {
     ...managementOrder,
     ...nextUpdates,
+  } as Order;
+}
+
+export function syncNotaryOfficeApprovalToManagement(
+  officeOrder: Order,
+  options: {
+    operator?: string;
+    approvedAt?: string;
+  } = {},
+) {
+  const managementOrder = getOrderById(officeOrder.orderId);
+  if (!managementOrder) {
+    return undefined;
+  }
+
+  const approvedAt = options.approvedAt?.trim() || getCurrentTimestamp();
+  const operator = options.operator?.trim() || officeOrder.pushedNotaryOfficeName?.trim() || '公证处';
+  const officeName = officeOrder.pushedNotaryOfficeName?.trim() || '公证处';
+  const nextUpdates: Partial<Order> = {
+    status: 'in_production',
+    pushedNotaryOfficeId: officeOrder.pushedNotaryOfficeId || managementOrder.pushedNotaryOfficeId,
+    pushedNotaryOfficeName: officeOrder.pushedNotaryOfficeName || managementOrder.pushedNotaryOfficeName,
+    updatedAt: approvedAt,
+    logs: [
+      ...managementOrder.logs,
+      {
+        time: approvedAt,
+        operator,
+        action: `${officeName}审核通过，进入制作中`,
+      },
+    ],
+  };
+
+  updateOrder(managementOrder.orderId, nextUpdates);
+  return {
+    ...managementOrder,
+    ...nextUpdates,
+  } as Order;
+}
+
+export function syncNotaryOfficeCompletionToManagement(
+  officeOrder: Order,
+  options: {
+    operator?: string;
+    completedAt?: string;
+  } = {},
+) {
+  const managementOrder = getOrderById(officeOrder.orderId);
+  if (!managementOrder) {
+    return undefined;
+  }
+
+  const completedAt = options.completedAt?.trim() || getCurrentTimestamp();
+  const operator = options.operator?.trim() || officeOrder.pushedNotaryOfficeName?.trim() || '公证处';
+  const officeName = officeOrder.pushedNotaryOfficeName?.trim() || '公证处';
+  const nextUpdates: Partial<Order> = {
+    status: 'pending_production',
+    updatedAt: completedAt,
+    logs: [
+      ...managementOrder.logs,
+      {
+        time: completedAt,
+        operator,
+        action: `${officeName}制作完成，待物流发货`,
+      },
+    ],
+  };
+
+  updateOrder(managementOrder.orderId, nextUpdates);
+  return {
+    ...managementOrder,
+    ...nextUpdates,
+  } as Order;
+}
+
+export function syncNotaryManagementShipment(
+  managementOrder: Order,
+  options: {
+    logisticsCompany: string;
+    trackingNumber: string;
+    operator?: string;
+    shippedAt?: string;
+  },
+) {
+  const currentManagementOrder = getOrderById(managementOrder.orderId) || managementOrder;
+  const shippedAt = options.shippedAt?.trim() || getCurrentTimestamp();
+  const operator = options.operator?.trim() || '运营';
+  const logisticsCompany = options.logisticsCompany.trim();
+  const trackingNumber = options.trackingNumber.trim();
+  const action = `物流发货：${logisticsCompany} ${trackingNumber}`;
+  const managementUpdates: Partial<Order> = {
+    status: 'shipped',
+    shippedAt,
+    logisticsCompany,
+    trackingNumber,
+    updatedAt: shippedAt,
+    logs: [
+      ...currentManagementOrder.logs,
+      {
+        time: shippedAt,
+        operator,
+        action,
+      },
+    ],
+  };
+
+  updateOrder(currentManagementOrder.orderId, managementUpdates);
+
+  const officeOrder = _notaryOfficeOrders.find((order) => order.orderId === currentManagementOrder.orderId);
+  if (officeOrder) {
+    const nextOfficeOrder: Order = {
+      ...officeOrder,
+      status: 'shipped',
+      shippedAt,
+      logisticsCompany,
+      trackingNumber,
+      updatedAt: shippedAt,
+      logs: [
+        ...officeOrder.logs,
+        {
+          time: shippedAt,
+          operator,
+          action,
+        },
+      ],
+    };
+
+    _notaryOfficeOrders = _notaryOfficeOrders.map((order) =>
+      order.orderId === currentManagementOrder.orderId ? nextOfficeOrder : order,
+    );
+    persistNotaryOfficeOrders();
+  }
+
+  return {
+    ...currentManagementOrder,
+    ...managementUpdates,
   } as Order;
 }

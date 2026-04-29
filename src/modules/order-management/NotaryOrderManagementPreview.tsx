@@ -1,7 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { getOrderById, updateOrder } from '../../services/mockDataService';
-import { pushNotaryOrderToOffice } from '../../services/notaryOfficeOrderService';
+import {
+  getNotaryOfficeOrderById,
+  pushNotaryOrderToOffice,
+  syncNotaryManagementShipment,
+} from '../../services/notaryOfficeOrderService';
 import { useTranslation } from '../../shared/i18n/config';
 import { getCurrentAuthAccountId } from '../../shared/utils/auth';
 import { formatBeijingTimestamp } from '../../shared/utils/dateTime';
@@ -401,6 +405,12 @@ const NotaryOrderManagementPreview: React.FC = () => {
   const auditProfile = useMemo(() => (order ? buildLicenseAuditProfile(order) : null), [order]);
   const pinyinPreview = useMemo(() => getNamePinyinParts(editForm?.licenseName || ''), [editForm?.licenseName]);
   const currentAccountId = useMemo(() => getCurrentAuthAccountId(), []);
+  const officeOrder = useMemo(
+    () => (order ? getNotaryOfficeOrderById(order.orderId) || null : null),
+    [order?.orderId, order?.status, order?.updatedAt],
+  );
+  const logisticsDisplayCompany = order?.logisticsCompany?.trim() || officeOrder?.logisticsCompany?.trim() || '';
+  const logisticsDisplayTrackingNumber = order?.trackingNumber?.trim() || officeOrder?.trackingNumber?.trim() || '';
   const isAuditable = order?.status === 'pending_review' && previewMode === 'audit';
   const isReadOnlyPreview = !isAuditable;
   const pageTitle = previewMode === 'audit' ? (isAuditable ? '订单审核' : '查看审核') : '查看订单';
@@ -411,7 +421,8 @@ const NotaryOrderManagementPreview: React.FC = () => {
     isPendingReviewOrder ||
     canSubmitLogistics ||
     order?.status === 'shipped' ||
-    order?.status === 'completed';
+    order?.status === 'completed' ||
+    Boolean(logisticsDisplayCompany || logisticsDisplayTrackingNumber);
   const logisticsSubmitDisabled =
     !canSubmitLogistics || !logisticsForm.logisticsCompany.trim() || !logisticsForm.trackingNumber.trim();
   const exportPdfFileName = useMemo(
@@ -498,20 +509,37 @@ const NotaryOrderManagementPreview: React.FC = () => {
     }
   };
 
-  const DEFAULT_NOTARY_OFFICE_ID = 'beibu_gulf';
   const NOTARY_OFFICES = [
-    { id: DEFAULT_NOTARY_OFFICE_ID, name: '北部湾公证处', district: '默认推送公证处' },
+    { id: 'beibu_gulf', name: '北部湾公证处', district: '可选推送公证处' },
     { id: 'zhangjiang', name: '张江公证处', district: '可选推送公证处' },
+    { id: 'dongbo', name: '东博公证处', district: '可选推送公证处' },
   ];
 
   const handleApprove = () => {
-    setSelectedNotaryOffice(DEFAULT_NOTARY_OFFICE_ID);
-    setShowApproveModal(true);
+    const currentTimestamp = getCurrentTimestamp();
+    const nextUpdates: Partial<Order> = {
+      status: 'pending_production',
+      updatedAt: currentTimestamp,
+      logs: [
+        ...order.logs,
+        {
+          time: currentTimestamp,
+          operator: currentAccountId,
+          action: '审核通过',
+        },
+      ],
+    };
+
+    updateOrder(order.orderId, nextUpdates);
+    setOrder({
+      ...order,
+      ...nextUpdates,
+    } as Order);
+    showToast('success', '审核通过，订单已进入待制作状态');
+    window.setTimeout(() => navigate('/order-management/notary-orders?status=pending_production'), 1200);
   };
 
   const handleConfirmApprove = () => {
-    if (!selectedNotaryOffice) return;
-
     const currentTimestamp = getCurrentTimestamp();
     const officeName = NOTARY_OFFICES.find((o) => o.id === selectedNotaryOffice)?.name || selectedNotaryOffice;
 
@@ -666,28 +694,12 @@ const NotaryOrderManagementPreview: React.FC = () => {
     }
 
     const currentTimestamp = getCurrentTimestamp();
-    const nextUpdates: Partial<Order> = {
-      status: 'shipped',
-      shippedAt: currentTimestamp,
+    const nextOrder = syncNotaryManagementShipment(order, {
       logisticsCompany,
       trackingNumber,
-      updatedAt: currentTimestamp,
-      logs: [
-        ...order.logs,
-        {
-          time: currentTimestamp,
-          operator: currentAccountId,
-          action: `填写物流信息并发货：${logisticsCompany} ${trackingNumber}`,
-        },
-      ],
-    };
-
-    updateOrder(order.orderId, nextUpdates);
-
-    const nextOrder = {
-      ...order,
-      ...nextUpdates,
-    } as Order;
+      operator: currentAccountId,
+      shippedAt: currentTimestamp,
+    });
 
     setOrder(nextOrder);
     setLogisticsForm(buildLogisticsForm(nextOrder));
@@ -904,11 +916,11 @@ const NotaryOrderManagementPreview: React.FC = () => {
       ? [
         {
           label: '物流公司',
-          value: getDisplayValue(order.logisticsCompany),
+          value: getDisplayValue(logisticsDisplayCompany),
         },
         {
           label: '物流单号',
-          value: getDisplayValue(order.trackingNumber),
+          value: getDisplayValue(logisticsDisplayTrackingNumber),
         },
       ]
       : [];
@@ -1157,7 +1169,7 @@ const NotaryOrderManagementPreview: React.FC = () => {
         </div>
       )}
 
-      {showApproveModal && (
+      {false && showApproveModal && (
         <div className="modal-overlay" onClick={() => setShowApproveModal(false)}>
           <div className="modal approve-notary-modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal__header">

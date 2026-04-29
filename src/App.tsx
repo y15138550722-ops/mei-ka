@@ -17,6 +17,7 @@ const ProductForm = lazy(() => import('./modules/product-management/ProductForm'
 const ProductProcessTypeManagement = lazy(() => import('./modules/product-management/ProductProcessTypeManagement'));
 const NotaryOrderList = lazy(() => import('./modules/notary-office/NotaryOrderList'));
 const NotaryOrderPreview = lazy(() => import('./modules/notary-office/NotaryOrderPreview'));
+const AgentSystemPage = lazy(() => import('./modules/agent-system/AgentSystemPage'));
 const LoginPage = lazy(() => import('./modules/auth/LoginPage'));
 
 interface ProtectedLayoutProps {
@@ -34,6 +35,18 @@ const ProtectedLayout: React.FC<ProtectedLayoutProps> = ({ currentUser, onLogout
       <Outlet />
     </MainLayout>
   );
+};
+
+interface ProtectedSystemPageProps {
+  currentUser: AuthSession | null;
+}
+
+const ProtectedSystemPage: React.FC<ProtectedSystemPageProps> = ({ currentUser }) => {
+  if (!currentUser) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <AgentSystemPage />;
 };
 
 const App: React.FC = () => {
@@ -57,6 +70,8 @@ const App: React.FC = () => {
             currentUser ? <Navigate to="/" replace /> : <LoginPage onLogin={handleLogin} />
           }
         />
+
+        <Route path="/agent-system" element={<ProtectedSystemPage currentUser={currentUser} />} />
 
         <Route element={<ProtectedLayout currentUser={currentUser} onLogout={handleLogout} />}>
           <Route path="/" element={<Dashboard />} />
