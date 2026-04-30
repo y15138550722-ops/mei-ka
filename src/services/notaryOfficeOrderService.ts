@@ -4,8 +4,9 @@ import { getOrderById, getOrders, updateOrder } from './mockDataService';
 
 const NOTARY_OFFICE_ORDER_STORAGE_KEY = 'meika-notary-office-orders';
 const NOTARY_OFFICE_ORDER_DATA_VERSION_STORAGE_KEY = 'meika-notary-office-orders-version';
-const NOTARY_OFFICE_ORDER_DATA_VERSION = 'v4-notary-review-production-flow';
+const NOTARY_OFFICE_ORDER_DATA_VERSION = 'v6-empty-notary-office-orders';
 const REMOVED_NOTARY_OFFICE_ORDER_IDS = new Set(['MK2600057', 'MK2600061']);
+const MANAGEMENT_ORDER_ID_PATTERN = /^MK\d+$/;
 
 const NOTARY_OFFICE_PENDING_REVIEW_SEEDS = [
   {
@@ -166,12 +167,48 @@ const hasPushedNotaryOffice = (order: Order) =>
   Boolean(
     order.pushedNotaryOfficeId?.trim() ||
       order.pushedNotaryOfficeName?.trim() ||
-      order.logs.some((log) => /推送至/.test(log.action)),
+      order.logs.some((log) => /推送至|送审至|公证处已接收/.test(log.action)),
   );
 
-const isManagementFlowOfficeOrder = (order: Order) => /^MK\d+$/.test(order.orderId) && hasPushedNotaryOffice(order);
+const isManagementFlowOfficeOrder = (order: Order) =>
+  MANAGEMENT_ORDER_ID_PATTERN.test(order.orderId) && hasPushedNotaryOffice(order);
 
-type NotaryOfficePushStatus = Extract<OrderStatus, 'pending_review'>;
+const getOfficeOrderManagementOrderId = (order: Order) => {
+  const managementOrderId = order.managementOrderId?.trim();
+  if (managementOrderId) {
+    return managementOrderId;
+  }
+
+  return isManagementFlowOfficeOrder(order) ? order.orderId : undefined;
+};
+
+const getNotaryOfficeOrderSortValue = (order: Order) =>
+  order.updatedAt?.trim() || order.createdAt?.trim() || '';
+
+const hasSameOrderLog = (logs: Order['logs'], targetLog: Order['logs'][number]) =>
+  logs.some(
+    (log) =>
+      log.time === targetLog.time &&
+      log.operator === targetLog.operator &&
+      log.action === targetLog.action,
+  );
+
+const appendUniqueOrderLogs = (logs: Order['logs'], nextLogs: Order['logs']) => {
+  const mergedLogs = [...logs];
+
+  nextLogs.forEach((log) => {
+    if (!hasSameOrderLog(mergedLogs, log)) {
+      mergedLogs.push(log);
+    }
+  });
+
+  return mergedLogs;
+};
+
+const findLatestOrderLog = (logs: Order['logs'], pattern: RegExp) =>
+  [...logs].reverse().find((log) => pattern.test(log.action));
+
+type NotaryOfficePushStatus = Extract<OrderStatus, 'pending_review' | 'in_production'>;
 
 const normalizeDefaultPushedOrder = (order: Order): Order => {
   const nextOrder = cloneOrder(order);
@@ -185,21 +222,32 @@ const normalizeDefaultPushedOrder = (order: Order): Order => {
 };
 
 const normalizeStoredNotaryOfficeOrder = (order: Order): Order => {
-  if (order.status === 'translating' && isManagementFlowOfficeOrder(order)) {
-    return {
-      ...order,
+  const isLegacyManagementFlowOrder = isManagementFlowOfficeOrder(order);
+  let nextOrder = order;
+
+  if (order.status === 'translating' && isLegacyManagementFlowOrder) {
+    nextOrder = {
+      ...nextOrder,
       status: 'pending_review',
     };
   }
 
-  if (order.status === 'pending_production') {
-    return {
-      ...order,
+  if (nextOrder.status === 'pending_production') {
+    nextOrder = {
+      ...nextOrder,
       status: 'in_production',
     };
   }
 
-  return order;
+  if (isLegacyManagementFlowOrder && !nextOrder.managementOrderId) {
+    nextOrder = {
+      ...nextOrder,
+      managementOrderId: nextOrder.orderId,
+      notarySubmissionSequence: nextOrder.notarySubmissionSequence || 1,
+    };
+  }
+
+  return nextOrder;
 };
 
 const mergeUniqueOrdersById = (orders: Order[]) => {
@@ -246,6 +294,10 @@ const buildSeedNotaryOfficeOrders = (templateOrders: Order[]): Order[] =>
       rejectReason: undefined,
       pushedNotaryOfficeId: seed.officeId,
       pushedNotaryOfficeName: seed.officeName,
+      auditSelectedNotaryOfficeId: seed.officeId,
+      auditSelectedNotaryOfficeName: seed.officeName,
+      productionDisplayNotaryOfficeId: seed.officeId,
+      productionDisplayNotaryOfficeName: seed.officeName,
       licenseName: seed.customerName,
       licenseNo: seed.licenseNo,
       licenseCategory: seed.licenseCategory,
@@ -268,11 +320,7 @@ const buildSeedNotaryOfficeOrders = (templateOrders: Order[]): Order[] =>
   });
 
 const buildDefaultNotaryOfficeOrders = (): Order[] => {
-  const managementNotaryOrders = getOrders().filter((order) => order.productCategory === 'notary');
-  const pushedOrders = managementNotaryOrders.filter(hasPushedNotaryOffice).map(normalizeDefaultPushedOrder);
-  const seedOrders = buildSeedNotaryOfficeOrders(managementNotaryOrders);
-
-  return excludeRemovedOrders(mergeUniqueOrdersById([...pushedOrders, ...seedOrders]));
+  return [];
 };
 
 const persistNotaryOfficeOrders = () => {
@@ -290,11 +338,10 @@ const loadNotaryOfficeOrders = (): Order[] => {
 
   try {
     const rawValue = window.localStorage.getItem(NOTARY_OFFICE_ORDER_STORAGE_KEY);
+    const storedDataVersion = window.localStorage.getItem(NOTARY_OFFICE_ORDER_DATA_VERSION_STORAGE_KEY);
 
-    if (!rawValue) {
-      if (defaultOrders.length > 0) {
-        window.localStorage.setItem(NOTARY_OFFICE_ORDER_STORAGE_KEY, JSON.stringify(defaultOrders));
-      }
+    if (!rawValue || storedDataVersion !== NOTARY_OFFICE_ORDER_DATA_VERSION) {
+      window.localStorage.setItem(NOTARY_OFFICE_ORDER_STORAGE_KEY, JSON.stringify(defaultOrders));
       window.localStorage.setItem(NOTARY_OFFICE_ORDER_DATA_VERSION_STORAGE_KEY, NOTARY_OFFICE_ORDER_DATA_VERSION);
       return defaultOrders;
     }
@@ -305,13 +352,10 @@ const loadNotaryOfficeOrders = (): Order[] => {
     }
 
     const storedOrders = excludeRemovedOrders(parsedValue as Order[]).map(normalizeStoredNotaryOfficeOrder);
-    const existingOrderIds = new Set(storedOrders.map((order) => order.orderId));
-    const missingDefaultOrders = defaultOrders.filter((order) => !existingOrderIds.has(order.orderId));
-    const mergedOrders = [...storedOrders, ...missingDefaultOrders];
 
-    window.localStorage.setItem(NOTARY_OFFICE_ORDER_STORAGE_KEY, JSON.stringify(mergedOrders));
+    window.localStorage.setItem(NOTARY_OFFICE_ORDER_STORAGE_KEY, JSON.stringify(storedOrders));
     window.localStorage.setItem(NOTARY_OFFICE_ORDER_DATA_VERSION_STORAGE_KEY, NOTARY_OFFICE_ORDER_DATA_VERSION);
-    return mergedOrders;
+    return storedOrders;
   } catch {
     return defaultOrders;
   }
@@ -320,19 +364,36 @@ const loadNotaryOfficeOrders = (): Order[] => {
 const createNotaryOfficeOrderFromManagementOrder = (
   managementOrder: Order,
   options: {
+    orderId?: string;
     operator?: string;
     pushedAt?: string;
+    submissionSequence?: number;
     targetStatus?: NotaryOfficePushStatus;
   } = {},
 ): Order => {
   const pushedAt = options.pushedAt?.trim() || getCurrentTimestamp();
   const operator = options.operator?.trim() || '系统';
   const targetStatus = options.targetStatus || 'pending_review';
-  const officeName = managementOrder.pushedNotaryOfficeName || '未指定公证处';
+  const officeOrderId = options.orderId || managementOrder.orderId;
+  const submissionSequence = options.submissionSequence || 1;
+  const officeId = managementOrder.productionDisplayNotaryOfficeId || managementOrder.pushedNotaryOfficeId;
+  const officeName =
+    managementOrder.productionDisplayNotaryOfficeName || managementOrder.pushedNotaryOfficeName || '未指定公证处';
+  const receiveAction =
+    targetStatus === 'in_production'
+      ? `驾照官系统已接收：制作模板为${officeName}，进入制作中`
+      : `公证处已接收：${officeName}，进入待审核`;
 
   return {
     ...cloneOrder(managementOrder),
+    orderId: officeOrderId,
+    managementOrderId: managementOrder.orderId,
+    notarySubmissionSequence: submissionSequence,
     status: targetStatus,
+    pushedNotaryOfficeId: managementOrder.pushedNotaryOfficeId || officeId,
+    pushedNotaryOfficeName: managementOrder.pushedNotaryOfficeName || officeName,
+    productionDisplayNotaryOfficeId: officeId,
+    productionDisplayNotaryOfficeName: officeName,
     logisticsCompany: '',
     trackingNumber: '',
     shippedAt: undefined,
@@ -340,11 +401,10 @@ const createNotaryOfficeOrderFromManagementOrder = (
     createdAt: pushedAt,
     updatedAt: pushedAt,
     logs: [
-      ...managementOrder.logs.map((log) => ({ ...log })),
       {
         time: pushedAt,
         operator,
-        action: `公证处已接收：${officeName}，进入待审核`,
+        action: receiveAction,
       },
     ],
   };
@@ -352,8 +412,65 @@ const createNotaryOfficeOrderFromManagementOrder = (
 
 let _notaryOfficeOrders = loadNotaryOfficeOrders();
 
+const getNotaryOfficeOrdersByManagementOrderIdInternal = (managementOrderId: string) =>
+  _notaryOfficeOrders.filter((order) => getOfficeOrderManagementOrderId(order) === managementOrderId);
+
+const getLatestNotaryOfficeOrderByManagementOrderIdInternal = (managementOrderId: string) =>
+  [...getNotaryOfficeOrdersByManagementOrderIdInternal(managementOrderId)].sort((left, right) => {
+    const sequenceResult = (right.notarySubmissionSequence || 0) - (left.notarySubmissionSequence || 0);
+    if (sequenceResult !== 0) {
+      return sequenceResult;
+    }
+
+    const sortResult = getNotaryOfficeOrderSortValue(right).localeCompare(getNotaryOfficeOrderSortValue(left));
+    if (sortResult !== 0) {
+      return sortResult;
+    }
+
+    return right.orderId.localeCompare(left.orderId);
+  })[0];
+
+const getNextNotarySubmissionSequence = (managementOrderId: string) => {
+  const existingOrders = getNotaryOfficeOrdersByManagementOrderIdInternal(managementOrderId);
+  return (
+    existingOrders.reduce((maxSequence, order) => {
+      const sequence = order.notarySubmissionSequence || (order.orderId === managementOrderId ? 1 : 0);
+      return Math.max(maxSequence, sequence);
+    }, 0) + 1
+  );
+};
+
+const buildNotaryOfficeSubmissionOrderId = (managementOrderId: string, sequence: number) =>
+  `NO${managementOrderId.replace(/\D/g, '')}${String(sequence).padStart(2, '0')}`;
+
+const getAvailableNotaryOfficeSubmissionIdentity = (managementOrderId: string) => {
+  let sequence = getNextNotarySubmissionSequence(managementOrderId);
+  let orderId = buildNotaryOfficeSubmissionOrderId(managementOrderId, sequence);
+
+  while (_notaryOfficeOrders.some((order) => order.orderId === orderId)) {
+    sequence += 1;
+    orderId = buildNotaryOfficeSubmissionOrderId(managementOrderId, sequence);
+  }
+
+  return { orderId, sequence };
+};
+
+const getManagementOrderForOfficeOrder = (officeOrder: Order) => {
+  const managementOrderId = getOfficeOrderManagementOrderId(officeOrder) || officeOrder.orderId;
+  return getOrderById(managementOrderId);
+};
+
 export function getNotaryOfficeOrders() {
   return _notaryOfficeOrders.map(cloneOrder);
+}
+
+export function getNotaryOfficeOrdersByManagementOrderId(managementOrderId: string) {
+  return getNotaryOfficeOrdersByManagementOrderIdInternal(managementOrderId).map(cloneOrder);
+}
+
+export function getLatestNotaryOfficeOrderByManagementOrderId(managementOrderId: string) {
+  const order = getLatestNotaryOfficeOrderByManagementOrderIdInternal(managementOrderId);
+  return order ? cloneOrder(order) : undefined;
 }
 
 export function getNotaryOfficeOrderById(id: string) {
@@ -392,29 +509,49 @@ export function pushNotaryOrderToOffice(
     targetStatus?: NotaryOfficePushStatus;
   } = {},
 ) {
-  const existingOrder = _notaryOfficeOrders.find((order) => order.orderId === managementOrder.orderId);
-  if (existingOrder) {
+  const latestOfficeOrder = getLatestNotaryOfficeOrderByManagementOrderIdInternal(managementOrder.orderId);
+  const canReuseLatestOfficeOrder = Boolean(
+    latestOfficeOrder &&
+      latestOfficeOrder.status !== 'rejected' &&
+      latestOfficeOrder.status !== 'cancelled' &&
+      latestOfficeOrder.status !== 'completed' &&
+      latestOfficeOrder.status !== 'shipped',
+  );
+
+  if (latestOfficeOrder && canReuseLatestOfficeOrder) {
     const pushedAt = options.pushedAt?.trim() || getCurrentTimestamp();
     const operator = options.operator?.trim() || '系统';
     const targetStatus = options.targetStatus || 'pending_review';
-    const officeName = managementOrder.pushedNotaryOfficeName || '未指定公证处';
+    const officeId = managementOrder.productionDisplayNotaryOfficeId || managementOrder.pushedNotaryOfficeId;
+    const officeName =
+      managementOrder.productionDisplayNotaryOfficeName || managementOrder.pushedNotaryOfficeName || '未指定公证处';
+    const receiveAction =
+      targetStatus === 'in_production'
+        ? `驾照官系统已接收：制作模板为${officeName}，进入制作中`
+        : `送审至${officeName}，进入待审核`;
     const nextOrder: Order = {
-      ...existingOrder,
+      ...latestOfficeOrder,
+      managementOrderId: managementOrder.orderId,
+      notarySubmissionSequence: latestOfficeOrder.notarySubmissionSequence || 1,
       status: targetStatus,
-      pushedNotaryOfficeId: managementOrder.pushedNotaryOfficeId,
-      pushedNotaryOfficeName: managementOrder.pushedNotaryOfficeName,
+      pushedNotaryOfficeId: managementOrder.pushedNotaryOfficeId || officeId,
+      pushedNotaryOfficeName: managementOrder.pushedNotaryOfficeName || officeName,
+      productionDisplayNotaryOfficeId: officeId,
+      productionDisplayNotaryOfficeName: officeName,
       updatedAt: pushedAt,
       logs: [
-        ...existingOrder.logs,
+        ...latestOfficeOrder.logs,
         {
           time: pushedAt,
           operator,
-          action: `送审至${officeName}，进入待审核`,
+          action: receiveAction,
         },
       ],
     };
 
-    _notaryOfficeOrders = _notaryOfficeOrders.map((order) => (order.orderId === managementOrder.orderId ? nextOrder : order));
+    _notaryOfficeOrders = _notaryOfficeOrders.map((order) =>
+      order.orderId === latestOfficeOrder.orderId ? nextOrder : order,
+    );
     persistNotaryOfficeOrders();
     return cloneOrder(nextOrder);
   }
@@ -423,7 +560,12 @@ export function pushNotaryOrderToOffice(
     return cloneOrder(createNotaryOfficeOrderFromManagementOrder(managementOrder, options));
   }
 
-  const officeOrder = createNotaryOfficeOrderFromManagementOrder(managementOrder, options);
+  const { orderId, sequence } = getAvailableNotaryOfficeSubmissionIdentity(managementOrder.orderId);
+  const officeOrder = createNotaryOfficeOrderFromManagementOrder(managementOrder, {
+    ...options,
+    orderId,
+    submissionSequence: sequence,
+  });
   _notaryOfficeOrders = [..._notaryOfficeOrders, officeOrder];
   persistNotaryOfficeOrders();
   return cloneOrder(officeOrder);
@@ -437,28 +579,39 @@ export function syncNotaryOfficeRejectionToManagement(
     rejectedAt?: string;
   },
 ) {
-  const managementOrder = getOrderById(officeOrder.orderId);
+  const managementOrder = getManagementOrderForOfficeOrder(officeOrder);
   if (!managementOrder) {
     return undefined;
   }
 
-  const rejectedAt = options.rejectedAt?.trim() || getCurrentTimestamp();
+  const rejectionLog = findLatestOrderLog(officeOrder.logs, /公证处审核驳回|审核驳回|驳回/);
+  const rejectedAt = rejectionLog?.time?.trim() || options.rejectedAt?.trim() || getCurrentTimestamp();
   const operator = options.operator?.trim() || officeOrder.pushedNotaryOfficeName?.trim() || '公证处';
   const rejectReason = options.rejectReason.trim();
   const officeName = officeOrder.pushedNotaryOfficeName?.trim() || '公证处';
+  const officeSubmissionLog = officeOrder.logs.find((log) => /送审至|公证处已接收/.test(log.action));
+  const restoredSubmissionLogs =
+    !officeSubmissionLog || hasSameOrderLog(managementOrder.logs, officeSubmissionLog)
+      ? []
+      : [
+          {
+            ...officeSubmissionLog,
+            operator: officeSubmissionLog.operator || '系统',
+          },
+        ];
   const nextUpdates: Partial<Order> = {
-    status: 'cancelled',
+    status: 'pending_production',
     rejectReason,
     remark: rejectReason,
     updatedAt: rejectedAt,
-    logs: [
-      ...managementOrder.logs,
+    logs: appendUniqueOrderLogs(managementOrder.logs, [
+      ...restoredSubmissionLogs,
       {
         time: rejectedAt,
         operator,
         action: `${officeName}审核驳回：${rejectReason}`,
       },
-    ],
+    ]),
   };
 
   updateOrder(managementOrder.orderId, nextUpdates);
@@ -475,27 +628,37 @@ export function syncNotaryOfficeApprovalToManagement(
     approvedAt?: string;
   } = {},
 ) {
-  const managementOrder = getOrderById(officeOrder.orderId);
+  const managementOrder = getManagementOrderForOfficeOrder(officeOrder);
   if (!managementOrder) {
     return undefined;
   }
 
-  const approvedAt = options.approvedAt?.trim() || getCurrentTimestamp();
+  const approvalLog = findLatestOrderLog(officeOrder.logs, /公证处审核通过|审核通过，进入制作中|审核通过/);
+  const approvedAt = approvalLog?.time?.trim() || options.approvedAt?.trim() || getCurrentTimestamp();
   const operator = options.operator?.trim() || officeOrder.pushedNotaryOfficeName?.trim() || '公证处';
   const officeName = officeOrder.pushedNotaryOfficeName?.trim() || '公证处';
   const nextUpdates: Partial<Order> = {
     status: 'in_production',
     pushedNotaryOfficeId: officeOrder.pushedNotaryOfficeId || managementOrder.pushedNotaryOfficeId,
     pushedNotaryOfficeName: officeOrder.pushedNotaryOfficeName || managementOrder.pushedNotaryOfficeName,
+    productionDisplayNotaryOfficeId:
+      officeOrder.productionDisplayNotaryOfficeId ||
+      officeOrder.pushedNotaryOfficeId ||
+      managementOrder.productionDisplayNotaryOfficeId ||
+      managementOrder.pushedNotaryOfficeId,
+    productionDisplayNotaryOfficeName:
+      officeOrder.productionDisplayNotaryOfficeName ||
+      officeOrder.pushedNotaryOfficeName ||
+      managementOrder.productionDisplayNotaryOfficeName ||
+      managementOrder.pushedNotaryOfficeName,
     updatedAt: approvedAt,
-    logs: [
-      ...managementOrder.logs,
+    logs: appendUniqueOrderLogs(managementOrder.logs, [
       {
         time: approvedAt,
         operator,
         action: `${officeName}审核通过，进入制作中`,
       },
-    ],
+    ]),
   };
 
   updateOrder(managementOrder.orderId, nextUpdates);
@@ -512,25 +675,25 @@ export function syncNotaryOfficeCompletionToManagement(
     completedAt?: string;
   } = {},
 ) {
-  const managementOrder = getOrderById(officeOrder.orderId);
+  const managementOrder = getManagementOrderForOfficeOrder(officeOrder);
   if (!managementOrder) {
     return undefined;
   }
 
-  const completedAt = options.completedAt?.trim() || getCurrentTimestamp();
+  const completionLog = findLatestOrderLog(officeOrder.logs, /公证处制作完成|制作完成/);
+  const completedAt = completionLog?.time?.trim() || options.completedAt?.trim() || getCurrentTimestamp();
   const operator = options.operator?.trim() || officeOrder.pushedNotaryOfficeName?.trim() || '公证处';
   const officeName = officeOrder.pushedNotaryOfficeName?.trim() || '公证处';
   const nextUpdates: Partial<Order> = {
-    status: 'pending_production',
+    status: 'in_production',
     updatedAt: completedAt,
-    logs: [
-      ...managementOrder.logs,
+    logs: appendUniqueOrderLogs(managementOrder.logs, [
       {
         time: completedAt,
         operator,
-        action: `${officeName}制作完成，待物流发货`,
+        action: `${officeName}公证处制作完成`,
       },
-    ],
+    ]),
   };
 
   updateOrder(managementOrder.orderId, nextUpdates);
@@ -561,19 +724,18 @@ export function syncNotaryManagementShipment(
     logisticsCompany,
     trackingNumber,
     updatedAt: shippedAt,
-    logs: [
-      ...currentManagementOrder.logs,
+    logs: appendUniqueOrderLogs(currentManagementOrder.logs, [
       {
         time: shippedAt,
         operator,
         action,
       },
-    ],
+    ]),
   };
 
   updateOrder(currentManagementOrder.orderId, managementUpdates);
 
-  const officeOrder = _notaryOfficeOrders.find((order) => order.orderId === currentManagementOrder.orderId);
+  const officeOrder = getLatestNotaryOfficeOrderByManagementOrderIdInternal(currentManagementOrder.orderId);
   if (officeOrder) {
     const nextOfficeOrder: Order = {
       ...officeOrder,
@@ -593,7 +755,7 @@ export function syncNotaryManagementShipment(
     };
 
     _notaryOfficeOrders = _notaryOfficeOrders.map((order) =>
-      order.orderId === currentManagementOrder.orderId ? nextOfficeOrder : order,
+      order.orderId === officeOrder.orderId ? nextOfficeOrder : order,
     );
     persistNotaryOfficeOrders();
   }

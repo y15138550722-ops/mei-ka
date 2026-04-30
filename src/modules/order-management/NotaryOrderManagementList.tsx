@@ -3,7 +3,8 @@ import JSZip from 'jszip';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getOrders, updateOrder } from '../../services/mockDataService';
 import {
-  getNotaryOfficeOrderById,
+  getLatestNotaryOfficeOrderByManagementOrderId,
+  getNotaryOfficeOrdersByManagementOrderId,
   pushNotaryOrderToOffice,
   syncNotaryManagementShipment,
 } from '../../services/notaryOfficeOrderService';
@@ -38,6 +39,12 @@ type SubmissionFilePreviewStatus = 'idle' | 'loading' | 'ready' | 'error';
 type NotaryOrderRecordItem = {
   action: string;
   time?: string;
+  officeName?: string;
+  sequence?: number;
+};
+
+type NotaryOrderRecordLog = Order['logs'][number] & {
+  officeName?: string;
 };
 
 type LogisticsForm = {
@@ -205,23 +212,187 @@ const getPushedNotaryOfficeName = (order: Order) => {
   return matchedName || '--';
 };
 
+const getProductionDisplayNotaryOfficeName = (order: Order) =>
+  order.productionDisplayNotaryOfficeName?.trim() ||
+  order.auditSelectedNotaryOfficeName?.trim() ||
+  order.pushedNotaryOfficeName?.trim() ||
+  '--';
+
+const NOTARY_OFFICE_REJECTION_PATTERN = /公证处审核驳回|公证处.*驳回|审核驳回/;
+const NOTARY_OFFICE_SUBMISSION_PATTERN = /送审至|公证处已接收/;
+const NOTARY_OFFICE_APPROVAL_PATTERN = /公证处审核通过|审核通过，进入制作中|公证处.*审核通过/;
+const NOTARY_OFFICE_COMPLETION_PATTERN = /公证处制作完成/;
+
+const findLatestOrderLog = <T extends Order['logs'][number]>(logs: T[], pattern: RegExp) =>
+  [...logs].reverse().find((log) => pattern.test(log.action));
+
+const getRelatedNotaryOfficeOrders = (order: Order) => getNotaryOfficeOrdersByManagementOrderId(order.orderId);
+
+const getLatestRelatedNotaryOfficeOrder = (order: Order) => getLatestNotaryOfficeOrderByManagementOrderId(order.orderId) || null;
+
+const getRelatedNotaryOfficeLogs = (order: Order, officeOrders = getRelatedNotaryOfficeOrders(order)) =>
+  officeOrders.flatMap((officeOrder) => officeOrder.logs);
+
+const getNotaryOfficeOrderOfficeName = (officeOrder: Order) =>
+  officeOrder.pushedNotaryOfficeName?.trim() ||
+  officeOrder.productionDisplayNotaryOfficeName?.trim() ||
+  officeOrder.auditSelectedNotaryOfficeName?.trim() ||
+  '--';
+
+const getCombinedOrderRecordLogs = (order: Order, officeOrders = getRelatedNotaryOfficeOrders(order)) => {
+  const managementLogs: NotaryOrderRecordLog[] = order.logs.map((log) => ({
+    ...log,
+    officeName: getOrderRecordOfficeName(log.action, getProductionDisplayNotaryOfficeName(order)),
+  }));
+  const officeLogs: NotaryOrderRecordLog[] = officeOrders.flatMap((officeOrder) => {
+    const officeName = getNotaryOfficeOrderOfficeName(officeOrder);
+
+    return officeOrder.logs.map((log) => ({
+      ...log,
+      officeName: getOrderRecordOfficeName(log.action, officeName),
+    }));
+  });
+
+  return getSortedUniqueOrderLogs([...managementLogs, ...officeLogs]);
+};
+
+const hasSubmittedToNotaryOffice = (order: Order, officeOrders = getRelatedNotaryOfficeOrders(order)) => {
+  const combinedLogs = [...order.logs, ...getRelatedNotaryOfficeLogs(order, officeOrders)];
+  return Boolean(
+    findLatestOrderLog(combinedLogs, /送审至|公证处已接收/) ||
+      officeOrders.some((officeOrder) =>
+        officeOrder.logs.some((log) => /审核通过，进入制作中|公证处.*审核/.test(log.action)),
+      ),
+  );
+};
+
 const hasNotaryOfficeCompletion = (order: Order) => {
-  const officeOrder = getNotaryOfficeOrderById(order.orderId);
+  const officeOrders = getRelatedNotaryOfficeOrders(order);
+  const latestOfficeOrder = getLatestRelatedNotaryOfficeOrder(order);
+  const combinedLogs = [...getRelatedNotaryOfficeLogs(order, officeOrders), ...order.logs];
+  const submissionLog = findLatestOrderLog(combinedLogs, NOTARY_OFFICE_SUBMISSION_PATTERN);
+  const rejectionLog = findLatestOrderLog(combinedLogs, NOTARY_OFFICE_REJECTION_PATTERN);
+  const completionLog = findLatestOrderLog(combinedLogs, /公证处制作完成|待物流发货/);
+  const hasActiveCompletionLog = Boolean(
+    completionLog &&
+      (!submissionLog || isLogAtOrAfter(completionLog.time, submissionLog.time)) &&
+      (!rejectionLog || isLogAtOrAfter(completionLog.time, rejectionLog.time)),
+  );
+  const hasActiveCompletedStatus = Boolean(
+    hasSubmittedToNotaryOffice(order, officeOrders) &&
+      (latestOfficeOrder?.status === 'completed' || latestOfficeOrder?.status === 'shipped') &&
+      (!rejectionLog || isLogAtOrAfter(latestOfficeOrder?.updatedAt, rejectionLog.time)),
+  );
+
   return (
-    order.logs.some((log) => /制作完成|待物流发货/.test(log.action)) ||
-    officeOrder?.status === 'completed' ||
-    officeOrder?.status === 'shipped' ||
-    Boolean(officeOrder?.logs.some((log) => /制作完成|待物流发货/.test(log.action)))
+    hasActiveCompletionLog ||
+    hasActiveCompletedStatus
   );
 };
 
 const hasNotaryOfficeApproval = (order: Order) => {
-  const officeOrder = getNotaryOfficeOrderById(order.orderId);
-  return order.status === 'in_production' || officeOrder?.status === 'in_production' || hasNotaryOfficeCompletion(order);
+  const officeOrders = getRelatedNotaryOfficeOrders(order);
+  const latestOfficeOrder = getLatestRelatedNotaryOfficeOrder(order);
+  return (
+    Boolean(
+      findLatestOrderLog(
+        [...getRelatedNotaryOfficeLogs(order, officeOrders), ...order.logs],
+        /审核通过，进入制作中|公证处.*审核通过/,
+      ),
+    ) ||
+    (hasSubmittedToNotaryOffice(order, officeOrders) && latestOfficeOrder?.status === 'in_production') ||
+    hasNotaryOfficeCompletion(order)
+  );
 };
 
-const shouldShowNotarySubmissionAction = (order: Order) =>
-  order.status === 'pending_production' && !hasNotaryOfficeApproval(order);
+const isLogAtOrAfter = (leftTime: string | undefined, rightTime: string | undefined) => {
+  const normalizedLeftTime = getOrderRecordTime(leftTime);
+  const normalizedRightTime = getOrderRecordTime(rightTime);
+
+  if (!normalizedLeftTime || !normalizedRightTime) {
+    return Boolean(normalizedLeftTime);
+  }
+
+  return normalizedLeftTime >= normalizedRightTime;
+};
+
+const hasNotaryOfficeRejection = (order: Order, officeOrders = getRelatedNotaryOfficeOrders(order)) => {
+  const latestOfficeOrder = getLatestRelatedNotaryOfficeOrder(order);
+  const combinedLogs = [...order.logs, ...getRelatedNotaryOfficeLogs(order, officeOrders)];
+  const submissionLog = findLatestOrderLog(combinedLogs, /送审至|公证处已接收/);
+  const rejectionLog = findLatestOrderLog(combinedLogs, NOTARY_OFFICE_REJECTION_PATTERN);
+  const hasNotaryOfficeContext = Boolean(
+    submissionLog ||
+      order.pushedNotaryOfficeName?.trim() ||
+      order.productionDisplayNotaryOfficeName?.trim() ||
+      officeOrders.length > 0,
+  );
+  const hasOfficeOrderRejection = Boolean(
+    hasSubmittedToNotaryOffice(order, officeOrders) &&
+      isLogAtOrAfter(latestOfficeOrder?.updatedAt, submissionLog?.time) &&
+      (latestOfficeOrder?.status === 'rejected' || latestOfficeOrder?.status === 'cancelled'),
+  );
+  const hasStoredRejection = Boolean(
+    (order.status === 'pending_production' || getManagementStatus(order.status) === 'cancelled') &&
+      (order.rejectReason?.trim() || order.remark?.trim()) &&
+      hasNotaryOfficeContext &&
+      (!submissionLog || isLogAtOrAfter(order.updatedAt, submissionLog.time)),
+  );
+
+  return Boolean(
+    hasStoredRejection ||
+    (rejectionLog && isLogAtOrAfter(rejectionLog.time, submissionLog?.time)) ||
+      hasOfficeOrderRejection,
+  );
+};
+
+const hasAnyNotaryOfficeRejectionRecord = (
+  order: Order,
+  officeOrders = getRelatedNotaryOfficeOrders(order),
+) => {
+  const combinedLogs = [...order.logs, ...getRelatedNotaryOfficeLogs(order, officeOrders)];
+  const rejectionLog = findLatestOrderLog(combinedLogs, NOTARY_OFFICE_REJECTION_PATTERN);
+  const hasNotaryOfficeContext = Boolean(
+    order.pushedNotaryOfficeName?.trim() ||
+      order.productionDisplayNotaryOfficeName?.trim() ||
+      order.auditSelectedNotaryOfficeName?.trim() ||
+      officeOrders.length > 0 ||
+      findLatestOrderLog(combinedLogs, NOTARY_OFFICE_SUBMISSION_PATTERN),
+  );
+
+  return Boolean(
+    rejectionLog ||
+      (hasNotaryOfficeContext && (order.rejectReason?.trim() || order.remark?.trim())) ||
+      officeOrders.some((officeOrder) => officeOrder.status === 'rejected' || officeOrder.status === 'cancelled'),
+  );
+};
+
+const shouldShowNotarySubmissionAction = (order: Order) => {
+  const officeOrders = getRelatedNotaryOfficeOrders(order);
+  const latestOfficeOrder = getLatestRelatedNotaryOfficeOrder(order);
+  const visibleStatus = getManagementStatus(order.status);
+
+  if (visibleStatus !== 'pending_production') {
+    return false;
+  }
+
+  if (
+    latestOfficeOrder &&
+    latestOfficeOrder.status !== 'rejected' &&
+    latestOfficeOrder.status !== 'cancelled'
+  ) {
+    return false;
+  }
+
+  if (hasAnyNotaryOfficeRejectionRecord(order, officeOrders) || hasNotaryOfficeRejection(order, officeOrders)) {
+    return true;
+  }
+
+  return (
+    !hasNotaryOfficeApproval(order) &&
+    !hasSubmittedToNotaryOffice(order, officeOrders)
+  );
+};
 
 const getRejectReason = (order: Order) => {
   const directReason = order.rejectReason?.trim();
@@ -242,108 +413,192 @@ const getRejectReason = (order: Order) => {
   return matchedReason || rejectLog.action;
 };
 
-const findLatestOrderLog = (logs: Order['logs'], pattern: RegExp) =>
-  [...logs].reverse().find((log) => pattern.test(log.action));
-
 const getOrderRecordTime = (...parts: Array<string | undefined>) =>
-  parts.map((part) => part?.trim()).find(Boolean);
+  parts
+    .map((part) => {
+      const value = part?.trim();
+      if (!value) {
+        return undefined;
+      }
+
+      if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(value)) {
+        return `${value}:00`;
+      }
+
+      if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)) {
+        return value;
+      }
+
+      const parsedTime = Date.parse(value);
+      return Number.isNaN(parsedTime) ? value : formatBeijingTimestamp(parsedTime);
+    })
+    .find(Boolean);
+
+const getSortedUniqueOrderLogs = <T extends Order['logs'][number]>(logs: T[]) => {
+  const seenLogKeys = new Set<string>();
+
+  return logs
+    .filter((log) => {
+      const key = [getOrderRecordTime(log.time) || '', log.operator || '', log.action || ''].join('|');
+      if (seenLogKeys.has(key)) {
+        return false;
+      }
+
+      seenLogKeys.add(key);
+      return true;
+    })
+    .sort((left, right) => (getOrderRecordTime(left.time) || '').localeCompare(getOrderRecordTime(right.time) || ''));
+};
+
+const getOrderRecordOfficeName = (logAction: string | undefined, fallbackOfficeName: string) => {
+  const action = logAction?.trim() || '';
+  const matchedName =
+    action.match(/送审至(.+?)(?:，|,|$)/)?.[1]?.trim() ||
+    action.match(/公证处已接收：(.+?)(?:，|,|$)/)?.[1]?.trim() ||
+    action.match(/^(.+?公证处)审核(?:通过|驳回)/)?.[1]?.trim() ||
+    action.match(/^(.+?公证处)公证处制作完成/)?.[1]?.trim();
+
+  return matchedName || fallbackOfficeName;
+};
+
+const pushOrderRecordItem = (records: NotaryOrderRecordItem[], record: NotaryOrderRecordItem) => {
+  const recordKey = [record.action, record.time || '', record.officeName || ''].join('|');
+  const hasSameRecord = records.some(
+    (currentRecord) =>
+      [currentRecord.action, currentRecord.time || '', currentRecord.officeName || ''].join('|') === recordKey,
+  );
+
+  if (!hasSameRecord) {
+    records.push({ ...record, sequence: records.length });
+  }
+};
+
+const sortOrderRecordItems = (records: NotaryOrderRecordItem[]) =>
+  [...records].sort((left, right) => {
+    const leftTime = left.time || '';
+    const rightTime = right.time || '';
+    if (leftTime !== rightTime) {
+      return leftTime.localeCompare(rightTime);
+    }
+
+    return (left.sequence || 0) - (right.sequence || 0);
+  });
+
+const shouldHideOrderRecordOfficeName = (action: string) =>
+  action === '公证处审核通过--制作中' ||
+  action === '公证处审核驳回' ||
+  action === '公证处制作完成';
 
 const getOrderRecordItems = (order: Order): NotaryOrderRecordItem[] => {
-  if (getManagementStatus(order.status) === 'pending_review') {
-    return [];
-  }
-
-  const officeOrder = getNotaryOfficeOrderById(order.orderId);
-  const combinedLogs = [...order.logs, ...(officeOrder?.logs || [])];
-  const translationLog = findLatestOrderLog(order.logs, /^审核通过(?:，|$)/);
-  const submissionLog = findLatestOrderLog(combinedLogs, /送审至|公证处已接收/);
-  const approvalLog = findLatestOrderLog(combinedLogs, /审核通过，进入制作中|公证处.*审核通过/);
-  const rejectionLog = findLatestOrderLog(combinedLogs, /审核驳回|公证处.*驳回/);
-  const completionLog = findLatestOrderLog(combinedLogs, /制作完成|待物流发货/);
-  const shipmentLog = findLatestOrderLog(combinedLogs, /^物流发货[:：]/);
-  const hasSubmission = Boolean(submissionLog || order.pushedNotaryOfficeId || officeOrder);
-  const hasOfficeRejection = Boolean(
-    rejectionLog ||
-      officeOrder?.status === 'rejected' ||
-      officeOrder?.status === 'cancelled' ||
-      (getManagementStatus(order.status) === 'cancelled' && hasSubmission),
+  const officeOrders = getRelatedNotaryOfficeOrders(order);
+  const latestOfficeOrder = getLatestRelatedNotaryOfficeOrder(order);
+  const combinedLogs = getCombinedOrderRecordLogs(order, officeOrders);
+  const submissionLog = findLatestOrderLog(combinedLogs, NOTARY_OFFICE_SUBMISSION_PATTERN);
+  const approvalLog = findLatestOrderLog(combinedLogs, NOTARY_OFFICE_APPROVAL_PATTERN);
+  const rejectionLog = findLatestOrderLog(combinedLogs, NOTARY_OFFICE_REJECTION_PATTERN);
+  const completionLog = findLatestOrderLog(combinedLogs, NOTARY_OFFICE_COMPLETION_PATTERN);
+  const hasNotaryOfficeContext = Boolean(
+    submissionLog ||
+      order.pushedNotaryOfficeName?.trim() ||
+      order.productionDisplayNotaryOfficeName?.trim() ||
+      officeOrders.length > 0,
   );
-  const hasShipment = Boolean(shipmentLog);
-  const hasCompletion = Boolean(hasShipment || completionLog || officeOrder?.status === 'completed' || officeOrder?.status === 'shipped');
-  const hasApproval = Boolean(
-    hasCompletion ||
-      approvalLog ||
-      order.status === 'in_production' ||
-      officeOrder?.status === 'in_production' ||
-      officeOrder?.status === 'completed' ||
-      officeOrder?.status === 'shipped',
+  const hasOfficeOrderRejection = Boolean(
+    hasSubmittedToNotaryOffice(order, officeOrders) &&
+      isLogAtOrAfter(latestOfficeOrder?.updatedAt, submissionLog?.time) &&
+      (latestOfficeOrder?.status === 'rejected' || latestOfficeOrder?.status === 'cancelled'),
   );
-  const hasTranslation = Boolean(
-    translationLog ||
-      order.status === 'pending_production' ||
-      order.status === 'in_production' ||
-      hasShipment ||
-      hasSubmission ||
-      hasApproval ||
-      hasCompletion,
+  const hasStoredRejection = Boolean(
+    (order.status === 'pending_production' || getManagementStatus(order.status) === 'cancelled') &&
+      (order.rejectReason?.trim() || order.remark?.trim()) &&
+      hasNotaryOfficeContext &&
+      (!submissionLog || isLogAtOrAfter(order.updatedAt, submissionLog.time)),
   );
+  const hasRejectionAfterSubmission = Boolean(
+    (rejectionLog && (!submissionLog || isLogAtOrAfter(rejectionLog.time, submissionLog.time))) ||
+      hasStoredRejection ||
+      hasOfficeOrderRejection,
+  );
+  const hasApprovalAfterSubmission = Boolean(
+    submissionLog && approvalLog && isLogAtOrAfter(approvalLog.time, submissionLog.time),
+  );
+  const hasCompletionAfterApproval = Boolean(
+    submissionLog && approvalLog && completionLog && isLogAtOrAfter(completionLog.time, approvalLog.time),
+  );
+  const rejectionRecordTime = getOrderRecordTime(
+    rejectionLog?.time,
+    hasOfficeOrderRejection ? latestOfficeOrder?.updatedAt : undefined,
+  );
+  const officeName =
+    submissionLog?.action.match(/(?:送审至|公证处已接收：)(.+?)(?:，|,|$)/)?.[1]?.trim() ||
+    submissionLog?.officeName?.trim() ||
+    order.pushedNotaryOfficeName?.trim() ||
+    latestOfficeOrder?.pushedNotaryOfficeName?.trim() ||
+    getProductionDisplayNotaryOfficeName(order);
   const records: NotaryOrderRecordItem[] = [];
 
-  if (hasTranslation) {
-    records.push({
-      action: '已翻译',
-      time: getOrderRecordTime(translationLog?.time, order.updatedAt),
-    });
-  }
+  combinedLogs.forEach((log) => {
+    const recordOfficeName = getOrderRecordOfficeName(log.action, log.officeName || officeName);
+    const recordTime = getOrderRecordTime(log.time);
 
-  if (hasSubmission) {
-    records.push({
-      action: '已送审公证处',
-      time: getOrderRecordTime(submissionLog?.time, officeOrder?.createdAt, order.updatedAt),
-    });
-  }
+    if (NOTARY_OFFICE_SUBMISSION_PATTERN.test(log.action)) {
+      pushOrderRecordItem(records, {
+        action: '已送审-审核中',
+        time: recordTime,
+        officeName: recordOfficeName,
+      });
+    }
 
-  if (hasOfficeRejection) {
-    records.push({
+    if (NOTARY_OFFICE_REJECTION_PATTERN.test(log.action)) {
+      pushOrderRecordItem(records, {
+        action: '公证处审核驳回',
+        time: recordTime,
+        officeName: recordOfficeName,
+      });
+    }
+
+    if (NOTARY_OFFICE_APPROVAL_PATTERN.test(log.action)) {
+      pushOrderRecordItem(records, {
+        action: '公证处审核通过--制作中',
+        time: recordTime,
+        officeName: recordOfficeName,
+      });
+    }
+
+    if (NOTARY_OFFICE_COMPLETION_PATTERN.test(log.action)) {
+      pushOrderRecordItem(records, {
+        action: '公证处制作完成',
+        time: recordTime,
+        officeName: recordOfficeName,
+      });
+    }
+  });
+
+  if (hasRejectionAfterSubmission && rejectionRecordTime) {
+    pushOrderRecordItem(records, {
       action: '公证处审核驳回',
-      time: getOrderRecordTime(rejectionLog?.time, officeOrder?.updatedAt, order.updatedAt),
-    });
-    return records;
-  }
-
-  if (hasSubmission && !hasApproval && !hasCompletion && !hasShipment) {
-    records.push({
-      action: '公证处审核中',
-      time: getOrderRecordTime(submissionLog?.time, officeOrder?.createdAt, order.updatedAt),
+      time: rejectionRecordTime,
+      officeName,
     });
   }
 
-  if (hasApproval) {
-    records.push({
-      action: '公证处审核通过',
-      time: getOrderRecordTime(approvalLog?.time, officeOrder?.updatedAt, order.updatedAt),
-    });
-    records.push({
-      action: '公证处制作中',
-      time: getOrderRecordTime(approvalLog?.time, officeOrder?.updatedAt, order.updatedAt),
+  if (hasApprovalAfterSubmission && records.every((record) => record.action !== '公证处审核通过--制作中')) {
+    pushOrderRecordItem(records, {
+      action: '公证处审核通过--制作中',
+      time: getOrderRecordTime(approvalLog?.time),
+      officeName,
     });
   }
 
-  if (hasCompletion) {
-    records.push({
+  if (hasCompletionAfterApproval && records.every((record) => record.action !== '公证处制作完成')) {
+    pushOrderRecordItem(records, {
       action: '公证处制作完成',
-      time: getOrderRecordTime(completionLog?.time, officeOrder?.updatedAt, order.updatedAt),
+      time: getOrderRecordTime(completionLog?.time),
+      officeName,
     });
   }
 
-  if (hasShipment) {
-    records.push({
-      action: '已发货',
-      time: getOrderRecordTime(shipmentLog?.time, order.shippedAt, order.updatedAt),
-    });
-  }
-
-  return records;
+  return sortOrderRecordItems(records);
 };
 
 const getShippedSortValue = (order: Order) => {
@@ -813,6 +1068,7 @@ const NotaryOrderManagementList: React.FC = () => {
           order.licenseName,
           order.licenseNo,
           getPushedNotaryOfficeName(order),
+          getProductionDisplayNotaryOfficeName(order),
           order.trackingNumber,
         ]
           .filter(Boolean)
@@ -863,7 +1119,7 @@ const NotaryOrderManagementList: React.FC = () => {
   }, [notaryOrders]);
 
   const showRejectReasonColumn = activeStatus === 'cancelled';
-  const orderTableColumnCount = showRejectReasonColumn ? 11 : 10;
+  const orderTableColumnCount = showRejectReasonColumn ? 10 : 9;
   const activeFilterCount = [
     filterAgent.trim(),
     filterProduct,
@@ -929,7 +1185,12 @@ const NotaryOrderManagementList: React.FC = () => {
 
   const handleOpenSubmissionPreview = (order: Order) => {
     setSubmissionPreviewOrder(order);
-    setSelectedSubmissionOfficeId(order.logs.some((log) => /送审/.test(log.action)) ? order.pushedNotaryOfficeId || '' : '');
+    setSelectedSubmissionOfficeId(
+      order.pushedNotaryOfficeId ||
+        order.productionDisplayNotaryOfficeId ||
+        order.auditSelectedNotaryOfficeId ||
+        '',
+    );
     setSubmissionImages(SUBMISSION_MATERIAL_IMAGES);
     setSubmissionFiles(getSubmissionMaterialFiles(order));
   };
@@ -1107,6 +1368,10 @@ const NotaryOrderManagementList: React.FC = () => {
       ...submissionPreviewOrder,
       pushedNotaryOfficeId: selectedOffice.id,
       pushedNotaryOfficeName: selectedOffice.name,
+      productionDisplayNotaryOfficeId: selectedOffice.id,
+      productionDisplayNotaryOfficeName: selectedOffice.name,
+      rejectReason: undefined,
+      remark: '',
       updatedAt: currentTimestamp,
       logs: [
         ...submissionPreviewOrder.logs,
@@ -1121,6 +1386,10 @@ const NotaryOrderManagementList: React.FC = () => {
     updateOrder(submissionPreviewOrder.orderId, {
       pushedNotaryOfficeId: nextOrder.pushedNotaryOfficeId,
       pushedNotaryOfficeName: nextOrder.pushedNotaryOfficeName,
+      productionDisplayNotaryOfficeId: nextOrder.productionDisplayNotaryOfficeId,
+      productionDisplayNotaryOfficeName: nextOrder.productionDisplayNotaryOfficeName,
+      rejectReason: nextOrder.rejectReason,
+      remark: nextOrder.remark,
       updatedAt: nextOrder.updatedAt,
       logs: nextOrder.logs,
     });
@@ -1314,7 +1583,6 @@ const NotaryOrderManagementList: React.FC = () => {
                   <th style={{ minWidth: 180 }}>代理商</th>
                   <th style={{ minWidth: 220 }}>驾照信息</th>
                   <th style={{ minWidth: 260 }}>收货地址</th>
-                  <th style={{ minWidth: 180 }}>推送公证处</th>
                   {showRejectReasonColumn && <th style={{ minWidth: 220 }}>驳回原因</th>}
                   <th style={{ minWidth: 150 }}>订单状态</th>
                   <th style={{ minWidth: 240 }}>订单记录</th>
@@ -1403,12 +1671,6 @@ const NotaryOrderManagementList: React.FC = () => {
                           </div>
                         </td>
 
-                        <td>
-                          <div className="order-cell-stack order-cell-stack--compact">
-                            <div className="order-cell-value">{getPushedNotaryOfficeName(order)}</div>
-                          </div>
-                        </td>
-
                         {showRejectReasonColumn && (
                           <td>
                             <div className="order-cell-stack order-cell-stack--compact">
@@ -1437,7 +1699,18 @@ const NotaryOrderManagementList: React.FC = () => {
                               {orderRecordItems.map((record, index) => (
                                 <div key={`${record.action}-${index}`} className="notary-order-record__item">
                                   <span className="notary-order-record__action">{record.action}</span>
-                                  {record.time && <span className="notary-order-record__meta">{record.time}</span>}
+                                  <span className="notary-order-record__meta">
+                                    {[
+                                      record.time,
+                                      !shouldHideOrderRecordOfficeName(record.action) &&
+                                      record.officeName &&
+                                      record.officeName !== '--'
+                                        ? record.officeName
+                                        : undefined,
+                                    ]
+                                      .filter(Boolean)
+                                      .join(' ')}
+                                  </span>
                                 </div>
                               ))}
                             </div>
@@ -1466,21 +1739,21 @@ const NotaryOrderManagementList: React.FC = () => {
                             </button>
                           )}
                           {visibleStatus === 'pending_production' &&
-                            (hasNotaryOfficeCompletion(order) ? (
-                              <button
-                                type="button"
-                                className="order-text-action order-text-action--push"
-                                onClick={() => handleOpenLogisticsModal(order)}
-                              >
-                                物流发货
-                              </button>
-                            ) : shouldShowNotarySubmissionAction(order) ? (
+                            (shouldShowNotarySubmissionAction(order) ? (
                               <button
                                 type="button"
                                 className="order-text-action order-text-action--push"
                                 onClick={() => handleOpenSubmissionPreview(order)}
                               >
                                 送审
+                              </button>
+                            ) : hasNotaryOfficeCompletion(order) ? (
+                              <button
+                                type="button"
+                                className="order-text-action order-text-action--push"
+                                onClick={() => handleOpenLogisticsModal(order)}
+                              >
+                                物流发货
                               </button>
                             ) : null)}
                         </td>

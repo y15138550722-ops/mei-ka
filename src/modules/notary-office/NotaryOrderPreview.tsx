@@ -9,6 +9,7 @@ import {
   updateNotaryOfficeOrder,
 } from '../../services/notaryOfficeOrderService';
 import { buildNotaryPowerOfAttorneyPreviewFileDescriptors } from '../../shared/config/notaryPowerOfAttorney';
+import { formatBeijingTimestamp } from '../../shared/utils/dateTime';
 import type { OrderStatus } from '../../shared/types';
 import './NotaryOrderPreview.css';
 
@@ -220,7 +221,7 @@ const statusTagClass = (status: OrderStatus) => {
   return `tag tag--${map[status] || 'pending'}`;
 };
 
-const now = () => new Date().toISOString().replace('T', ' ').slice(0, 16);
+const now = () => formatBeijingTimestamp();
 const DOCX_WORD_NAMESPACE = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
 const decodeWordTemplate = (buffer: ArrayBuffer) => {

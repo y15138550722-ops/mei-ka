@@ -24,7 +24,7 @@ const PRODUCT_STORAGE_KEY = 'meika-products';
 const PRODUCT_NEXT_ID_STORAGE_KEY = 'meika-products-next-id';
 const ORDER_STORAGE_KEY = 'meika-orders';
 const ORDER_DATA_VERSION_STORAGE_KEY = 'meika-order-data-version';
-const ORDER_DATA_VERSION = 'notary-pending-review-plus-10-v1';
+const ORDER_DATA_VERSION = 'notary-management-all-pending-review-v3';
 const REMOVED_ORDER_IDS = new Set(['MK2600057', 'MK2600061']);
 
 const NAMES = ['张伟', '王芳', '李明', '赵丽', '孙强', '周杰', '吴秀英', '郑敏', '陈浩', '钱亮', '刘洋', '黄磊', '何欣', '马丽', '朱俊', '林静', '徐峰', '高蕾', '谢宇', '韩雪'];
@@ -165,6 +165,28 @@ const cloneOrder = (order: Order): Order => ({
 });
 
 const excludeRemovedOrders = (orders: Order[]) => orders.filter((order) => !REMOVED_ORDER_IDS.has(order.orderId));
+
+const normalizeNotaryManagementOrderStatus = (order: Order): Order => {
+  if (order.productCategory !== 'notary' || (order.status !== 'cancelled' && order.status !== 'rejected')) {
+    return order;
+  }
+
+  const hasNotaryOfficeSubmission = Boolean(
+    order.pushedNotaryOfficeName?.trim() ||
+      order.productionDisplayNotaryOfficeName?.trim() ||
+      order.logs.some((log) => /送审至|公证处已接收/.test(log.action)),
+  );
+  const hasNotaryOfficeRejection = order.logs.some((log) => /公证处审核驳回|公证处.*驳回/.test(log.action));
+
+  if (!hasNotaryOfficeSubmission || !hasNotaryOfficeRejection) {
+    return order;
+  }
+
+  return {
+    ...order,
+    status: 'pending_production',
+  };
+};
 
 const getPushTimeliness = (processType: ProductProcessType, index: number): PushTimeliness => {
   const tone = getProcessTypeTone(processType.name, processType.estimatedDays);
@@ -517,7 +539,7 @@ const syncOrderWithProduct = (order: Order, productsById: Map<string, Product>):
 
 const syncOrdersWithProducts = () => {
   const productsById = new Map(_products.map((product) => [product.productId, product] as const));
-  _orders = _orders.map((order) => syncOrderWithProduct(order, productsById));
+  _orders = _orders.map((order) => normalizeNotaryManagementOrderStatus(syncOrderWithProduct(order, productsById)));
 };
 
 function createOrders(products: Product[]): Order[] {
@@ -563,7 +585,11 @@ function createOrders(products: Product[]): Order[] {
       product.processTypes[index % product.processTypes.length]?.pricing.find((item) => item.agentLevel === agentLevel)?.price ||
       299;
 
-    const orderProductName = product.category === 'notary' ? NOTARY_ORDER_NAMES[index % NOTARY_ORDER_NAMES.length] : product.title;
+    if (product.category === 'notary') {
+      continue;
+    }
+
+    const orderProductName = product.title;
 
     orders.push({
       orderId: `MK${String(2026).substring(2)}${String(index + 1).padStart(5, '0')}`,
@@ -585,10 +611,6 @@ function createOrders(products: Product[]): Order[] {
       logisticsCompany: status === 'shipped' || status === 'completed' ? '顺丰速运' : '',
       trackingNumber: status === 'shipped' || status === 'completed' ? `SF${1000000000 + index}` : '',
       remark: '',
-      licenseName: product.category === 'notary' ? customerName : undefined,
-      licenseNo: product.category === 'notary' ? `D${10000000 + index}` : undefined,
-      licenseCategory: product.category === 'notary' ? (index % 2 === 0 ? 'C1' : 'A1') : undefined,
-      language: product.category === 'notary' ? ['英语', '法语', '德语', '日语'][index % 4] : undefined,
       createdAt,
       updatedAt,
       shippedAt,

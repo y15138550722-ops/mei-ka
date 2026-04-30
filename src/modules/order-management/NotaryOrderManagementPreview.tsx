@@ -2,8 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { getOrderById, updateOrder } from '../../services/mockDataService';
 import {
-  getNotaryOfficeOrderById,
-  pushNotaryOrderToOffice,
+  getLatestNotaryOfficeOrderByManagementOrderId,
   syncNotaryManagementShipment,
 } from '../../services/notaryOfficeOrderService';
 import { useTranslation } from '../../shared/i18n/config';
@@ -406,7 +405,7 @@ const NotaryOrderManagementPreview: React.FC = () => {
   const pinyinPreview = useMemo(() => getNamePinyinParts(editForm?.licenseName || ''), [editForm?.licenseName]);
   const currentAccountId = useMemo(() => getCurrentAuthAccountId(), []);
   const officeOrder = useMemo(
-    () => (order ? getNotaryOfficeOrderById(order.orderId) || null : null),
+    () => (order ? getLatestNotaryOfficeOrderByManagementOrderId(order.orderId) || null : null),
     [order?.orderId, order?.status, order?.updatedAt],
   );
   const logisticsDisplayCompany = order?.logisticsCompany?.trim() || officeOrder?.logisticsCompany?.trim() || '';
@@ -510,78 +509,55 @@ const NotaryOrderManagementPreview: React.FC = () => {
   };
 
   const NOTARY_OFFICES = [
-    { id: 'beibu_gulf', name: '北部湾公证处', district: '可选推送公证处' },
-    { id: 'zhangjiang', name: '张江公证处', district: '可选推送公证处' },
-    { id: 'dongbo', name: '东博公证处', district: '可选推送公证处' },
+    { id: 'beibu-gulf', name: '北部湾公证处', district: '制作公证处模版' },
+    { id: 'zhangjiang', name: '张江公证处', district: '制作公证处模版' },
+    { id: 'dongbo', name: '东博公证处', district: '制作公证处模版' },
   ];
 
   const handleApprove = () => {
+    setSelectedNotaryOffice(
+      order.auditSelectedNotaryOfficeId ||
+        order.productionDisplayNotaryOfficeId ||
+        order.pushedNotaryOfficeId ||
+        '',
+    );
+    setShowApproveModal(true);
+  };
+
+  const handleConfirmApprove = () => {
+    if (!selectedNotaryOffice) {
+      showToast('error', '请选择制作公证处模版');
+      return;
+    }
+
     const currentTimestamp = getCurrentTimestamp();
-    const nextUpdates: Partial<Order> = {
+    const officeName = NOTARY_OFFICES.find((o) => o.id === selectedNotaryOffice)?.name || selectedNotaryOffice;
+    const nextOrder: Order = {
+      ...order,
       status: 'pending_production',
+      pushedNotaryOfficeId: selectedNotaryOffice,
+      pushedNotaryOfficeName: officeName,
+      auditSelectedNotaryOfficeId: selectedNotaryOffice,
+      auditSelectedNotaryOfficeName: officeName,
+      productionDisplayNotaryOfficeId: selectedNotaryOffice,
+      productionDisplayNotaryOfficeName: officeName,
       updatedAt: currentTimestamp,
       logs: [
         ...order.logs,
         {
           time: currentTimestamp,
           operator: currentAccountId,
-          action: '审核通过',
+          action: `审核通过，选择制作模板：${officeName}`,
         },
       ],
     };
 
-    updateOrder(order.orderId, nextUpdates);
-    setOrder({
-      ...order,
-      ...nextUpdates,
-    } as Order);
-    showToast('success', '审核通过，订单已进入待制作状态');
-    window.setTimeout(() => navigate('/order-management/notary-orders?status=pending_production'), 1200);
-  };
+    updateOrder(order.orderId, nextOrder);
 
-  const handleConfirmApprove = () => {
-    const currentTimestamp = getCurrentTimestamp();
-    const officeName = NOTARY_OFFICES.find((o) => o.id === selectedNotaryOffice)?.name || selectedNotaryOffice;
-
-    updateOrder(order.orderId, {
-      status: 'pending_production',
-      pushedNotaryOfficeId: selectedNotaryOffice,
-      pushedNotaryOfficeName: officeName,
-      updatedAt: currentTimestamp,
-      logs: [
-        ...order.logs,
-        {
-          time: currentTimestamp,
-          operator: currentAccountId,
-          action: `审核通过，推送至${officeName}`,
-        },
-      ],
-    });
-    pushNotaryOrderToOffice(
-      {
-        ...order,
-        status: 'pending_production',
-        pushedNotaryOfficeId: selectedNotaryOffice,
-        pushedNotaryOfficeName: officeName,
-        updatedAt: currentTimestamp,
-        logs: [
-          ...order.logs,
-          {
-            time: currentTimestamp,
-            operator: currentAccountId,
-            action: `瀹℃牳閫氳繃锛屾帹閫佽嚦${officeName}`,
-          },
-        ],
-      },
-      {
-        operator: currentAccountId,
-        pushedAt: currentTimestamp,
-      },
-    );
-
+    setOrder(nextOrder);
     setShowApproveModal(false);
-    showToast('success', `审核通过，已推送至${officeName}`);
-    window.setTimeout(() => navigate(ORDER_MANAGEMENT_PENDING_REVIEW_PATH), 1200);
+    showToast('success', `审核通过，已选择制作模板：${officeName}`);
+    window.setTimeout(() => navigate('/order-management/notary-orders?status=pending_production'), 1200);
   };
 
   const handleReject = () => {
@@ -1169,17 +1145,17 @@ const NotaryOrderManagementPreview: React.FC = () => {
         </div>
       )}
 
-      {false && showApproveModal && (
+      {showApproveModal && (
         <div className="modal-overlay" onClick={() => setShowApproveModal(false)}>
           <div className="modal approve-notary-modal" onClick={(event) => event.stopPropagation()}>
             <div className="modal__header">
-              <h3 className="modal__title">选择推送公证处</h3>
+              <h3 className="modal__title">选择制作公证处模版</h3>
               <button type="button" className="btn btn--ghost btn--sm" onClick={() => setShowApproveModal(false)}>
                 关闭
               </button>
             </div>
             <div className="modal__body">
-              <p className="order-audit-modal__hint">订单审核通过后，将推送至所选公证处进行后续制作处理。</p>
+              <p className="order-audit-modal__hint">订单审核通过后，将同步至驾照官系统，制作人员按所选模版制作材料。</p>
               <div className="approve-notary-list">
                 {NOTARY_OFFICES.map((office) => (
                   <label
@@ -1215,7 +1191,7 @@ const NotaryOrderManagementPreview: React.FC = () => {
                 disabled={!selectedNotaryOffice}
                 onClick={handleConfirmApprove}
               >
-                确认通过并推送
+                确认通过并同步
               </button>
             </div>
           </div>

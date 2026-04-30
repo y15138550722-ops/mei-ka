@@ -42,6 +42,12 @@ export interface Order {
   rejectReason?: string;
   pushedNotaryOfficeId?: string;
   pushedNotaryOfficeName?: string;
+  auditSelectedNotaryOfficeId?: string;
+  auditSelectedNotaryOfficeName?: string;
+  productionDisplayNotaryOfficeId?: string;
+  productionDisplayNotaryOfficeName?: string;
+  managementOrderId?: string;
+  notarySubmissionSequence?: number;
   // --- Notary Specific ---
   licenseName?: string;
   licenseNo?: string;

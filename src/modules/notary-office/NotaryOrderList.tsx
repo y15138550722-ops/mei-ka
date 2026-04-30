@@ -75,6 +75,12 @@ const buildNotaryZipFilename = (order: Order) => {
   return `${parts.join('+')}.zip`;
 };
 
+const getProductionDisplayNotaryOfficeName = (order: Order) =>
+  order.productionDisplayNotaryOfficeName?.trim() ||
+  order.auditSelectedNotaryOfficeName?.trim() ||
+  order.pushedNotaryOfficeName?.trim() ||
+  '未选择';
+
 const getNotaryOrderShippedSortValue = (order: Order) => {
   if (order.shippedAt?.trim()) return order.shippedAt.trim();
 
@@ -312,7 +318,7 @@ const NotaryOrderList: React.FC = () => {
         {
           time: currentTime,
           operator: '公证专员',
-          action: '制作完成',
+          action: '公证处制作完成',
         },
       ],
     };
