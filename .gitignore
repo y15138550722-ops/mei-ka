@@ -7,3 +7,5 @@ build/
 .DS_Store
 dev-server*.log
 dev-server*.err.log
+cloudflared-tunnel*.log
+static-server*.log
