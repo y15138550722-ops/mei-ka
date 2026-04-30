@@ -5,7 +5,7 @@ import type { ProductProcessType } from '../../shared/types';
 import { formatBeijingTimestamp } from '../../shared/utils/dateTime';
 import './AgentSystemPage.css';
 
-type ValidityPeriod = '6年' | '10年' | '60年' | '长期';
+type ValidityPeriod = '6年' | '10年' | '60年' | '长期' | '自定义';
 
 const sideMenuItems = ['选择产品', '确认驾照信息', '确认收货信息', '选择办理类型', '提交订单'];
 const SECTION_SCROLL_OFFSET = 78;
@@ -38,7 +38,7 @@ const uploadItems = [
   { title: '电子签名', tone: 'plain' },
 ];
 
-const validityPeriods: ValidityPeriod[] = ['6年', '10年', '60年', '长期'];
+const validityPeriods: ValidityPeriod[] = ['6年', '10年', '60年', '长期', '自定义'];
 
 const provinceCityOptions = [
   { province: '北京市', cities: ['北京市'] },
@@ -129,7 +129,7 @@ const getNotaryOrderProductName = (productTitle: string) => {
 };
 
 const addYearsToDateValue = (dateValue: string, validityPeriod: ValidityPeriod) => {
-  if (!dateValue || validityPeriod === '长期') {
+  if (!dateValue || validityPeriod === '长期' || validityPeriod === '自定义') {
     return '';
   }
 
@@ -280,8 +280,8 @@ const AgentSystemPage: React.FC = () => {
         .sort((a, b) => b.weight - a.weight || a.title.localeCompare(b.title, 'zh-CN')),
     [],
   );
-  const [selectedProductId, setSelectedProductId] = useState(() => notaryProducts[0]?.productId || '');
-  const [selectedProcessTypeId, setSelectedProcessTypeId] = useState(() => notaryProducts[0]?.processTypes[0]?.typeId || '');
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [selectedProcessTypeId, setSelectedProcessTypeId] = useState('');
   const selectedProduct = useMemo(
     () => notaryProducts.find((product) => product.productId === selectedProductId) || null,
     [notaryProducts, selectedProductId],
@@ -295,6 +295,7 @@ const AgentSystemPage: React.FC = () => {
   const selectedProcessTypePrice = getProcessTypePrice(selectedProcessType);
   const balanceAfterPayment = AGENT_ACCOUNT_BALANCE - selectedProcessTypePrice;
   const [validityPeriod, setValidityPeriod] = useState<ValidityPeriod>('6年');
+  const [customValidUntilDate, setCustomValidUntilDate] = useState('');
   const [selectedProvince, setSelectedProvince] = useState('');
   const [selectedCity, setSelectedCity] = useState('');
   const [birthDate, setBirthDate] = useState('');
@@ -400,15 +401,20 @@ const AgentSystemPage: React.FC = () => {
       return;
     }
 
-    const product = selectedProduct || notaryProducts[0] || null;
+    const product = selectedProduct;
     if (!product) {
-      showToast('暂无可提交的公证产品');
+      showToast('请先选择驾照翻译认证产品');
       return;
     }
 
-    const processType = selectedProcessType || product.processTypes[0] || null;
+    const processType = selectedProcessType;
     if (!processType) {
-      showToast('请先配置办理类型');
+      showToast('请先选择办理类型');
+      return;
+    }
+
+    if (validityPeriod === '自定义' && !customValidUntilDate) {
+      showToast('请选择终止日期');
       return;
     }
 
@@ -455,7 +461,9 @@ const AgentSystemPage: React.FC = () => {
       licenseAddress: readFormValue(certificateData, 'licenseAddress') || deliveryAddress,
       licenseFirstIssueDate: initialIssueDate,
       licenseValidFromDate: validStartDate,
-      licenseValidUntilDate: addYearsToDateValue(validStartDate, validityPeriod),
+      licenseValidUntilDate: validityPeriod === '自定义'
+        ? customValidUntilDate
+        : addYearsToDateValue(validStartDate, validityPeriod),
       licenseValidYears: validityPeriod,
       licenseIssuingAuthority: readFormValue(certificateData, 'licenseIssuingAuthority'),
       licenseIssuingRegion,
@@ -533,7 +541,7 @@ const AgentSystemPage: React.FC = () => {
                   disabled={notaryProducts.length === 0}
                   onChange={(event) => handleProductChange(event.target.value)}
                 >
-                  <option value="">请选择产品</option>
+                  <option value="">请选择</option>
                   {notaryProducts.length === 0 ? (
                     <option value="">暂无在售公证产品</option>
                   ) : (
@@ -658,6 +666,17 @@ const AgentSystemPage: React.FC = () => {
                     ))}
                   </div>
                 </div>
+                {validityPeriod === '自定义' && (
+                  <label className="agent-field agent-field--validity-end">
+                    <span>终止日期</span>
+                    <DateInput
+                      ariaLabel="终止日期"
+                      placeholder="请选择终止日期"
+                      value={customValidUntilDate}
+                      onChange={setCustomValidUntilDate}
+                    />
+                  </label>
+                )}
                 <div className="agent-field">
                   <span>发证地区 <em className="agent-required">*</em></span>
                   <div className="agent-region-selects">

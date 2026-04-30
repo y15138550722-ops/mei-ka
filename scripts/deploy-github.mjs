@@ -54,16 +54,27 @@ for (let index = 0; index < args.length; index += 1) {
   }
 }
 
-const bin = (command) => {
-  if (process.platform !== 'win32') {
-    return command;
+const quoteWindowsShellArg = (value) => {
+  const stringValue = String(value);
+  if (!/[()\s&|<>^"]/.test(stringValue)) {
+    return stringValue;
   }
 
-  if (command === 'npm') {
-    return 'npm.cmd';
+  return `"${stringValue.replace(/"/g, '\\"')}"`;
+};
+
+const createSpawnCommand = (command, commandArgs) => {
+  if (process.platform === 'win32' && command === 'npm') {
+    return {
+      command: 'cmd.exe',
+      args: ['/d', '/s', '/c', [command, ...commandArgs].map(quoteWindowsShellArg).join(' ')],
+    };
   }
 
-  return command;
+  return {
+    command,
+    args: commandArgs,
+  };
 };
 
 const run = (command, commandArgs, { capture = false, allowFailure = false } = {}) => {
@@ -74,7 +85,8 @@ const run = (command, commandArgs, { capture = false, allowFailure = false } = {
     return '';
   }
 
-  const result = spawnSync(bin(command), commandArgs, {
+  const spawnCommand = createSpawnCommand(command, commandArgs);
+  const result = spawnSync(spawnCommand.command, spawnCommand.args, {
     cwd: process.cwd(),
     encoding: 'utf8',
     stdio: capture ? 'pipe' : 'inherit',
@@ -97,7 +109,8 @@ const run = (command, commandArgs, { capture = false, allowFailure = false } = {
 };
 
 const hasChanges = (argsForDiff) => {
-  const result = spawnSync(bin('git'), argsForDiff, {
+  const spawnCommand = createSpawnCommand('git', argsForDiff);
+  const result = spawnSync(spawnCommand.command, spawnCommand.args, {
     cwd: process.cwd(),
     encoding: 'utf8',
     stdio: 'ignore',
