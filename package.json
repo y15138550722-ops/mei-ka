@@ -6,6 +6,7 @@
     "install:src": "cd src && npm install",
     "build": "cd src && npm run build",
     "deploy:github": "node scripts/deploy-github.mjs",
+    "deploy:git": "npm run deploy:github --",
     "check:vercel": "node scripts/check-vercel-deploy.mjs",
     "predeploy:vercel": "npm run check:vercel && npm run build",
     "deploy:vercel": "npx vercel@52.0.0 deploy --prod --yes",
