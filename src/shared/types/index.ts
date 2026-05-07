@@ -60,6 +60,8 @@ export interface Order {
   licenseValidFromDate?: string;
   licenseValidUntilDate?: string;
   licenseValidYears?: string;
+  licenseArchiveNumber?: string;
+  licenseBarcodeNumber?: string;
   licenseIssuingAuthority?: string;
   licenseIssuingRegion?: string;
   idpSurnameEn?: string;
@@ -71,6 +73,7 @@ export interface Order {
   idpWhitePhoto?: string;
   idpSignature?: string;
   language?: string;
+  useCountry?: string;
   // ---------------------
   createdAt: string;
   updatedAt: string;

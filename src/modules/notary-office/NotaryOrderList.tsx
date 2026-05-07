@@ -7,8 +7,10 @@ import {
   updateNotaryOfficeOrder,
 } from '../../services/notaryOfficeOrderService';
 import ListUnifiedPagination from '../../shared/components/list/ListUnifiedPagination';
-import type { Order, OrderStatus } from '../../shared/types';
+import type { Order, OrderStatus, ProcessType } from '../../shared/types';
 import { formatBeijingTimestamp } from '../../shared/utils/dateTime';
+import { getLanguageOptionsForProduct } from '../../shared/utils/notaryLanguageOptions';
+import { getProcessTypeTone } from '../../shared/utils/productProcessType';
 
 const NOTARY_SOURCE_STATUSES: OrderStatus[] = [
   'pending_review',
@@ -37,6 +39,30 @@ const NOTARY_LANGUAGE_COUNTRY_MAP: Record<string, string> = {
   法语: '法国',
   德语: '德国',
   日语: '日本',
+};
+
+const NOTARY_PRIORITY_OPTIONS: Array<{ value: ProcessType; label: string }> = [
+  { value: 'urgent', label: '紧急办理' },
+  { value: 'priority', label: '优先办理' },
+  { value: 'normal', label: '正常办理' },
+];
+
+const NOTARY_PRIORITY_LABELS: Record<ProcessType, string> = {
+  urgent: '紧急办理',
+  priority: '优先办理',
+  normal: '正常办理',
+};
+
+const NOTARY_PRIORITY_TAG_CLASSES: Record<ProcessType, string> = {
+  urgent: 'tag tag--warning',
+  priority: 'tag tag--processing',
+  normal: 'tag tag--inactive',
+};
+
+const NOTARY_PRIORITY_SORT_ORDER: Record<ProcessType, number> = {
+  urgent: 0,
+  priority: 1,
+  normal: 2,
 };
 
 const getCurrentTimestamp = () => formatBeijingTimestamp();
@@ -81,32 +107,23 @@ const getProductionDisplayNotaryOfficeName = (order: Order) =>
   order.pushedNotaryOfficeName?.trim() ||
   '未选择';
 
-const getNotaryOrderShippedSortValue = (order: Order) => {
-  if (order.shippedAt?.trim()) return order.shippedAt.trim();
+const getNotaryOrderPriority = (order: Order): ProcessType => getProcessTypeTone(order.processType);
 
-  const logisticsLog = [...order.logs].reverse().find((log) => /录入物流单号|填写物流/.test(log.action));
-  if (logisticsLog?.time?.trim()) return logisticsLog.time.trim();
+const getNotaryOrderPriorityLabel = (order: Order) => NOTARY_PRIORITY_LABELS[getNotaryOrderPriority(order)];
 
-  if ((order.status === 'shipped' || order.status === 'completed') && order.updatedAt?.trim()) {
-    return order.updatedAt.trim();
-  }
+const getNotaryOrderPriorityTagClass = (order: Order) =>
+  NOTARY_PRIORITY_TAG_CLASSES[getNotaryOrderPriority(order)] || 'tag tag--inactive';
 
-  return '';
+const getNotaryOrderPushTimeValue = (order: Order) => {
+  const submissionLog = order.logs.find((log) => /送审至|公证处已接收|推送至/.test(log.action) && log.time?.trim());
+
+  return submissionLog?.time?.trim() || order.createdAt?.trim() || order.updatedAt?.trim() || '';
 };
 
-const getNotaryOrderSortValue = (order: Order) => {
-  if (getNotaryVisibleStatus(order.status) === 'completed') {
-    const shippedSortValue = getNotaryOrderShippedSortValue(order);
-    if (shippedSortValue) {
-      return shippedSortValue;
-    }
-  }
-
-  if (order.updatedAt?.trim()) return order.updatedAt.trim();
-  if (order.createdAt?.trim()) return order.createdAt.trim();
-
-  return '';
-};
+const getNotaryOrderSortValue = (order: Order) => ({
+  priorityValue: NOTARY_PRIORITY_SORT_ORDER[getNotaryOrderPriority(order)],
+  pushTimeValue: getNotaryOrderPushTimeValue(order),
+});
 
 const getNotaryStatusTagClass = (status: OrderStatus) => {
   const map: Record<OrderStatus, string> = {
@@ -151,7 +168,13 @@ const NotaryOrderList: React.FC = () => {
   const [allOrders, setAllOrders] = useState<Order[]>(() => getNotaryOfficeOrders());
   const [filterStatus, setFilterStatus] = useState<OrderStatus | ''>(currentQueryStatus);
   const [filterProduct, setFilterProduct] = useState('');
+  const [filterLanguage, setFilterLanguage] = useState('');
+  const [filterPriority, setFilterPriority] = useState<ProcessType | ''>('');
   const [filterName, setFilterName] = useState('');
+  const [appliedFilterProduct, setAppliedFilterProduct] = useState('');
+  const [appliedFilterLanguage, setAppliedFilterLanguage] = useState('');
+  const [appliedFilterPriority, setAppliedFilterPriority] = useState<ProcessType | ''>('');
+  const [appliedFilterName, setAppliedFilterName] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
@@ -170,17 +193,38 @@ const NotaryOrderList: React.FC = () => {
       ),
     [allOrders],
   );
+  const languageOptions = useMemo(
+    () => (filterProduct ? getLanguageOptionsForProduct(filterProduct) : []),
+    [filterProduct],
+  );
+
+  useEffect(() => {
+    if (filterLanguage && !languageOptions.includes(filterLanguage)) {
+      setFilterLanguage('');
+    }
+  }, [filterLanguage, languageOptions]);
 
   const filteredOrders = useMemo(() => {
-    const trimmedName = filterName.trim().toLowerCase();
+    const trimmedName = appliedFilterName.trim().toLowerCase();
 
     const nextOrders = notaryOrders.filter((order) => {
       if (filterStatus && getNotaryVisibleStatus(order.status) !== filterStatus) return false;
-      if (filterProduct && order.productName !== filterProduct) return false;
+      if (appliedFilterProduct && order.productName !== appliedFilterProduct) return false;
+      if (appliedFilterProduct && appliedFilterLanguage && order.language !== appliedFilterLanguage) return false;
+      if (appliedFilterPriority && getNotaryOrderPriority(order) !== appliedFilterPriority) return false;
 
       if (trimmedName) {
-        const searchableName = `${order.licenseName || ''} ${order.customerName || ''}`.toLowerCase();
-        if (!searchableName.includes(trimmedName)) {
+        const searchableKeyword = [
+          order.licenseName,
+          order.customerName,
+          order.customerPassport,
+          order.customerPhone,
+          order.licenseNo,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        if (!searchableKeyword.includes(trimmedName)) {
           return false;
         }
       }
@@ -189,14 +233,29 @@ const NotaryOrderList: React.FC = () => {
     });
 
     return [...nextOrders].sort((left, right) => {
-      const sortResult = getNotaryOrderSortValue(right).localeCompare(getNotaryOrderSortValue(left));
-      if (sortResult !== 0) {
-        return sortResult;
+      const leftSortValue = getNotaryOrderSortValue(left);
+      const rightSortValue = getNotaryOrderSortValue(right);
+
+      if (leftSortValue.priorityValue !== rightSortValue.priorityValue) {
+        return leftSortValue.priorityValue - rightSortValue.priorityValue;
       }
 
-      return right.orderId.localeCompare(left.orderId);
+      if (leftSortValue.pushTimeValue !== rightSortValue.pushTimeValue) {
+        if (!leftSortValue.pushTimeValue) return 1;
+        if (!rightSortValue.pushTimeValue) return -1;
+        return leftSortValue.pushTimeValue.localeCompare(rightSortValue.pushTimeValue);
+      }
+
+      return left.orderId.localeCompare(right.orderId);
     });
-  }, [filterName, filterProduct, filterStatus, notaryOrders]);
+  }, [
+    appliedFilterLanguage,
+    appliedFilterName,
+    appliedFilterPriority,
+    appliedFilterProduct,
+    filterStatus,
+    notaryOrders,
+  ]);
 
   const paginatedOrders = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
@@ -253,7 +312,7 @@ const NotaryOrderList: React.FC = () => {
   }, [activeBatchStatus, allOrders]);
 
   const showRejectReasonColumn = filterStatus === 'rejected';
-  const orderTableColumnCount = 6 + (showRejectReasonColumn ? 1 : 0) + (showBatchSelection ? 1 : 0);
+  const orderTableColumnCount = 7 + (showRejectReasonColumn ? 1 : 0) + (showBatchSelection ? 1 : 0);
 
   const applyOrderPatches = (patches: Record<string, Partial<Order>>) => {
     Object.entries(patches).forEach(([orderId, patch]) => {
@@ -331,12 +390,22 @@ const NotaryOrderList: React.FC = () => {
   };
 
   const handleSearch = () => {
+    setAppliedFilterProduct(filterProduct);
+    setAppliedFilterLanguage(filterProduct ? filterLanguage : '');
+    setAppliedFilterPriority(filterPriority);
+    setAppliedFilterName(filterName);
     setCurrentPage(1);
   };
 
   const handleReset = () => {
     setFilterProduct('');
+    setFilterLanguage('');
+    setFilterPriority('');
     setFilterName('');
+    setAppliedFilterProduct('');
+    setAppliedFilterLanguage('');
+    setAppliedFilterPriority('');
+    setAppliedFilterName('');
     setCurrentPage(1);
   };
 
@@ -478,7 +547,12 @@ const NotaryOrderList: React.FC = () => {
     { label: t('order.status.rejected'), value: 'rejected' },
   ];
 
-  const activeFilterCount = [filterProduct, filterName.trim()].filter(Boolean).length;
+  const activeFilterCount = [
+    appliedFilterProduct,
+    appliedFilterProduct ? appliedFilterLanguage : '',
+    appliedFilterPriority,
+    appliedFilterName.trim(),
+  ].filter(Boolean).length;
 
   return (
     <div className="app-main animate-fadeIn order-list-page notary-order-list-page">
@@ -520,11 +594,44 @@ const NotaryOrderList: React.FC = () => {
             </div>
 
             <div className="form-group order-filter-field">
-              <label className="form-label">姓名</label>
+              <label className="form-label">语言</label>
+              <select
+                className="form-select"
+                value={filterLanguage}
+                disabled={!filterProduct}
+                onChange={(event) => setFilterLanguage(event.target.value)}
+              >
+                <option value="">{filterProduct ? t('common.all') : '请先选择产品'}</option>
+                {languageOptions.map((language) => (
+                  <option key={language} value={language}>
+                    {language}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group order-filter-field">
+              <label className="form-label">优先级</label>
+              <select
+                className="form-select"
+                value={filterPriority}
+                onChange={(event) => setFilterPriority(event.target.value as ProcessType | '')}
+              >
+                <option value="">{t('common.all')}</option>
+                {NOTARY_PRIORITY_OPTIONS.map((priority) => (
+                  <option key={priority.value} value={priority.value}>
+                    {priority.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group order-filter-field notary-order-list__name-filter">
+              <label className="form-label">关键字</label>
               <input
                 className="form-input"
                 value={filterName}
-                placeholder="请输入姓名"
+                placeholder="请输入姓名、身份证号、手机号"
                 onChange={(event) => setFilterName(event.target.value)}
               />
             </div>
@@ -573,7 +680,18 @@ const NotaryOrderList: React.FC = () => {
           </div>
 
           <div className="table-wrapper">
-            <table className="data-table order-list-table">
+            <table className="data-table order-list-table notary-order-list-table">
+              <colgroup>
+                {showBatchSelection && <col className="notary-order-list-table__col--selection" />}
+                <col className="notary-order-list-table__col--sequence" />
+                <col className="notary-order-list-table__col--product" />
+                <col className="notary-order-list-table__col--license" />
+                <col className="notary-order-list-table__col--delivery" />
+                <col className="notary-order-list-table__col--priority" />
+                {showRejectReasonColumn && <col className="notary-order-list-table__col--reject" />}
+                <col className="notary-order-list-table__col--status" />
+                <col className="notary-order-list-table__col--actions" />
+              </colgroup>
               <thead>
                 <tr>
                   {showBatchSelection && (
@@ -591,7 +709,8 @@ const NotaryOrderList: React.FC = () => {
                   <th style={{ width: 60 }}>序号</th>
                   <th>产品</th>
                   <th>{t('notary.field.licenseInfo')}</th>
-                  <th style={{ minWidth: '300px' }}>收货信息</th>
+                  <th>收货信息</th>
+                  <th>优先级</th>
                   {showRejectReasonColumn && <th style={{ minWidth: '240px' }}>驳回原因</th>}
                   <th>{t('order.field.status')}</th>
                   <th>{t('common.operate')}</th>
@@ -669,6 +788,10 @@ const NotaryOrderList: React.FC = () => {
                             <div>手机号：{order.customerPhone}</div>
                             <div>收货地址：{order.deliveryAddress}</div>
                           </div>
+                        </td>
+
+                        <td>
+                          <span className={getNotaryOrderPriorityTagClass(order)}>{getNotaryOrderPriorityLabel(order)}</span>
                         </td>
 
                         {showRejectReasonColumn && (

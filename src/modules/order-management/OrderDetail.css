@@ -311,7 +311,7 @@
 .notary-review-card {
   border-color: #d9e4f0;
   box-shadow: none;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .notary-review-card .order-audit-card__header {
@@ -384,6 +384,10 @@
 
 .notary-review-field__value .order-audit-field__editor--textarea {
   min-height: 92px;
+}
+
+.notary-review-field__value .order-audit-field__date-editor {
+  line-height: normal;
 }
 
 .notary-review-status {

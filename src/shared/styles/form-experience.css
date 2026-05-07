@@ -263,8 +263,14 @@
 }
 .notary-order-list__filter-actions {
   grid-column: 4 / 5;
+  grid-row: 2;
+  align-self: end;
   justify-self: end;
   width: 100%;
+}
+.notary-order-list__name-filter {
+  grid-column: 1 / 2;
+  grid-row: 2;
 }
 .order-list-topbar {
   display: flex;
@@ -427,6 +433,48 @@
 }
 .notary-order-list__batch-summary strong {
   color: var(--color-text-primary);
+}
+.notary-order-list-table {
+  table-layout: fixed;
+  min-width: 1060px;
+}
+.notary-order-list-table th,
+.notary-order-list-table td {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+.notary-order-list-table__col--selection {
+  width: 52px;
+}
+.notary-order-list-table__col--sequence {
+  width: 60px;
+}
+.notary-order-list-table__col--product {
+  width: 150px;
+}
+.notary-order-list-table__col--license {
+  width: 190px;
+}
+.notary-order-list-table__col--delivery {
+  width: 280px;
+}
+.notary-order-list-table__col--priority {
+  width: 96px;
+}
+.notary-order-list-table__col--reject {
+  width: 220px;
+}
+.notary-order-list-table__col--status {
+  width: 104px;
+}
+.notary-order-list-table__col--actions {
+  width: 180px;
+}
+.notary-order-list-table td {
+  overflow-wrap: anywhere;
+}
+.notary-order-list-table .tag {
+  white-space: nowrap;
 }
 .order-list-tabs .tabs__item--active .order-list-tabs__count {
   color: var(--color-primary);
@@ -1443,8 +1491,13 @@
     min-width: auto;
     align-items: flex-start;
   }
+  .notary-order-list__name-filter {
+    grid-column: span 1;
+    grid-row: auto;
+  }
   .notary-order-list__filter-actions {
     grid-column: span 1;
+    grid-row: auto;
   }
 }
 
@@ -1459,6 +1512,10 @@
   .order-filter-field--keyword,
   .order-filter-actions {
     grid-column: span 1;
+  }
+  .notary-order-list__name-filter {
+    grid-column: span 1;
+    grid-row: auto;
   }
   .order-filter-range {
     flex-direction: column;

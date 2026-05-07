@@ -21,6 +21,8 @@ import {
 } from '../../shared/config/notaryPowerOfAttorney';
 import { getProductProcessTypeLabel } from '../../shared/utils/productProcessType';
 import { orderPreviewAssets } from '../../shared/config/orderPreviewAssets';
+import { LICENSE_ISSUING_AUTHORITY_OPTIONS } from '../../shared/config/licenseIssuingAuthority';
+import DatePickerInput from '../../shared/components/form/DatePickerInput';
 import type { Order, OrderLog, OrderStatus } from '../../shared/types';
 import './OrderDetail.css';
 
@@ -38,6 +40,8 @@ type OrderEditForm = {
   birthDate: string;
   licenseCategory: string;
   licenseAddress: string;
+  archiveNumber: string;
+  barcodeNumber: string;
   firstIssueDate: string;
   validFromDate: string;
   validUntilDate: string;
@@ -68,6 +72,7 @@ const POWER_OF_ATTORNEY_PATH = buildPreviewAssetPath('Power of Attorney.docx');
 const POWER_OF_ATTORNEY_EXPORT_OPTIONS = buildNotaryPowerOfAttorneyExportOptions(POWER_OF_ATTORNEY_PATH);
 const ORDER_MANAGEMENT_PENDING_REVIEW_PATH = '/order-management/notary-orders?status=pending_review';
 const LOGISTICS_COMPANY_OPTIONS = ['顺丰速运', '京东物流', '邮政EMS', '圆通速递', '中通快递', '申通快递'];
+const LICENSE_VALIDITY_YEAR_OPTIONS = ['6年', '10年', '60年', '长期', '自定义'];
 
 const CERTIFICATE_IMAGES: CertificateImage[] = [
   {
@@ -200,6 +205,27 @@ const addYearsToDate = (dateString: string, years: number) => {
   return `${year + years}-${padNumber(month)}-${padNumber(day)}`;
 };
 
+const calculateLicenseValidUntilDate = (validFromDate: string, validYears: string, customValidUntilDate = '') => {
+  const normalizedValidYears = validYears.trim();
+
+  if (normalizedValidYears === '自定义') {
+    return customValidUntilDate.trim();
+  }
+
+  if (normalizedValidYears === '长期') {
+    return '';
+  }
+
+  const years = Number(normalizedValidYears.replace(/\D/g, ''));
+
+  if (!validFromDate.trim() || !Number.isFinite(years) || years <= 0) {
+    return '';
+  }
+
+  const calculatedDate = addYearsToDate(validFromDate.trim(), years);
+  return calculatedDate === '--' ? '' : calculatedDate;
+};
+
 const getDisplayValue = (value?: string | null) => {
   const normalizedValue = value?.trim();
   return normalizedValue ? normalizedValue : '--';
@@ -303,13 +329,21 @@ const buildLicenseAuditProfile = (order: Order) => {
   const validFromDateSource = resolvePersistedValue(order.licenseValidFromDate, createDateFromSeed(seed + 41, 2021, 4));
   const validUntilDateSource = resolvePersistedValue(order.licenseValidUntilDate, addYearsToDate(validFromDateSource, 10));
   const validYearsSource = resolvePersistedValue(order.licenseValidYears, '10年');
-  const issuingAuthoritySource = resolvePersistedValue(order.licenseIssuingAuthority, '公安交通管理局');
+  const issuingAuthoritySource = resolvePersistedValue(order.licenseIssuingAuthority, LICENSE_ISSUING_AUTHORITY_OPTIONS[0]);
   const issuingRegionSource = resolvePersistedValue(order.licenseIssuingRegion, extractIssuingRegion(licenseAddressSource));
   const genderSource = resolvePersistedValue(order.licenseGender, seed % 4 === 0 ? '女' : '男');
   const nationalitySource = resolvePersistedValue(order.licenseNationality, '中国/CHN');
   const licenseName = getDisplayValue(licenseNameSource);
   const licenseNo = getDisplayValue(licenseNoSource);
   const licenseCategory = getDisplayValue(licenseCategorySource);
+  const archiveNumberSource = resolvePersistedValue(
+    order.licenseArchiveNumber,
+    buildArchiveNumber(licenseNo === '--' ? '' : licenseNo, order.orderId),
+  );
+  const barcodeNumberSource = resolvePersistedValue(
+    order.licenseBarcodeNumber,
+    buildBarcodeNumber(licenseNo === '--' ? '' : licenseNo, order.orderId),
+  );
   const { surnamePinyin, givenNamePinyin } = getNamePinyinParts(licenseName === '--' ? '' : licenseName);
 
   return {
@@ -322,6 +356,8 @@ const buildLicenseAuditProfile = (order: Order) => {
     birthDate: getDisplayValue(birthDateSource),
     vehicleCategory: licenseCategory,
     licenseAddress: getDisplayValue(licenseAddressSource),
+    archiveNumber: getDisplayValue(archiveNumberSource),
+    barcodeNumber: getDisplayValue(barcodeNumberSource),
     firstIssueDate: getDisplayValue(firstIssueDateSource),
     validFromDate: getDisplayValue(validFromDateSource),
     validUntilDate: getDisplayValue(validUntilDateSource),
@@ -342,6 +378,8 @@ const buildOrderEditForm = (order: Order): OrderEditForm => {
     birthDate: toEditableValue(order.licenseBirthDate, auditProfile.birthDate),
     licenseCategory: toEditableValue(order.licenseCategory, auditProfile.vehicleCategory),
     licenseAddress: toEditableValue(order.licenseAddress, auditProfile.licenseAddress),
+    archiveNumber: toEditableValue(order.licenseArchiveNumber, auditProfile.archiveNumber),
+    barcodeNumber: toEditableValue(order.licenseBarcodeNumber, auditProfile.barcodeNumber),
     firstIssueDate: toEditableValue(order.licenseFirstIssueDate, auditProfile.firstIssueDate),
     validFromDate: toEditableValue(order.licenseValidFromDate, auditProfile.validFromDate),
     validUntilDate: toEditableValue(order.licenseValidUntilDate, auditProfile.validUntilDate),
@@ -455,7 +493,21 @@ const NotaryOrderManagementPreview: React.FC = () => {
   };
 
   const handleEditFieldChange = (field: keyof OrderEditForm, value: string) => {
-    setEditForm((currentForm) => (currentForm ? { ...currentForm, [field]: value } : currentForm));
+    setEditForm((currentForm) => {
+      if (!currentForm) return currentForm;
+
+      const nextForm = { ...currentForm, [field]: value };
+
+      if (field === 'validYears' || field === 'validFromDate') {
+        nextForm.validUntilDate = calculateLicenseValidUntilDate(
+          field === 'validFromDate' ? value : currentForm.validFromDate,
+          field === 'validYears' ? value : currentForm.validYears,
+          currentForm.validUntilDate,
+        );
+      }
+
+      return nextForm;
+    });
   };
 
   const handleLogisticsFieldChange = (field: keyof LogisticsForm, value: string) => {
@@ -614,6 +666,17 @@ const NotaryOrderManagementPreview: React.FC = () => {
       return;
     }
 
+    if (editForm.validYears === '自定义' && !editForm.validUntilDate.trim()) {
+      showToast('error', '请选择终止日期');
+      return;
+    }
+
+    const nextValidUntilDate = calculateLicenseValidUntilDate(
+      editForm.validFromDate,
+      editForm.validYears,
+      editForm.validUntilDate,
+    );
+
     const nextUpdates: Partial<Order> = {
       licenseNo: editForm.licenseNo.trim(),
       licenseName: editForm.licenseName.trim(),
@@ -622,9 +685,11 @@ const NotaryOrderManagementPreview: React.FC = () => {
       licenseBirthDate: editForm.birthDate.trim(),
       licenseCategory: editForm.licenseCategory.trim(),
       licenseAddress: editForm.licenseAddress.trim(),
+      licenseArchiveNumber: editForm.archiveNumber.trim(),
+      licenseBarcodeNumber: editForm.barcodeNumber.trim(),
       licenseFirstIssueDate: editForm.firstIssueDate.trim(),
       licenseValidFromDate: editForm.validFromDate.trim(),
-      licenseValidUntilDate: editForm.validUntilDate.trim(),
+      licenseValidUntilDate: nextValidUntilDate,
       licenseValidYears: editForm.validYears.trim(),
       licenseIssuingAuthority: editForm.issuingAuthority.trim(),
       licenseIssuingRegion: editForm.issuingRegion.trim(),
@@ -689,9 +754,10 @@ const NotaryOrderManagementPreview: React.FC = () => {
       multiline?: boolean;
       rows?: number;
       placeholder?: string;
+      ariaLabel?: string;
     } = {},
   ) => {
-    const { type = 'text', multiline = false, rows = 3, placeholder } = options;
+    const { type = 'text', multiline = false, rows = 3, placeholder, ariaLabel } = options;
     const value = editForm[field];
 
     if (multiline) {
@@ -706,6 +772,18 @@ const NotaryOrderManagementPreview: React.FC = () => {
       );
     }
 
+    if (type === 'date') {
+      return (
+        <DatePickerInput
+          className="order-audit-field__editor order-audit-field__date-editor"
+          ariaLabel={ariaLabel || placeholder || '日期'}
+          placeholder={placeholder || '请选择日期'}
+          value={value}
+          onChange={(nextValue) => handleEditFieldChange(field, nextValue)}
+        />
+      );
+    }
+
     return (
       <input
         type={type}
@@ -716,6 +794,42 @@ const NotaryOrderManagementPreview: React.FC = () => {
       />
     );
   };
+
+  const renderValidYearsEditor = () => (
+    <select
+      className="form-select order-audit-field__editor"
+      value={editForm.validYears}
+      onChange={(event) => handleEditFieldChange('validYears', event.target.value)}
+    >
+      {LICENSE_VALIDITY_YEAR_OPTIONS.map((validityYear) => (
+        <option key={validityYear} value={validityYear}>
+          {validityYear}
+        </option>
+      ))}
+    </select>
+  );
+
+  const renderIssuingAuthorityEditor = () => (
+    <select
+      className="form-select order-audit-field__editor"
+      value={editForm.issuingAuthority}
+      onChange={(event) => handleEditFieldChange('issuingAuthority', event.target.value)}
+    >
+      <option value="" disabled>请选择发证机构</option>
+      {LICENSE_ISSUING_AUTHORITY_OPTIONS.map((authority) => (
+        <option key={authority} value={authority}>
+          {authority}
+        </option>
+      ))}
+    </select>
+  );
+
+  const shouldShowValidUntilDate = isEditing ? editForm.validYears === '自定义' : auditProfile.validYears === '自定义';
+
+  const renderValidUntilDateValue = () =>
+    isEditing
+      ? renderEditor('validUntilDate', { type: 'date', ariaLabel: '终止日期', placeholder: '请选择终止日期' })
+      : auditProfile.validUntilDate;
 
   const orderInfoItems: AuditFieldItem[] = [
     {
@@ -764,7 +878,7 @@ const NotaryOrderManagementPreview: React.FC = () => {
     },
     {
       label: '出生日期',
-      value: isEditing ? renderEditor('birthDate', { type: 'date' }) : auditProfile.birthDate,
+      value: isEditing ? renderEditor('birthDate', { type: 'date', ariaLabel: '出生日期', placeholder: '请选择出生日期' }) : auditProfile.birthDate,
     },
     {
       label: '准驾车型',
@@ -777,27 +891,35 @@ const NotaryOrderManagementPreview: React.FC = () => {
     },
     {
       label: '档案编号',
-      value: buildArchiveNumber(auditProfile.licenseNo, order.orderId),
+      value: isEditing ? renderEditor('archiveNumber', { placeholder: '请输入档案编号' }) : auditProfile.archiveNumber,
     },
     {
       label: '条形码',
-      value: buildBarcodeNumber(auditProfile.licenseNo, order.orderId),
+      value: isEditing ? renderEditor('barcodeNumber', { placeholder: '请输入条形码' }) : auditProfile.barcodeNumber,
     },
     {
       label: '初次领证日期',
-      value: isEditing ? renderEditor('firstIssueDate', { type: 'date' }) : auditProfile.firstIssueDate,
+      value: isEditing ? renderEditor('firstIssueDate', { type: 'date', ariaLabel: '初次领证日期', placeholder: '请选择初次领证日期' }) : auditProfile.firstIssueDate,
     },
     {
       label: '有效起始日期',
-      value: isEditing ? renderEditor('validFromDate', { type: 'date' }) : auditProfile.validFromDate,
+      value: isEditing ? renderEditor('validFromDate', { type: 'date', ariaLabel: '有效起始日期', placeholder: '请选择有效起始日期' }) : auditProfile.validFromDate,
     },
     {
       label: '有效年限',
-      value: isEditing ? renderEditor('validYears', { placeholder: '如 10年' }) : auditProfile.validYears,
+      value: isEditing ? renderValidYearsEditor() : auditProfile.validYears,
     },
+    ...(shouldShowValidUntilDate
+      ? [
+          {
+            label: '终止日期',
+            value: renderValidUntilDateValue(),
+          },
+        ]
+      : []),
     {
       label: '发证机构',
-      value: isEditing ? renderEditor('issuingAuthority', { placeholder: '请输入发证机关' }) : auditProfile.issuingAuthority,
+      value: isEditing ? renderIssuingAuthorityEditor() : auditProfile.issuingAuthority,
     },
     {
       label: '发证地区',

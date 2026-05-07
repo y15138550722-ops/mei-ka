@@ -484,11 +484,6 @@ const sortOrderRecordItems = (records: NotaryOrderRecordItem[]) =>
     return (left.sequence || 0) - (right.sequence || 0);
   });
 
-const shouldHideOrderRecordOfficeName = (action: string) =>
-  action === '公证处审核通过--制作中' ||
-  action === '公证处审核驳回' ||
-  action === '公证处制作完成';
-
 const getOrderRecordItems = (order: Order): NotaryOrderRecordItem[] => {
   const officeOrders = getRelatedNotaryOfficeOrders(order);
   const latestOfficeOrder = getLatestRelatedNotaryOfficeOrder(order);
@@ -551,7 +546,7 @@ const getOrderRecordItems = (order: Order): NotaryOrderRecordItem[] => {
 
     if (NOTARY_OFFICE_REJECTION_PATTERN.test(log.action)) {
       pushOrderRecordItem(records, {
-        action: '公证处审核驳回',
+        action: '审核驳回',
         time: recordTime,
         officeName: recordOfficeName,
       });
@@ -559,7 +554,7 @@ const getOrderRecordItems = (order: Order): NotaryOrderRecordItem[] => {
 
     if (NOTARY_OFFICE_APPROVAL_PATTERN.test(log.action)) {
       pushOrderRecordItem(records, {
-        action: '公证处审核通过--制作中',
+        action: '审核通过--制作中',
         time: recordTime,
         officeName: recordOfficeName,
       });
@@ -567,7 +562,7 @@ const getOrderRecordItems = (order: Order): NotaryOrderRecordItem[] => {
 
     if (NOTARY_OFFICE_COMPLETION_PATTERN.test(log.action)) {
       pushOrderRecordItem(records, {
-        action: '公证处制作完成',
+        action: '制作完成',
         time: recordTime,
         officeName: recordOfficeName,
       });
@@ -576,23 +571,23 @@ const getOrderRecordItems = (order: Order): NotaryOrderRecordItem[] => {
 
   if (hasRejectionAfterSubmission && rejectionRecordTime) {
     pushOrderRecordItem(records, {
-      action: '公证处审核驳回',
+      action: '审核驳回',
       time: rejectionRecordTime,
       officeName,
     });
   }
 
-  if (hasApprovalAfterSubmission && records.every((record) => record.action !== '公证处审核通过--制作中')) {
+  if (hasApprovalAfterSubmission && records.every((record) => record.action !== '审核通过--制作中')) {
     pushOrderRecordItem(records, {
-      action: '公证处审核通过--制作中',
+      action: '审核通过--制作中',
       time: getOrderRecordTime(approvalLog?.time),
       officeName,
     });
   }
 
-  if (hasCompletionAfterApproval && records.every((record) => record.action !== '公证处制作完成')) {
+  if (hasCompletionAfterApproval && records.every((record) => record.action !== '制作完成')) {
     pushOrderRecordItem(records, {
-      action: '公证处制作完成',
+      action: '制作完成',
       time: getOrderRecordTime(completionLog?.time),
       officeName,
     });
@@ -1702,9 +1697,7 @@ const NotaryOrderManagementList: React.FC = () => {
                                   <span className="notary-order-record__meta">
                                     {[
                                       record.time,
-                                      !shouldHideOrderRecordOfficeName(record.action) &&
-                                      record.officeName &&
-                                      record.officeName !== '--'
+                                      record.officeName && record.officeName !== '--'
                                         ? record.officeName
                                         : undefined,
                                     ]

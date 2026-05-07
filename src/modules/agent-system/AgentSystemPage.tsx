@@ -2,30 +2,16 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { addOrder, getProducts } from '../../services/mockDataService';
 import type { ProductProcessType } from '../../shared/types';
+import { LICENSE_ISSUING_AUTHORITY_OPTIONS } from '../../shared/config/licenseIssuingAuthority';
+import DatePickerInput from '../../shared/components/form/DatePickerInput';
 import { formatBeijingTimestamp } from '../../shared/utils/dateTime';
+import { getLanguageOptionsForProduct } from '../../shared/utils/notaryLanguageOptions';
 import './AgentSystemPage.css';
 
 type ValidityPeriod = '6年' | '10年' | '60年' | '长期' | '自定义';
 
 const sideMenuItems = ['选择产品', '确认驾照信息', '确认收货信息', '选择办理类型', '提交订单'];
 const SECTION_SCROLL_OFFSET = 78;
-
-const SINGLE_CERTIFICATE_LANGUAGES = ['英语', '法语', '西班牙语', '意大利语', '德语'];
-const DOUBLE_CERTIFICATE_LANGUAGES = ['英语', '意大利语'];
-
-const getLanguageOptionsForProduct = (productTitle = '') => {
-  const compactTitle = productTitle.replace(/\s+/g, '');
-
-  if (!compactTitle) {
-    return [];
-  }
-
-  if (compactTitle.includes('公证双号') || compactTitle.includes('公证海牙双号')) {
-    return DOUBLE_CERTIFICATE_LANGUAGES;
-  }
-
-  return SINGLE_CERTIFICATE_LANGUAGES;
-};
 
 const uploadItems = [
   { title: '驾照正面照片', tone: 'green' },
@@ -77,15 +63,6 @@ const provinceCityOptions = [
   { province: '台湾省', cities: ['台北市', '新北市', '桃园市', '台中市', '台南市', '高雄市', '基隆市', '新竹市', '嘉义市'] },
 ] as const;
 
-const issuingAuthorityOptions = [
-  '公安局交通管理局',
-  '公安局交通警察支队',
-  '公安局交通警察总队',
-  '公安局公安交通管理局',
-  '公安局交通管理支队',
-  '公安局交通警察巡逻支队',
-];
-
 const getProcessTypePrice = (processType: ProductProcessType | null) =>
   processType?.pricing.find((item) => item.agentLevel === 'self')?.price ?? processType?.pricing[0]?.price ?? 0;
 
@@ -96,13 +73,6 @@ const formatCurrency = (value: number, fractionDigits?: number) => {
   const fixedDigits = typeof fractionDigits === 'number' ? fractionDigits : Number.isInteger(value) ? 0 : 2;
   return `¥${value.toFixed(fixedDigits)}`;
 };
-
-interface DateInputProps {
-  ariaLabel: string;
-  placeholder: string;
-  value: string;
-  onChange: (value: string) => void;
-}
 
 const formatDateValue = (date: Date) => {
   const year = date.getFullYear();
@@ -143,131 +113,6 @@ const addYearsToDateValue = (dateValue: string, validityPeriod: ValidityPeriod) 
   return formatDateValue(new Date(year + validityYears, month - 1, day));
 };
 
-const parseDateValue = (value: string) => {
-  const [year, month, day] = value.split('-').map(Number);
-  return Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)
-    ? new Date(year, month - 1, day)
-    : null;
-};
-
-const isSameDate = (left: Date, right: Date) =>
-  left.getFullYear() === right.getFullYear() &&
-  left.getMonth() === right.getMonth() &&
-  left.getDate() === right.getDate();
-
-const buildCalendarDays = (monthDate: Date) => {
-  const firstDay = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
-  const startDate = new Date(firstDay);
-  startDate.setDate(firstDay.getDate() - firstDay.getDay());
-
-  return Array.from({ length: 42 }, (_, index) => {
-    const date = new Date(startDate);
-    date.setDate(startDate.getDate() + index);
-    return date;
-  });
-};
-
-const DateInput: React.FC<DateInputProps> = ({ ariaLabel, placeholder, value, onChange }) => {
-  const selectedDate = useMemo(() => parseDateValue(value), [value]);
-  const [isOpen, setIsOpen] = useState(false);
-  const [visibleMonth, setVisibleMonth] = useState(() => selectedDate || new Date());
-  const pickerRef = useRef<HTMLDivElement | null>(null);
-  const today = useMemo(() => new Date(), []);
-  const calendarDays = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth]);
-
-  useEffect(() => {
-    if (selectedDate) {
-      setVisibleMonth(selectedDate);
-    }
-  }, [selectedDate]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!pickerRef.current?.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handlePointerDown);
-
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-    };
-  }, [isOpen]);
-
-  const moveMonth = (offset: number) => {
-    setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1));
-  };
-
-  const selectDate = (date: Date) => {
-    onChange(formatDateValue(date));
-    setIsOpen(false);
-  };
-
-  return (
-    <div ref={pickerRef} className="agent-date-field">
-      <button
-        type="button"
-        className={`agent-date-trigger ${isOpen ? 'agent-date-trigger--open' : ''} ${value ? '' : 'agent-date-trigger--empty'}`}
-        aria-label={ariaLabel}
-        aria-expanded={isOpen}
-        onClick={() => setIsOpen((current) => !current)}
-      >
-        <span className="agent-date-trigger__value">{value || placeholder}</span>
-        <span className="agent-date-trigger__icon" aria-hidden="true" />
-      </button>
-
-      {isOpen && (
-        <div className="agent-date-picker" role="dialog" aria-label={`${ariaLabel}日期选择`}>
-          <div className="agent-date-picker__header">
-            <div className="agent-date-picker__nav">
-              <button type="button" onClick={() => moveMonth(-12)} aria-label="上一年">«</button>
-              <button type="button" onClick={() => moveMonth(-1)} aria-label="上个月">‹</button>
-            </div>
-            <strong>{visibleMonth.getFullYear()} 年&nbsp;&nbsp;{visibleMonth.getMonth() + 1} 月</strong>
-            <div className="agent-date-picker__nav">
-              <button type="button" onClick={() => moveMonth(1)} aria-label="下个月">›</button>
-              <button type="button" onClick={() => moveMonth(12)} aria-label="下一年">»</button>
-            </div>
-          </div>
-
-          <div className="agent-date-picker__week">
-            {['日', '一', '二', '三', '四', '五', '六'].map((weekDay) => (
-              <span key={weekDay}>{weekDay}</span>
-            ))}
-          </div>
-
-          <div className="agent-date-picker__days">
-            {calendarDays.map((date) => {
-              const currentMonth = date.getMonth() === visibleMonth.getMonth();
-              const selected = selectedDate ? isSameDate(date, selectedDate) : false;
-              const currentDay = isSameDate(date, today);
-
-              return (
-                <button
-                  key={formatDateValue(date)}
-                  type="button"
-                  className={[
-                    'agent-date-picker__day',
-                    currentMonth ? '' : 'agent-date-picker__day--muted',
-                    selected ? 'agent-date-picker__day--selected' : '',
-                    currentDay && !selected ? 'agent-date-picker__day--today' : '',
-                  ].filter(Boolean).join(' ')}
-                  onClick={() => selectDate(date)}
-                >
-                  {date.getDate()}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
 const AgentSystemPage: React.FC = () => {
   const navigate = useNavigate();
   const sectionRefs = useRef<Array<HTMLElement | null>>([]);
@@ -288,6 +133,7 @@ const AgentSystemPage: React.FC = () => {
   );
   const languageOptions = useMemo(() => getLanguageOptionsForProduct(selectedProduct?.title), [selectedProduct?.title]);
   const [selectedLanguage, setSelectedLanguage] = useState(() => languageOptions[0] || '');
+  const [useCountry, setUseCountry] = useState('');
   const selectedProcessType = useMemo(
     () => selectedProduct?.processTypes.find((processType) => processType.typeId === selectedProcessTypeId) || null,
     [selectedProduct?.processTypes, selectedProcessTypeId],
@@ -418,6 +264,11 @@ const AgentSystemPage: React.FC = () => {
       return;
     }
 
+    if (!useCountry.trim()) {
+      showToast('请选择使用国家');
+      return;
+    }
+
     const certificateData = certificateFormRef.current ? new FormData(certificateFormRef.current) : new FormData();
     const deliveryData = deliveryFormRef.current ? new FormData(deliveryFormRef.current) : new FormData();
     const licenseName = readFormValue(certificateData, 'licenseName');
@@ -459,6 +310,8 @@ const AgentSystemPage: React.FC = () => {
       licenseNationality: readFormValue(certificateData, 'licenseNationality') || '中国/CHN',
       licenseBirthDate: birthDate,
       licenseAddress: readFormValue(certificateData, 'licenseAddress') || deliveryAddress,
+      licenseArchiveNumber: readFormValue(certificateData, 'archiveNumber'),
+      licenseBarcodeNumber: readFormValue(certificateData, 'barcodeNumber'),
       licenseFirstIssueDate: initialIssueDate,
       licenseValidFromDate: validStartDate,
       licenseValidUntilDate: validityPeriod === '自定义'
@@ -468,6 +321,7 @@ const AgentSystemPage: React.FC = () => {
       licenseIssuingAuthority: readFormValue(certificateData, 'licenseIssuingAuthority'),
       licenseIssuingRegion,
       language,
+      useCountry: useCountry.trim(),
       createdAt: currentTimestamp,
       updatedAt: currentTimestamp,
       logs: [
@@ -493,9 +347,9 @@ const AgentSystemPage: React.FC = () => {
       )}
 
       <header className="agent-system-header">
-        <div className="agent-system-header__brand" aria-label="美卡认证代理平台-录单">
+        <div className="agent-system-header__brand" aria-label="美卡认证代理平台-用户端">
           <span className="agent-system-logo">MK</span>
-          <strong>美卡认证代理平台-录单</strong>
+          <strong>美卡认证代理平台-用户端</strong>
         </div>
 
         <nav className="agent-system-nav" aria-label="系统导航">
@@ -574,6 +428,14 @@ const AgentSystemPage: React.FC = () => {
                   )}
                 </div>
               </div>
+              <label className="agent-field agent-field--wide">
+                <span>使用国家 <em className="agent-required">*</em></span>
+                <input
+                  value={useCountry}
+                  placeholder="请输入使用国家"
+                  onChange={(event) => setUseCountry(event.target.value)}
+                />
+              </label>
             </div>
           </section>
 
@@ -610,7 +472,7 @@ const AgentSystemPage: React.FC = () => {
                 </label>
                 <label className="agent-field">
                   <span>出生日期</span>
-                  <DateInput
+                  <DatePickerInput
                     ariaLabel="出生日期"
                     placeholder="请选择出生日期"
                     value={birthDate}
@@ -635,7 +497,7 @@ const AgentSystemPage: React.FC = () => {
                 </label>
                 <label className="agent-field">
                   <span>初次领证日期</span>
-                  <DateInput
+                  <DatePickerInput
                     ariaLabel="初次领证日期"
                     placeholder="请选择初次领证日期"
                     value={initialIssueDate}
@@ -644,7 +506,7 @@ const AgentSystemPage: React.FC = () => {
                 </label>
                 <label className="agent-field">
                   <span>有效起始日期</span>
-                  <DateInput
+                  <DatePickerInput
                     ariaLabel="有效起始日期"
                     placeholder="请选择效起始日期"
                     value={validStartDate}
@@ -669,7 +531,7 @@ const AgentSystemPage: React.FC = () => {
                 {validityPeriod === '自定义' && (
                   <label className="agent-field agent-field--validity-end">
                     <span>终止日期</span>
-                    <DateInput
+                    <DatePickerInput
                       ariaLabel="终止日期"
                       placeholder="请选择终止日期"
                       value={customValidUntilDate}
@@ -706,7 +568,7 @@ const AgentSystemPage: React.FC = () => {
                   <span>发证机构</span>
                   <select name="licenseIssuingAuthority" defaultValue="">
                     <option value="" disabled>请选择发证机构</option>
-                    {issuingAuthorityOptions.map((authority) => (
+                    {LICENSE_ISSUING_AUTHORITY_OPTIONS.map((authority) => (
                       <option key={authority} value={authority}>
                         {authority}
                       </option>
