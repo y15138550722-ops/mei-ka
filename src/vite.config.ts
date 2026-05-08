@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-const appRoutePrefixes = ['/login', '/agent-system', '/orders', '/order-management', '/products', '/notary']
+const appRoutePrefixes = ['/login', '/agent-system', '/license-officer', '/orders', '/order-management', '/products', '/notary']
 
 function shouldFallbackToIndex(url = '') {
   const { pathname } = new URL(url, 'http://meika.local')

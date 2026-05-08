@@ -1,17 +1,36 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { addOrder, getProducts } from '../../services/mockDataService';
-import type { ProductProcessType } from '../../shared/types';
+import { addOrder, getOrders, getProducts } from '../../services/mockDataService';
+import type { Order, OrderStatus, ProductProcessType } from '../../shared/types';
 import { LICENSE_ISSUING_AUTHORITY_OPTIONS } from '../../shared/config/licenseIssuingAuthority';
+import { orderPreviewAssets } from '../../shared/config/orderPreviewAssets';
 import DatePickerInput from '../../shared/components/form/DatePickerInput';
 import { formatBeijingTimestamp } from '../../shared/utils/dateTime';
 import { getLanguageOptionsForProduct } from '../../shared/utils/notaryLanguageOptions';
 import './AgentSystemPage.css';
 
 type ValidityPeriod = '6年' | '10年' | '60年' | '长期' | '自定义';
+type OrderEntryType = 'notary' | 'domesticLicenseTranslation';
+type AgentPageView = 'orderEntry' | 'orderList';
+type AgentOrderStatusTab = '' | 'pending_review' | 'pending_production' | 'shipped' | 'cancelled';
+
+const orderEntryOptions: Array<{ value: OrderEntryType; label: string }> = [
+  { value: 'notary', label: '公证产品下单' },
+  { value: 'domesticLicenseTranslation', label: '换国内驾照翻译件下单' },
+];
+
+const agentOrderStatusTabs: Array<{ value: AgentOrderStatusTab; label: string }> = [
+  { value: '', label: '所有订单' },
+  { value: 'pending_review', label: '待审核' },
+  { value: 'pending_production', label: '制作中' },
+  { value: 'shipped', label: '已发货' },
+  { value: 'cancelled', label: '已取消' },
+];
 
 const sideMenuItems = ['选择产品', '确认驾照信息', '确认收货信息', '选择办理类型', '提交订单'];
 const SECTION_SCROLL_OFFSET = 78;
+const ORDER_LIST_PAGE_SIZE = 10;
+const AGENT_ACTIVE_VIEW_STORAGE_KEY = 'meika-agent-system-active-view';
 
 const uploadItems = [
   { title: '驾照正面照片', tone: 'green' },
@@ -63,11 +82,57 @@ const provinceCityOptions = [
   { province: '台湾省', cities: ['台北市', '新北市', '桃园市', '台中市', '台南市', '高雄市', '基隆市', '新竹市', '嘉义市'] },
 ] as const;
 
+const deliveryRegionOptions = [
+  {
+    province: '北京市',
+    cities: [
+      { city: '北京市', districts: ['东城区', '西城区', '朝阳区', '海淀区', '丰台区', '通州区'] },
+    ],
+  },
+  {
+    province: '上海市',
+    cities: [
+      { city: '上海市', districts: ['黄浦区', '徐汇区', '静安区', '浦东新区', '闵行区', '宝山区'] },
+    ],
+  },
+  {
+    province: '广东省',
+    cities: [
+      { city: '广州市', districts: ['越秀区', '天河区', '海珠区', '白云区', '番禺区'] },
+      { city: '深圳市', districts: ['福田区', '罗湖区', '南山区', '宝安区', '龙岗区'] },
+      { city: '珠海市', districts: ['香洲区', '斗门区', '金湾区'] },
+    ],
+  },
+  {
+    province: '广西壮族自治区',
+    cities: [
+      { city: '南宁市', districts: ['青秀区', '兴宁区', '西乡塘区', '江南区', '良庆区'] },
+      { city: '柳州市', districts: ['城中区', '鱼峰区', '柳南区', '柳北区'] },
+      { city: '桂林市', districts: ['秀峰区', '叠彩区', '象山区', '七星区'] },
+    ],
+  },
+  {
+    province: '江苏省',
+    cities: [
+      { city: '南京市', districts: ['玄武区', '秦淮区', '建邺区', '鼓楼区', '江宁区'] },
+      { city: '苏州市', districts: ['姑苏区', '吴中区', '相城区', '工业园区'] },
+      { city: '无锡市', districts: ['梁溪区', '锡山区', '惠山区', '滨湖区'] },
+    ],
+  },
+  {
+    province: '浙江省',
+    cities: [
+      { city: '杭州市', districts: ['上城区', '拱墅区', '西湖区', '滨江区', '萧山区'] },
+      { city: '宁波市', districts: ['海曙区', '江北区', '北仑区', '鄞州区'] },
+      { city: '温州市', districts: ['鹿城区', '龙湾区', '瓯海区'] },
+    ],
+  },
+] as const;
+
 const getProcessTypePrice = (processType: ProductProcessType | null) =>
   processType?.pricing.find((item) => item.agentLevel === 'self')?.price ?? processType?.pricing[0]?.price ?? 0;
 
 const AGENT_ACCOUNT_BALANCE = 28304;
-const NOTARY_ORDER_MANAGEMENT_PENDING_REVIEW_PATH = '/order-management/notary-orders?status=pending_review';
 
 const formatCurrency = (value: number, fractionDigits?: number) => {
   const fixedDigits = typeof fractionDigits === 'number' ? fractionDigits : Number.isInteger(value) ? 0 : 2;
@@ -98,6 +163,68 @@ const getNotaryOrderProductName = (productTitle: string) => {
   return '公证单号';
 };
 
+const getAgentOrderStatus = (status: OrderStatus): AgentOrderStatusTab => {
+  if (status === 'pending_review' || status === 'translating' || status === 'rejected') return 'pending_review';
+  if (status === 'pending_production' || status === 'in_production') return 'pending_production';
+  if (status === 'shipped' || status === 'completed') return 'shipped';
+  if (status === 'cancelled') return 'cancelled';
+  return '';
+};
+
+const getAgentOrderStatusLabel = (status: OrderStatus) => {
+  const statusValue = getAgentOrderStatus(status);
+  return agentOrderStatusTabs.find((tab) => tab.value === statusValue)?.label || '待审核';
+};
+
+const getAgentOrderStatusClassName = (status: OrderStatus) => {
+  const statusValue = getAgentOrderStatus(status) || 'pending_review';
+  return `agent-order-status agent-order-status--${statusValue}`;
+};
+
+const PRODUCTION_RECORD_KEYWORDS = ['翻译', '制作', '制作完成', '发货', '物流', '生产端'];
+const NON_PRODUCTION_RECORD_KEYWORDS = ['公证处', '送审', '审核', '驳回', '拒绝', '接收', '待审核'];
+
+const getProductionOrderRecords = (order: Order) => {
+  const matchedLogs = order.logs.filter((log) => {
+    const logText = `${log.operator} ${log.action}`;
+    const isProductionEvent = PRODUCTION_RECORD_KEYWORDS.some((keyword) => logText.includes(keyword));
+    const isNotaryOrAuditEvent = NON_PRODUCTION_RECORD_KEYWORDS.some((keyword) => logText.includes(keyword));
+
+    return isProductionEvent && !isNotaryOrAuditEvent;
+  });
+
+  if (matchedLogs.length > 0) {
+    return matchedLogs.map((log) => `${log.time.slice(0, 16)} ${log.action}`);
+  }
+
+  const status = getAgentOrderStatus(order.status);
+
+  if (status === 'shipped') {
+    return [
+      `发货：${order.logisticsCompany || '已发货'}${order.trackingNumber ? ` ${order.trackingNumber}` : ''}`,
+    ];
+  }
+
+  return [];
+};
+
+const isAgentSubmittedOrder = (order: Order) =>
+  order.remark === '代理端提交' ||
+  order.logs.some((log) => log.operator === '代理端' || log.action.includes('代理端'));
+
+const isNotaryOrder = (order: Order) => order.productCategory === 'notary';
+
+const getInitialAgentPageView = (): AgentPageView => {
+  if (typeof window === 'undefined') return 'orderEntry';
+
+  try {
+    const storedView = window.localStorage.getItem(AGENT_ACTIVE_VIEW_STORAGE_KEY);
+    return storedView === 'orderList' || storedView === 'orderEntry' ? storedView : 'orderEntry';
+  } catch {
+    return 'orderEntry';
+  }
+};
+
 const addYearsToDateValue = (dateValue: string, validityPeriod: ValidityPeriod) => {
   if (!dateValue || validityPeriod === '长期' || validityPeriod === '自定义') {
     return '';
@@ -115,21 +242,41 @@ const addYearsToDateValue = (dateValue: string, validityPeriod: ValidityPeriod) 
 
 const AgentSystemPage: React.FC = () => {
   const navigate = useNavigate();
+  const orderEntryDropdownRef = useRef<HTMLDivElement | null>(null);
+  const orderProductFilterRef = useRef<HTMLDivElement | null>(null);
   const sectionRefs = useRef<Array<HTMLElement | null>>([]);
   const certificateFormRef = useRef<HTMLFormElement | null>(null);
   const deliveryFormRef = useRef<HTMLFormElement | null>(null);
-  const notaryProducts = useMemo(
+  const [activeView, setActiveView] = useState<AgentPageView>(() => getInitialAgentPageView());
+  const [orderEntryType, setOrderEntryType] = useState<OrderEntryType>('notary');
+  const [isOrderEntryDropdownOpen, setIsOrderEntryDropdownOpen] = useState(false);
+  const [orderListStatus, setOrderListStatus] = useState<AgentOrderStatusTab>('');
+  const [orderListProductIds, setOrderListProductIds] = useState<string[]>([]);
+  const [isOrderProductFilterOpen, setIsOrderProductFilterOpen] = useState(false);
+  const [orderListKeyword, setOrderListKeyword] = useState('');
+  const [orderListStartDate, setOrderListStartDate] = useState('');
+  const [orderListEndDate, setOrderListEndDate] = useState('');
+  const [orderListPage, setOrderListPage] = useState(1);
+  const orderEntryLabel = orderEntryOptions.find((item) => item.value === orderEntryType)?.label || '公证产品下单';
+  const orderListProducts = useMemo(
     () =>
       getProducts()
-        .filter((product) => product.category === 'notary' && product.status === 'active')
+        .filter((product) => product.status === 'active')
         .sort((a, b) => b.weight - a.weight || a.title.localeCompare(b.title, 'zh-CN')),
     [],
   );
+  const activeProducts = useMemo(() => {
+    const activeCategory = orderEntryType === 'notary' ? 'notary' : 'translation';
+
+    return getProducts()
+      .filter((product) => product.category === activeCategory && product.status === 'active')
+      .sort((a, b) => b.weight - a.weight || a.title.localeCompare(b.title, 'zh-CN'));
+  }, [orderEntryType]);
   const [selectedProductId, setSelectedProductId] = useState('');
   const [selectedProcessTypeId, setSelectedProcessTypeId] = useState('');
   const selectedProduct = useMemo(
-    () => notaryProducts.find((product) => product.productId === selectedProductId) || null,
-    [notaryProducts, selectedProductId],
+    () => activeProducts.find((product) => product.productId === selectedProductId) || null,
+    [activeProducts, selectedProductId],
   );
   const languageOptions = useMemo(() => getLanguageOptionsForProduct(selectedProduct?.title), [selectedProduct?.title]);
   const [selectedLanguage, setSelectedLanguage] = useState(() => languageOptions[0] || '');
@@ -144,6 +291,9 @@ const AgentSystemPage: React.FC = () => {
   const [customValidUntilDate, setCustomValidUntilDate] = useState('');
   const [selectedProvince, setSelectedProvince] = useState('');
   const [selectedCity, setSelectedCity] = useState('');
+  const [deliveryProvince, setDeliveryProvince] = useState('');
+  const [deliveryCity, setDeliveryCity] = useState('');
+  const [deliveryDistrict, setDeliveryDistrict] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [initialIssueDate, setInitialIssueDate] = useState('');
   const [validStartDate, setValidStartDate] = useState('');
@@ -154,14 +304,95 @@ const AgentSystemPage: React.FC = () => {
     () => provinceCityOptions.find((item) => item.province === selectedProvince)?.cities ?? [],
     [selectedProvince],
   );
+  const deliveryCityOptions = useMemo(
+    () => deliveryRegionOptions.find((item) => item.province === deliveryProvince)?.cities ?? [],
+    [deliveryProvince],
+  );
+  const deliveryDistrictOptions = useMemo(
+    () => deliveryCityOptions.find((item) => item.city === deliveryCity)?.districts ?? [],
+    [deliveryCity, deliveryCityOptions],
+  );
+  const selectedOrderListProductNames = useMemo(
+    () =>
+      orderListProducts
+        .filter((product) => orderListProductIds.includes(product.productId))
+        .map((product) => product.title),
+    [orderListProductIds, orderListProducts],
+  );
   const [toast, setToast] = useState<string | null>(null);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+  const [orderDetailModalOrder, setOrderDetailModalOrder] = useState<Order | null>(null);
+  const [licenseInfoModalOrder, setLicenseInfoModalOrder] = useState<Order | null>(null);
+  const [allAgentOrders, setAllAgentOrders] = useState<Order[]>(() =>
+    getOrders()
+      .filter(isAgentSubmittedOrder)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+  );
+  const filteredAgentOrders = useMemo(() => {
+    const keyword = orderListKeyword.trim().toLowerCase();
+
+    return allAgentOrders.filter((order) => {
+      const createdDate = order.createdAt.slice(0, 10);
+      if (orderListStatus && getAgentOrderStatus(order.status) !== orderListStatus) return false;
+      if (orderListProductIds.length > 0 && !orderListProductIds.includes(order.productId)) return false;
+      if (orderListStartDate && createdDate < orderListStartDate) return false;
+      if (orderListEndDate && createdDate > orderListEndDate) return false;
+
+      if (keyword) {
+        const searchableText = [
+          order.orderId,
+          order.productName,
+          order.customerName,
+          order.customerPhone,
+          order.trackingNumber,
+          order.deliveryAddress,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+
+        if (!searchableText.includes(keyword)) return false;
+      }
+
+      return true;
+    });
+  }, [allAgentOrders, orderListEndDate, orderListKeyword, orderListProductIds, orderListStartDate, orderListStatus]);
+  const orderListPageCount = Math.max(1, Math.ceil(filteredAgentOrders.length / ORDER_LIST_PAGE_SIZE));
+  const paginatedAgentOrders = useMemo(() => {
+    const startIndex = (orderListPage - 1) * ORDER_LIST_PAGE_SIZE;
+    return filteredAgentOrders.slice(startIndex, startIndex + ORDER_LIST_PAGE_SIZE);
+  }, [filteredAgentOrders, orderListPage]);
 
   useEffect(() => {
     if (selectedLanguage && !languageOptions.includes(selectedLanguage)) {
       setSelectedLanguage('');
     }
   }, [languageOptions, selectedLanguage]);
+
+  useEffect(() => {
+    setOrderListPage(1);
+  }, [orderListEndDate, orderListKeyword, orderListProductIds, orderListStartDate, orderListStatus]);
+
+  useEffect(() => {
+    if (orderListPage > orderListPageCount) {
+      setOrderListPage(orderListPageCount);
+    }
+  }, [orderListPage, orderListPageCount]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(AGENT_ACTIVE_VIEW_STORAGE_KEY, activeView);
+    } catch {
+      // Ignore storage failures in restricted browser contexts.
+    }
+  }, [activeView]);
+
+  useEffect(() => {
+    const firstProduct = activeProducts[0];
+    setSelectedProductId(firstProduct?.productId || '');
+    setSelectedProcessTypeId(firstProduct?.processTypes[0]?.typeId || '');
+    setSelectedLanguage(getLanguageOptionsForProduct(firstProduct?.title)[0] || '');
+  }, [activeProducts]);
 
   useEffect(() => {
     if (selectedProcessTypeId && !selectedProduct?.processTypes.some((processType) => processType.typeId === selectedProcessTypeId)) {
@@ -174,6 +405,66 @@ const AgentSystemPage: React.FC = () => {
       setSelectedCity('');
     }
   }, [cityOptions, selectedCity]);
+
+  useEffect(() => {
+    if (!deliveryCityOptions.some((item) => item.city === deliveryCity)) {
+      setDeliveryCity('');
+    }
+  }, [deliveryCity, deliveryCityOptions]);
+
+  useEffect(() => {
+    if (!(deliveryDistrictOptions as readonly string[]).includes(deliveryDistrict)) {
+      setDeliveryDistrict('');
+    }
+  }, [deliveryDistrict, deliveryDistrictOptions]);
+
+  useEffect(() => {
+    if (!isOrderEntryDropdownOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!orderEntryDropdownRef.current?.contains(event.target as Node)) {
+        setIsOrderEntryDropdownOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOrderEntryDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isOrderEntryDropdownOpen]);
+
+  useEffect(() => {
+    if (!isOrderProductFilterOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!orderProductFilterRef.current?.contains(event.target as Node)) {
+        setIsOrderProductFilterOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOrderProductFilterOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isOrderProductFilterOpen]);
 
   useEffect(() => {
     const updateActiveSection = () => {
@@ -211,11 +502,17 @@ const AgentSystemPage: React.FC = () => {
   };
 
   const handleProductChange = (value: string) => {
-    const nextProduct = notaryProducts.find((product) => product.productId === value) || null;
+    const nextProduct = activeProducts.find((product) => product.productId === value) || null;
 
     setSelectedProductId(value);
     setSelectedLanguage(getLanguageOptionsForProduct(nextProduct?.title)[0] || '');
     setSelectedProcessTypeId(nextProduct?.processTypes[0]?.typeId || '');
+  };
+
+  const handleOrderEntryChange = (value: OrderEntryType) => {
+    setOrderEntryType(value);
+    setActiveView('orderEntry');
+    setIsOrderEntryDropdownOpen(false);
   };
 
   const handleAddressRecognition = () => {
@@ -242,6 +539,29 @@ const AgentSystemPage: React.FC = () => {
     window.scrollTo({ top: Math.max(targetTop, 0), behavior: 'smooth' });
   };
 
+  const resetOrderEntryForm = () => {
+    certificateFormRef.current?.reset();
+    deliveryFormRef.current?.reset();
+    setBirthDate('');
+    setInitialIssueDate('');
+    setValidStartDate('');
+    setValidityPeriod('6年');
+    setCustomValidUntilDate('');
+    setSelectedProvince('');
+    setSelectedCity('');
+    setDeliveryProvince('');
+    setDeliveryCity('');
+    setDeliveryDistrict('');
+    setAddressRecognitionText('');
+    setAddressRecognitionError('');
+    setUseCountry('');
+    setActiveSectionIndex(0);
+    setSelectedProductId('');
+    setSelectedProcessTypeId('');
+    setSelectedLanguage('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleConfirmSubmitOrder = () => {
     if (isSubmittingOrder) {
       return;
@@ -249,7 +569,7 @@ const AgentSystemPage: React.FC = () => {
 
     const product = selectedProduct;
     if (!product) {
-      showToast('请先选择驾照翻译认证产品');
+      showToast(`请先选择${orderEntryLabel}`);
       return;
     }
 
@@ -276,7 +596,9 @@ const AgentSystemPage: React.FC = () => {
     const licenseNo = readFormValue(certificateData, 'licenseNo') || `D${Date.now().toString().slice(-8)}`;
     const deliveryAddress =
       joinAddressSegments([
-        readFormValue(deliveryData, 'deliveryRegion'),
+        deliveryProvince,
+        deliveryCity,
+        deliveryDistrict,
         readFormValue(deliveryData, 'deliveryAddress'),
       ]) ||
       addressRecognitionText.trim() ||
@@ -290,8 +612,8 @@ const AgentSystemPage: React.FC = () => {
       customerPassport: licenseNo,
       customerEmail: `agent-${Date.now()}@example.com`,
       productId: product.productId,
-      productName: getNotaryOrderProductName(product.title),
-      productCategory: 'notary',
+      productName: product.category === 'notary' ? getNotaryOrderProductName(product.title) : product.title,
+      productCategory: product.category,
       processType: processType.name,
       processTypeId: processType.typeId,
       pushTimeliness: 'instant',
@@ -328,15 +650,437 @@ const AgentSystemPage: React.FC = () => {
         {
           time: currentTimestamp,
           operator: '代理端',
-          action: '订单创建：代理端确认提交',
+          action: `订单创建：代理端${orderEntryLabel}确认提交`,
         },
       ],
     });
 
     setIsSubmittingOrder(true);
-    showToast(`订单 ${createdOrder.orderId} 已进入公证订单管理`);
-    window.setTimeout(() => navigate(NOTARY_ORDER_MANAGEMENT_PENDING_REVIEW_PATH), 700);
+    setAllAgentOrders((orders) => [createdOrder, ...orders.filter((order) => order.orderId !== createdOrder.orderId)]);
+    resetOrderEntryForm();
+    showToast(`订单 ${createdOrder.orderId} 提交成功`);
+    window.setTimeout(() => setIsSubmittingOrder(false), 700);
   };
+
+  const handleResetOrderListFilters = () => {
+    setOrderListStatus('');
+    setOrderListProductIds([]);
+    setOrderListKeyword('');
+    setOrderListStartDate('');
+    setOrderListEndDate('');
+  };
+
+  const handleToggleOrderListProduct = (productId: string) => {
+    setOrderListProductIds((productIds) =>
+      productIds.includes(productId)
+        ? productIds.filter((item) => item !== productId)
+        : [...productIds, productId],
+    );
+  };
+
+  const renderOrderDetailModal = () => {
+    if (!orderDetailModalOrder) return null;
+
+    const order = orderDetailModalOrder;
+    const shouldShowNotaryFields = isNotaryOrder(order);
+
+    return (
+      <div className="agent-modal-backdrop" role="presentation" onMouseDown={() => setOrderDetailModalOrder(null)}>
+        <section
+          className="agent-modal agent-order-detail-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label="查看订单"
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <header className="agent-modal__header">
+            <h2>订单详情</h2>
+            <button type="button" className="agent-modal__close" onClick={() => setOrderDetailModalOrder(null)}>
+              ×
+            </button>
+          </header>
+
+          <div className="agent-modal__content">
+            <div className="agent-modal__section agent-modal__section--plain">
+              <h3>收货信息</h3>
+              <div className="agent-modal__detail-grid agent-modal__detail-grid--two">
+                <div className="agent-modal__detail-item">
+                  <span>收件人：</span>
+                  <strong>{order.customerName}</strong>
+                </div>
+                <div className="agent-modal__detail-item">
+                  <span>联系电话：</span>
+                  <strong>{order.customerPhone}</strong>
+                </div>
+                <div className="agent-modal__detail-item agent-modal__detail-item--wide">
+                  <span>收货地址：</span>
+                  <strong>{order.deliveryAddress}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="agent-modal__section agent-modal__section--plain">
+              <h3>商品信息</h3>
+              <div className="agent-modal__detail-grid agent-modal__detail-grid--two">
+                <div className="agent-modal__detail-item">
+                  <span>订单编号：</span>
+                  <strong>{order.orderId}</strong>
+                </div>
+                <div className="agent-modal__detail-item">
+                  <span>商品名称：</span>
+                  <strong>{order.productName}</strong>
+                </div>
+                {shouldShowNotaryFields && (
+                  <div className="agent-modal__detail-item">
+                    <span>使用国家：</span>
+                    <strong>{order.useCountry || '待补充'}</strong>
+                  </div>
+                )}
+                <div className="agent-modal__detail-item">
+                  <span>办理类型：</span>
+                  <strong>{order.processType || '正常办理'}</strong>
+                </div>
+                <div className="agent-modal__detail-item">
+                  <span>价格：</span>
+                  <strong className="agent-modal__price">{formatCurrency(order.lockedPrice)}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="agent-modal__section agent-modal__section--plain">
+              <h3>驾照信息</h3>
+              <div className="agent-modal__detail-grid agent-modal__detail-grid--three">
+                <div className="agent-modal__detail-item">
+                  <span>驾证号码：</span>
+                  <strong>{order.licenseNo || order.customerPassport}</strong>
+                </div>
+                <div className="agent-modal__detail-item">
+                  <span>姓名：</span>
+                  <strong>{order.licenseName || order.customerName}</strong>
+                </div>
+                <div className="agent-modal__detail-item">
+                  <span>准驾车型：</span>
+                  <strong>{order.licenseCategory || 'C1'}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="agent-modal__section agent-modal__section--plain">
+              <h3>订单状态</h3>
+              <div className="agent-modal__status-grid">
+                <div>
+                  <span>订单状态：</span>
+                  <strong className={getAgentOrderStatusClassName(order.status)}>
+                    {getAgentOrderStatusLabel(order.status)}
+                  </strong>
+                </div>
+                <div>
+                  <span>下单时间：</span>
+                  <strong>{order.createdAt.replace('T', ' ').slice(0, 19)}</strong>
+                </div>
+                <div>
+                  <span>办理类型：</span>
+                  <strong className="agent-modal__static-pill">{order.processType || '正常办理'}</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <footer className="agent-modal__footer">
+            <button type="button" className="agent-modal__button" onClick={() => setOrderDetailModalOrder(null)}>
+              关闭弹窗
+            </button>
+          </footer>
+        </section>
+      </div>
+    );
+  };
+
+  const renderLicenseInfoModal = () => {
+    if (!licenseInfoModalOrder) return null;
+
+    const order = licenseInfoModalOrder;
+    const licensePhotoItems = [
+      { label: '驾照正面', src: orderPreviewAssets.licenseFront },
+      { label: '驾照反面', src: orderPreviewAssets.licenseBack },
+      { label: '驾照副页正面照片', src: orderPreviewAssets.extraFront },
+      { label: '驾照副页反面照片', src: orderPreviewAssets.extraBack },
+    ];
+
+    return (
+      <div className="agent-modal-backdrop" role="presentation" onMouseDown={() => setLicenseInfoModalOrder(null)}>
+        <section
+          className="agent-modal agent-license-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label="驾照信息"
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <header className="agent-modal__header">
+            <h2>驾照信息</h2>
+            <button type="button" className="agent-modal__close" onClick={() => setLicenseInfoModalOrder(null)}>
+              ×
+            </button>
+          </header>
+
+          <div className="agent-modal__content">
+            <div className="agent-license-modal__layout">
+              <section className="agent-license-modal__panel">
+                <h3>驾照信息</h3>
+                <div className="agent-license-modal__fields">
+                  <div><span>驾证号码：</span><strong>{order.licenseNo || order.customerPassport}</strong></div>
+                  <div><span>姓名：</span><strong>{order.licenseName || order.customerName}</strong></div>
+                  <div><span>姓氏拼音：</span><strong>{order.idpSurnameEn || '-'}</strong></div>
+                  <div><span>名字拼音：</span><strong>{order.idpGivenNameEn || '-'}</strong></div>
+                  <div><span>性别：</span><strong>{order.licenseGender || '-'}</strong></div>
+                  <div><span>国籍：</span><strong>{order.licenseNationality || '-'}</strong></div>
+                  <div><span>出生日期：</span><strong>{order.licenseBirthDate || '-'}</strong></div>
+                  <div><span>驾照地址详情：</span><strong>{order.licenseAddress || '-'}</strong></div>
+                  <div><span>准驾车型：</span><strong>{order.licenseCategory || 'C1'}</strong></div>
+                  <div><span>档案编号：</span><strong>{order.licenseArchiveNumber || '-'}</strong></div>
+                  <div><span>条形码：</span><strong>{order.licenseBarcodeNumber || '-'}</strong></div>
+                  <div><span>初次领证日期：</span><strong>{order.licenseFirstIssueDate || '-'}</strong></div>
+                  <div><span>有效起始日期：</span><strong>{order.licenseValidFromDate || '-'}</strong></div>
+                  <div><span>有效年限：</span><strong>{order.licenseValidYears || '-'}</strong></div>
+                  <div><span>发证地区(省市)：</span><strong>{order.licenseIssuingRegion || '-'}</strong></div>
+                  <div><span>发证机构：</span><strong>{order.licenseIssuingAuthority || '-'}</strong></div>
+                </div>
+              </section>
+
+              <section className="agent-license-modal__panel">
+                <h3>驾照证件照片</h3>
+                <div className="agent-license-modal__photos">
+                  {licensePhotoItems.map((item) => (
+                    <figure key={item.label} className="agent-license-modal__photo">
+                      <figcaption>{item.label}</figcaption>
+                      <div>
+                        <img src={item.src} alt={item.label} />
+                      </div>
+                    </figure>
+                  ))}
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <footer className="agent-modal__footer">
+            <button type="button" className="agent-modal__button" onClick={() => setLicenseInfoModalOrder(null)}>
+              关闭弹窗
+            </button>
+          </footer>
+        </section>
+      </div>
+    );
+  };
+
+  const renderOrderListView = () => (
+    <div className="agent-order-list-view animate-fadeIn">
+      <section className="agent-order-list-card">
+        <h1 className="agent-order-list-title">订单列表</h1>
+
+        <div className="agent-order-list-filters">
+          <div className="agent-order-list-field agent-order-list-field--product">
+            <span>产品名称</span>
+            <div
+              ref={orderProductFilterRef}
+              className={`agent-product-multi-select ${isOrderProductFilterOpen ? 'agent-product-multi-select--open' : ''}`}
+            >
+              <button
+                type="button"
+                className="agent-product-multi-select__trigger"
+                onClick={() => setIsOrderProductFilterOpen((prev) => !prev)}
+                aria-haspopup="listbox"
+                aria-expanded={isOrderProductFilterOpen}
+              >
+                <span>
+                  {selectedOrderListProductNames.length > 0
+                    ? selectedOrderListProductNames.join('、')
+                    : '选择产品（可多选）'}
+                </span>
+                <span aria-hidden="true">⌄</span>
+              </button>
+              {isOrderProductFilterOpen && (
+                <div className="agent-product-multi-select__menu" role="listbox" aria-label="产品名称">
+                  {orderListProducts.map((product) => (
+                    <label key={product.productId} className="agent-product-multi-select__option">
+                      <input
+                        type="checkbox"
+                        checked={orderListProductIds.includes(product.productId)}
+                        onChange={() => handleToggleOrderListProduct(product.productId)}
+                      />
+                      <span>{product.title}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <label className="agent-order-list-field agent-order-list-field--keyword">
+            <span>精准搜索</span>
+            <input
+              value={orderListKeyword}
+              onChange={(event) => setOrderListKeyword(event.target.value)}
+              placeholder="订单号、快递单号、姓名……"
+            />
+          </label>
+
+          <label className="agent-order-list-field agent-order-list-field--date">
+            <span>创建时间</span>
+            <div className="agent-order-list-range">
+              <input type="date" value={orderListStartDate} onChange={(event) => setOrderListStartDate(event.target.value)} />
+              <span>—</span>
+              <input type="date" value={orderListEndDate} onChange={(event) => setOrderListEndDate(event.target.value)} />
+            </div>
+          </label>
+        </div>
+
+        <div className="agent-order-list-actions">
+          <button type="button" className="agent-order-list-button agent-order-list-button--primary">
+            搜索
+          </button>
+          <button type="button" className="agent-order-list-button" onClick={handleResetOrderListFilters}>
+            重置
+          </button>
+          <button type="button" className="agent-order-list-button">
+            导出
+            <span className="agent-order-list-button__arrow" aria-hidden="true">⌄</span>
+          </button>
+        </div>
+
+        <div className="agent-order-list-tabs">
+          {agentOrderStatusTabs.map((tab) => (
+            <button
+              key={tab.value || 'all'}
+              type="button"
+              className={`agent-order-list-tab ${orderListStatus === tab.value ? 'agent-order-list-tab--active' : ''}`}
+              onClick={() => setOrderListStatus(tab.value)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="agent-order-table-wrap">
+          <table className="agent-order-table">
+            <thead>
+              <tr>
+                <th>下单时间</th>
+                <th>产品信息</th>
+                <th>驾照信息</th>
+                <th>订单状态</th>
+                <th>订单记录</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedAgentOrders.map((order) => {
+                const productionRecords = getProductionOrderRecords(order);
+                const shouldShowNotaryFields = isNotaryOrder(order);
+
+                return (
+                  <tr key={order.orderId}>
+                    <td className="agent-order-table__time">
+                      <div>{order.createdAt.replace('T', ' ').slice(0, 19)}</div>
+                      <div className="agent-order-table__id">{order.orderId}</div>
+                    </td>
+                    <td>
+                      <div className="agent-order-table__product-head">
+                        <span className="agent-order-table__product-name">{order.productName}</span>
+                        {shouldShowNotaryFields && order.language && (
+                          <span className="agent-order-table__language-pill">{order.language}</span>
+                        )}
+                      </div>
+                      <div className="agent-order-table__meta">
+                        收件人：{order.customerName}
+                        <br />
+                        手机：{order.customerPhone}
+                        <br />
+                        收货地址：{order.deliveryAddress}
+                        <br />
+                        办理类型：
+                        <span className="agent-order-table__process-pill">{order.processType || '正常办理'}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="agent-order-table__meta">
+                        准驾车型：{order.licenseCategory || 'C1'}
+                        <br />
+                        姓名：{order.licenseName || order.customerName}
+                        <br />
+                        驾照号：{order.licenseNo || order.customerPassport}
+                      </div>
+                    </td>
+                    <td>
+                      <span className={getAgentOrderStatusClassName(order.status)}>
+                        {getAgentOrderStatusLabel(order.status)}
+                      </span>
+                    </td>
+                    <td className="agent-order-table__record">
+                      {productionRecords.length > 0 ? (
+                        productionRecords.map((record) => (
+                          <div key={record}>{record}</div>
+                        ))
+                      ) : (
+                        <span className="agent-order-table__record-empty">暂无生产端事件</span>
+                      )}
+                    </td>
+                    <td>
+                      <div className="agent-order-table__actions">
+                        <button type="button" onClick={() => setOrderDetailModalOrder(order)}>
+                          查看订单
+                        </button>
+                        <button type="button" onClick={() => setLicenseInfoModalOrder(order)}>
+                          驾照信息
+                        </button>
+                        {getAgentOrderStatus(order.status) === 'pending_review' && (
+                          <button type="button" onClick={() => showToast('取消订单入口已打开')}>
+                            取消订单
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="agent-order-pagination" aria-label="订单分页">
+          <span>
+            共 {filteredAgentOrders.length} 条，每页 {ORDER_LIST_PAGE_SIZE} 条
+          </span>
+          <div className="agent-order-pagination__controls">
+            <button
+              type="button"
+              disabled={orderListPage <= 1}
+              onClick={() => setOrderListPage((page) => Math.max(1, page - 1))}
+            >
+              上一页
+            </button>
+            {Array.from({ length: orderListPageCount }, (_, index) => index + 1).map((page) => (
+              <button
+                key={page}
+                type="button"
+                className={orderListPage === page ? 'agent-order-pagination__page--active' : ''}
+                onClick={() => setOrderListPage(page)}
+              >
+                {page}
+              </button>
+            ))}
+            <button
+              type="button"
+              disabled={orderListPage >= orderListPageCount}
+              onClick={() => setOrderListPage((page) => Math.min(orderListPageCount, page + 1))}
+            >
+              下一页
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
 
   return (
     <div className="agent-system-page">
@@ -345,6 +1089,8 @@ const AgentSystemPage: React.FC = () => {
           <div className="toast toast--info">{toast}</div>
         </div>
       )}
+      {renderOrderDetailModal()}
+      {renderLicenseInfoModal()}
 
       <header className="agent-system-header">
         <div className="agent-system-header__brand" aria-label="美卡认证代理平台-用户端">
@@ -353,14 +1099,59 @@ const AgentSystemPage: React.FC = () => {
         </div>
 
         <nav className="agent-system-nav" aria-label="系统导航">
-          {['首页', '下单入口', '订单中心', '公证业务', '产品列表', '账户中心'].map((item) => (
-            <button
-              key={item}
-              type="button"
-              className={`agent-system-nav__item ${item === '下单入口' ? 'agent-system-nav__item--active' : ''}`}
-            >
-              {item}
-            </button>
+          {['首页', '下单入口', '商户中心', '订单列表', '产品资料', '商户资料'].map((item) => (
+            item === '下单入口' ? (
+              <div
+                key={item}
+                ref={orderEntryDropdownRef}
+                className={`agent-system-nav__dropdown ${isOrderEntryDropdownOpen ? 'agent-system-nav__dropdown--open' : ''}`}
+              >
+                <button
+                  type="button"
+                  className={`agent-system-nav__dropdown-trigger ${activeView === 'orderEntry' ? 'agent-system-nav__dropdown-trigger--active' : ''}`}
+                  onClick={() => setIsOrderEntryDropdownOpen((prev) => !prev)}
+                  aria-haspopup="menu"
+                  aria-expanded={isOrderEntryDropdownOpen}
+                >
+                  下单入口
+                  <span className="agent-system-nav__dropdown-arrow" aria-hidden="true">⌄</span>
+                </button>
+
+                {isOrderEntryDropdownOpen && (
+                  <div className="agent-system-nav__dropdown-menu" role="menu" aria-label="下单入口">
+                    {orderEntryOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={`agent-system-nav__dropdown-item ${orderEntryType === option.value ? 'agent-system-nav__dropdown-item--active' : ''}`}
+                        onClick={() => handleOrderEntryChange(option.value)}
+                        role="menuitem"
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                key={item}
+                type="button"
+                className={`agent-system-nav__item ${item === '订单列表' && activeView === 'orderList' ? 'agent-system-nav__item--active' : ''}`}
+                onClick={() => {
+                  if (item === '订单列表') {
+                    setActiveView('orderList');
+                    return;
+                  }
+
+                  if (item === '首页') {
+                    setActiveView('orderEntry');
+                  }
+                }}
+              >
+                {item}
+              </button>
+            )
           ))}
         </nav>
 
@@ -369,37 +1160,40 @@ const AgentSystemPage: React.FC = () => {
         </button>
       </header>
 
-      <div className="agent-system-shell">
-        <aside className="agent-system-sidebar">
-          {sideMenuItems.map((item, index) => (
-            <button
-              key={item}
-              type="button"
-              className={`agent-system-sidebar__item ${activeSectionIndex === index ? 'agent-system-sidebar__item--active' : ''}`}
-              aria-current={activeSectionIndex === index ? 'true' : undefined}
-              onClick={() => handleSideMenuClick(index)}
-            >
-              {item}
-            </button>
-          ))}
-        </aside>
+      {activeView === 'orderList' ? (
+        renderOrderListView()
+      ) : (
+        <div className="agent-system-shell">
+          <aside className="agent-system-sidebar">
+            {sideMenuItems.map((item, index) => (
+              <button
+                key={item}
+                type="button"
+                className={`agent-system-sidebar__item ${activeSectionIndex === index ? 'agent-system-sidebar__item--active' : ''}`}
+                aria-current={activeSectionIndex === index ? 'true' : undefined}
+                onClick={() => handleSideMenuClick(index)}
+              >
+                {item}
+              </button>
+            ))}
+          </aside>
 
-        <main className="agent-order-main animate-fadeIn">
+          <main className="agent-order-main animate-fadeIn">
           <section ref={(node) => assignSectionRef(0, node)} className="agent-panel agent-product-panel">
-            <div className="agent-panel__title">选择产品</div>
+            <div className="agent-panel__title">选择产品 - {orderEntryLabel}</div>
             <div className="agent-product-stack">
               <label className="agent-field agent-field--wide">
-                <span>选择驾照翻译认证产品</span>
+                <span>选择{orderEntryLabel}</span>
                 <select
                   value={selectedProductId}
-                  disabled={notaryProducts.length === 0}
+                  disabled={activeProducts.length === 0}
                   onChange={(event) => handleProductChange(event.target.value)}
                 >
                   <option value="">请选择</option>
-                  {notaryProducts.length === 0 ? (
-                    <option value="">暂无在售公证产品</option>
+                  {activeProducts.length === 0 ? (
+                    <option value="">暂无在售产品</option>
                   ) : (
-                    notaryProducts.map((product) => (
+                    activeProducts.map((product) => (
                       <option key={product.productId} value={product.productId}>
                         {product.title}
                       </option>
@@ -604,15 +1398,43 @@ const AgentSystemPage: React.FC = () => {
           <section ref={(node) => assignSectionRef(2, node)} className="agent-panel agent-delivery-panel">
             <div className="agent-panel__title">确认收货信息</div>
             <form ref={deliveryFormRef} className="agent-delivery-form">
-              <label className="agent-field">
+              <div className="agent-field">
                 <span>地址信息</span>
-                <select name="deliveryRegion" defaultValue="">
-                  <option value="" disabled>请选择省/市/区</option>
-                  <option value="广西壮族自治区 南宁市 青秀区">广西壮族自治区 / 南宁市 / 青秀区</option>
-                  <option value="上海市 上海市 浦东新区">上海市 / 上海市 / 浦东新区</option>
-                  <option value="广东省 广州市 天河区">广东省 / 广州市 / 天河区</option>
-                </select>
-              </label>
+                <div className="agent-delivery-region-selects">
+                  <select value={deliveryProvince} onChange={(event) => setDeliveryProvince(event.target.value)}>
+                    <option value="" disabled>请选择省份</option>
+                    {deliveryRegionOptions.map((item) => (
+                      <option key={item.province} value={item.province}>
+                        {item.province}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={deliveryCity}
+                    disabled={!deliveryProvince}
+                    onChange={(event) => setDeliveryCity(event.target.value)}
+                  >
+                    <option value="" disabled>请选择城市</option>
+                    {deliveryCityOptions.map((item) => (
+                      <option key={item.city} value={item.city}>
+                        {item.city}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={deliveryDistrict}
+                    disabled={!deliveryCity}
+                    onChange={(event) => setDeliveryDistrict(event.target.value)}
+                  >
+                    <option value="" disabled>请选择区县</option>
+                    {deliveryDistrictOptions.map((district) => (
+                      <option key={district} value={district}>
+                        {district}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
               <label className="agent-field agent-field--textarea">
                 <span>详细地址</span>
                 <textarea name="deliveryAddress" placeholder="请填写详细地址" />
@@ -699,22 +1521,6 @@ const AgentSystemPage: React.FC = () => {
 
             <div className="agent-checkout-submit">
               <div className="agent-checkout-actions">
-                <button type="button" className="agent-checkout-action agent-checkout-action--blue" onClick={() => showToast('外事办委托书已导出')}>
-                  <span aria-hidden="true">▧</span>
-                  导出外事办委托书
-                </button>
-                <button type="button" className="agent-checkout-action agent-checkout-action--green" onClick={() => showToast('北部湾委托书已导出')}>
-                  <span aria-hidden="true">▧</span>
-                  导出北部湾委托书
-                </button>
-                <button type="button" className="agent-checkout-action agent-checkout-action--pink" onClick={() => showToast('张江委托书已导出')}>
-                  <span aria-hidden="true">▧</span>
-                  导出张江委托书
-                </button>
-                <button type="button" className="agent-checkout-action agent-checkout-action--gray" onClick={() => showToast('图片 PDF 已导出')}>
-                  <span aria-hidden="true">↓</span>
-                  导出图片为PDF
-                </button>
                 <button
                   type="button"
                   className="agent-checkout-action agent-checkout-action--confirm"
@@ -731,8 +1537,9 @@ const AgentSystemPage: React.FC = () => {
               </div>
             </div>
           </section>
-        </main>
-      </div>
+          </main>
+        </div>
+      )}
     </div>
   );
 };

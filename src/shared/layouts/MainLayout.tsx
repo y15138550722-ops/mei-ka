@@ -157,6 +157,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, currentUser, onLogout
     navigate('/agent-system');
   };
 
+  const handleSwitchProductionClick = () => {
+    setIsUserMenuOpen(false);
+    navigate('/license-officer/orders/chinese-translation');
+  };
+
   const renderFlyoutItems = (items: MenuItem[], depth = 0): React.ReactNode =>
     items.map(item => {
       const itemLabel = t(item.labelKey);
@@ -374,7 +379,15 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, currentUser, onLogout
                   onClick={handleSwitchSystemClick}
                   role="menuitem"
                 >
-                  切换系统
+                  切换用户端
+                </button>
+                <button
+                  type="button"
+                  className="sidebar-user-dropdown__item"
+                  onClick={handleSwitchProductionClick}
+                  role="menuitem"
+                >
+                  切换生产端
                 </button>
                 <button
                   type="button"

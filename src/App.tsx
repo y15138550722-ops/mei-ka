@@ -18,6 +18,8 @@ const ProductProcessTypeManagement = lazy(() => import('./modules/product-manage
 const NotaryOrderList = lazy(() => import('./modules/notary-office/NotaryOrderList'));
 const NotaryOrderPreview = lazy(() => import('./modules/notary-office/NotaryOrderPreview'));
 const AgentSystemPage = lazy(() => import('./modules/agent-system/AgentSystemPage'));
+const LicenseOfficerLayout = lazy(() => import('./modules/license-officer/LicenseOfficerLayout'));
+const ChineseTranslationOrders = lazy(() => import('./modules/license-officer/ChineseTranslationOrders'));
 const LoginPage = lazy(() => import('./modules/auth/LoginPage'));
 
 interface ProtectedLayoutProps {
@@ -49,6 +51,23 @@ const ProtectedSystemPage: React.FC<ProtectedSystemPageProps> = ({ currentUser }
   return <AgentSystemPage />;
 };
 
+interface ProtectedLicenseOfficerLayoutProps {
+  currentUser: AuthSession | null;
+  onLogout: () => void;
+}
+
+const ProtectedLicenseOfficerLayout: React.FC<ProtectedLicenseOfficerLayoutProps> = ({ currentUser, onLogout }) => {
+  if (!currentUser) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return (
+    <LicenseOfficerLayout currentUser={currentUser} onLogout={onLogout}>
+      <Outlet />
+    </LicenseOfficerLayout>
+  );
+};
+
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<AuthSession | null>(() => getStoredAuthSession());
 
@@ -72,6 +91,14 @@ const App: React.FC = () => {
         />
 
         <Route path="/agent-system" element={<ProtectedSystemPage currentUser={currentUser} />} />
+
+        <Route element={<ProtectedLicenseOfficerLayout currentUser={currentUser} onLogout={handleLogout} />}>
+          <Route
+            path="/license-officer"
+            element={<Navigate to="/license-officer/orders/chinese-translation" replace />}
+          />
+          <Route path="/license-officer/orders/chinese-translation" element={<ChineseTranslationOrders />} />
+        </Route>
 
         <Route element={<ProtectedLayout currentUser={currentUser} onLogout={handleLogout} />}>
           <Route path="/" element={<Dashboard />} />
