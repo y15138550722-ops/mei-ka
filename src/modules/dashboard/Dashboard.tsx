@@ -11,7 +11,7 @@ const PENDING_SHIPMENT_STATUSES: OrderStatus[] = ['translating', 'pending_review
 const SHIPPED_STATUSES: OrderStatus[] = ['shipped', 'completed'];
 const ABNORMAL_STATUSES: OrderStatus[] = ['rejected', 'cancelled'];
 const CHANNELS: Channel[] = ['ctrip', 'fliggy', 'private', 'offline'];
-const PRODUCT_CATEGORIES: ProductCategory[] = ['translation', 'notary', 'idp'];
+const PRODUCT_CATEGORIES: ProductCategory[] = ['translation', 'domestic_license', 'notary', 'idp'];
 
 const currencyFormatter = new Intl.NumberFormat('zh-CN', {
   style: 'currency',

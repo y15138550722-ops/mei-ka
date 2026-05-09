@@ -175,6 +175,13 @@ export const getLicenseInfo = (order: Order) =>
     `姓名：${getLicenseName(order)}`,
     getLicenseNo(order) ? `驾照号：${getLicenseNo(order)}` : undefined,
     getLicenseCategory(order) ? `准驾车型：${getLicenseCategory(order)}` : undefined,
+    order.domesticLicenseInfo
+      ? `换证城市：${order.licenseIssuingRegion || `${order.domesticLicenseInfo.exchangeProvince} ${order.domesticLicenseInfo.exchangeCity}`}`
+      : undefined,
+    order.domesticLicenseInfo
+      ? `驾照发放国家及城市：${order.domesticLicenseInfo.foreignCountry} ${order.domesticLicenseInfo.foreignCity}`
+      : undefined,
+    order.domesticLicenseInfo ? `中文姓名：${order.domesticLicenseInfo.chineseName}` : undefined,
   ]);
 
 export const getLogisticsInfo = (order: Order) =>

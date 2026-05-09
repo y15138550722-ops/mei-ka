@@ -138,6 +138,7 @@ const resources = {
     'product.toast.incompleteFields': '请填写所有必填字段（标题、类别、价格、权重）',
 
     'product.category.translation': '翻译认证',
+    'product.category.domestic_license': '换国内驾照翻译件',
     'product.category.notary': '公证',
     'product.category.idp': 'IDP',
 
@@ -295,6 +296,7 @@ const resources = {
     'product.toast.incompleteFields': 'Please fill all required fields (title, category, price, weight)',
 
     'product.category.translation': 'Translation & Certification',
+    'product.category.domestic_license': 'Domestic License Exchange Translation',
     'product.category.notary': 'Notarization',
     'product.category.idp': 'IDP',
 

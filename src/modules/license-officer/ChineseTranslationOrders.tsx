@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { getOrders } from '../../services/mockDataService';
+import { getOrders, updateOrder } from '../../services/mockDataService';
 import ListUnifiedPagination from '../../shared/components/list/ListUnifiedPagination';
 import type { Order } from '../../shared/types';
+import { formatBeijingTimestamp } from '../../shared/utils/dateTime';
 import './ChineseTranslationOrders.css';
 
 type ProductionOrderStatus = 'untranslated' | 'unmade' | 'unshipped' | 'shipped' | 'cancelled';
@@ -16,12 +17,20 @@ const PRODUCTION_STATUS_OPTIONS: Array<{ value: ProductionOrderStatus | ''; labe
 ];
 
 const CHINESE_TRANSLATION_TYPE = '中文翻译件';
+const PRODUCTION_OPERATOR = '生产端';
+const TRANSLATED_ACTION = '已翻译';
+const MADE_ACTION = '已制作';
+const SHIPPED_ACTION = '已发货';
+
+const hasProductionAction = (order: Order, action: string) =>
+  order.logs.some((log) => log.operator === PRODUCTION_OPERATOR && log.action === action);
 
 const normalizeProductionStatus = (order: Order): ProductionOrderStatus => {
   if (order.status === 'cancelled' || order.status === 'rejected') return 'cancelled';
   if (order.status === 'shipped' || order.status === 'completed') return 'shipped';
-  if (order.status === 'in_production') return 'unshipped';
-  if (order.status === 'pending_production') return 'unmade';
+  if (order.status === 'in_production' || hasProductionAction(order, MADE_ACTION)) return 'unshipped';
+  if (hasProductionAction(order, TRANSLATED_ACTION)) return 'unmade';
+  if (order.status === 'pending_production') return 'untranslated';
   return 'untranslated';
 };
 
@@ -56,6 +65,12 @@ const getOrderInfo = (order: Order) => [
   `产品：${order.productName}`,
   `办理类型：${order.processType || '正常办理'}`,
   `国家：${getOrderCountry(order)}`,
+  order.domesticLicenseInfo
+    ? `境外发放城市：${order.domesticLicenseInfo.foreignCity || '--'}`
+    : undefined,
+  order.domesticLicenseInfo
+    ? `换证城市：${order.licenseIssuingRegion || `${order.domesticLicenseInfo.exchangeProvince} ${order.domesticLicenseInfo.exchangeCity}`}`
+    : undefined,
   `姓名：${order.licenseName || order.customerName}`,
   `驾照号：${order.licenseNo || order.customerPassport}`,
   `准驾车型：${order.licenseCategory || 'C1'}`,
@@ -74,22 +89,24 @@ const getShippingInfo = (order: Order) => [
 ];
 
 const isChineseTranslationOrder = (order: Order) =>
-  order.productCategory === 'translation' &&
+  (order.productCategory === 'translation' || order.productCategory === 'domestic_license') &&
   (
     order.remark === '代理端提交' ||
     order.logs.some((log) => log.operator === '代理端' || log.action.includes('代理端')) ||
+    order.productName.includes('换国内驾照翻译件') ||
     order.productName.includes('翻译') ||
     order.productName.toLowerCase().includes('naati') ||
     order.productName.toLowerCase().includes('nzta')
   );
 
 const ChineseTranslationOrders: React.FC = () => {
+  const [orderVersion, setOrderVersion] = useState(0);
   const allOrders = useMemo(
     () =>
       getOrders()
         .filter(isChineseTranslationOrder)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-    [],
+    [orderVersion],
   );
 
   const processTypeOptions = useMemo(
@@ -109,6 +126,9 @@ const ChineseTranslationOrders: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [toast, setToast] = useState<string | null>(null);
+  const [shippingOrder, setShippingOrder] = useState<Order | null>(null);
+  const [shippingCompany, setShippingCompany] = useState('顺丰速运');
+  const [shippingTrackingNumber, setShippingTrackingNumber] = useState('');
 
   const filteredOrders = useMemo(() => {
     const orderIdKeyword = filterOrderId.trim().toLowerCase();
@@ -161,23 +181,129 @@ const ChineseTranslationOrders: React.FC = () => {
     setCurrentPage(1);
   };
 
-  const renderActions = (order: Order) => {
-    const status = normalizeProductionStatus(order);
-    const actions: string[] = ['查看订单'];
+  const appendProductionLog = (order: Order, action: string, timestamp = formatBeijingTimestamp()) => {
+    const nextLogs = [
+      ...order.logs,
+      {
+        time: timestamp,
+        operator: PRODUCTION_OPERATOR,
+        action,
+      },
+    ];
 
-    if (status === 'untranslated') actions.push('翻译订单');
-    if (status === 'unmade') actions.push('导出订单');
-    if (status === 'unshipped') actions.push('打印快递面单', '发货');
+    updateOrder(order.orderId, {
+      logs: nextLogs,
+      updatedAt: timestamp,
+    });
+    setOrderVersion((version) => version + 1);
+    return { nextLogs, timestamp };
+  };
 
-    if (actions.length === 0) {
-      return <span className="license-translation-actions__empty">--</span>;
+  const handleConfirmTranslated = (order: Order) => {
+    if (hasProductionAction(order, TRANSLATED_ACTION)) {
+      showToast(`订单 ${order.orderId} 已记录翻译`);
+      return;
     }
 
-    return actions.map((action) => (
-      <button key={action} type="button" onClick={() => showToast(`${action}：${order.orderId}`)}>
-        {action}
-      </button>
-    ));
+    appendProductionLog(order, TRANSLATED_ACTION);
+    showToast(`订单 ${order.orderId} 已翻译`);
+  };
+
+  const handleExportOrder = (order: Order) => {
+    const timestamp = formatBeijingTimestamp();
+    const nextLogs = hasProductionAction(order, MADE_ACTION)
+      ? order.logs
+      : [
+          ...order.logs,
+          {
+            time: timestamp,
+            operator: PRODUCTION_OPERATOR,
+            action: MADE_ACTION,
+          },
+        ];
+
+    updateOrder(order.orderId, {
+      status: 'in_production',
+      logs: nextLogs,
+      updatedAt: timestamp,
+    });
+    setOrderVersion((version) => version + 1);
+    showToast(`订单 ${order.orderId} 已制作`);
+  };
+
+  const openShippingDialog = (order: Order) => {
+    setShippingOrder(order);
+    setShippingCompany(order.logisticsCompany || '顺丰速运');
+    setShippingTrackingNumber(order.trackingNumber || `SF${Date.now().toString().slice(-10)}`);
+  };
+
+  const handleConfirmShipping = () => {
+    if (!shippingOrder) return;
+
+    const logisticsCompany = shippingCompany.trim();
+    const trackingNumber = shippingTrackingNumber.trim();
+
+    if (!logisticsCompany || !trackingNumber) {
+      showToast('请填写快递公司和物流单号');
+      return;
+    }
+
+    const timestamp = formatBeijingTimestamp();
+    const nextLogs = hasProductionAction(shippingOrder, SHIPPED_ACTION)
+      ? shippingOrder.logs
+      : [
+          ...shippingOrder.logs,
+          {
+            time: timestamp,
+            operator: PRODUCTION_OPERATOR,
+            action: SHIPPED_ACTION,
+          },
+        ];
+
+    updateOrder(shippingOrder.orderId, {
+      status: 'shipped',
+      logisticsCompany,
+      trackingNumber,
+      shippedAt: timestamp,
+      updatedAt: timestamp,
+      logs: nextLogs,
+    });
+    setOrderVersion((version) => version + 1);
+    setShippingOrder(null);
+    setShippingTrackingNumber('');
+    showToast(`订单 ${shippingOrder.orderId} 已发货`);
+  };
+
+  const renderActions = (order: Order) => {
+    const status = normalizeProductionStatus(order);
+
+    return (
+      <>
+        <button type="button" onClick={() => showToast(`查看订单：${order.orderId}`)}>
+          查看订单
+        </button>
+        {status === 'untranslated' && (
+          <button type="button" onClick={() => handleConfirmTranslated(order)}>
+            翻译订单
+          </button>
+        )}
+        {status === 'unmade' && (
+          <button type="button" onClick={() => handleExportOrder(order)}>
+            导出订单
+          </button>
+        )}
+        {status === 'unshipped' && (
+          <>
+            <button type="button" onClick={() => showToast(`打印快递面单：${order.orderId}`)}>
+              打印快递面单
+            </button>
+            <button type="button" onClick={() => openShippingDialog(order)}>
+              发货
+            </button>
+          </>
+        )}
+      </>
+    );
   };
 
   return (
@@ -185,6 +311,46 @@ const ChineseTranslationOrders: React.FC = () => {
       {toast && (
         <div className="toast-container">
           <div className="toast toast--success">{toast}</div>
+        </div>
+      )}
+      {shippingOrder && (
+        <div className="license-translation-modal-backdrop" role="presentation" onMouseDown={() => setShippingOrder(null)}>
+          <div
+            className="license-translation-shipping-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="确认发货"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="license-translation-shipping-modal__header">
+              <strong>确认发货</strong>
+              <button type="button" onClick={() => setShippingOrder(null)} aria-label="关闭">
+                ×
+              </button>
+            </div>
+            <div className="license-translation-shipping-modal__body">
+              <label>
+                <span>快递公司</span>
+                <input value={shippingCompany} onChange={(event) => setShippingCompany(event.target.value)} />
+              </label>
+              <label>
+                <span>物流单号</span>
+                <input value={shippingTrackingNumber} onChange={(event) => setShippingTrackingNumber(event.target.value)} />
+              </label>
+            </div>
+            <div className="license-translation-shipping-modal__footer">
+              <button type="button" className="license-translation-button" onClick={() => setShippingOrder(null)}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="license-translation-button license-translation-button--primary"
+                onClick={handleConfirmShipping}
+              >
+                确认发货
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -281,7 +447,7 @@ const ChineseTranslationOrders: React.FC = () => {
             <tbody>
               {paginatedOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="license-translation-empty">
+                  <td colSpan={9} className="license-translation-empty">
                     当前筛选条件下没有订单
                   </td>
                 </tr>

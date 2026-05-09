@@ -24,22 +24,38 @@ import {
   statusTagClass,
 } from './orderListShared';
 
+const DOMESTIC_LICENSE_PRODUCT_TITLE = '换国内驾照翻译件';
+const isDomesticLicenseProduct = (productTitle: string) => productTitle === DOMESTIC_LICENSE_PRODUCT_TITLE;
+const isDomesticLicenseOrder = (order: Order) =>
+  order.productCategory === 'domestic_license' ||
+  order.productName === DOMESTIC_LICENSE_PRODUCT_TITLE ||
+  Boolean(order.domesticLicenseInfo);
+
+const getDomesticExchangeCity = (order: Order) =>
+  [order.domesticLicenseInfo?.exchangeProvince, order.domesticLicenseInfo?.exchangeCity].filter(Boolean).join(' ');
+
+const getDomesticForeignLocation = (order: Order) =>
+  [order.domesticLicenseInfo?.foreignCountry, order.domesticLicenseInfo?.foreignCity].filter(Boolean).join(' ');
+
 const TranslationOrderList: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
   const translationProducts = useMemo(
-    () => getProducts().filter((product) => product.category === 'translation').sort((a, b) => b.weight - a.weight),
+    () => getProducts().filter((product) => isDomesticLicenseProduct(product.title)).sort((a, b) => b.weight - a.weight),
     [],
   );
   const allOrders = useMemo(
-    () => getOrders().filter((order) => order.productCategory === 'translation'),
+    () => getOrders().filter(isDomesticLicenseOrder),
     [],
   );
 
   const [activeStatus, setActiveStatus] = useState<TranslationOrderStatus | ''>('');
   const [filterAgent, setFilterAgent] = useState('');
   const [filterProduct, setFilterProduct] = useState('');
+  const [filterProcessType, setFilterProcessType] = useState('');
+  const [filterForeignCountry, setFilterForeignCountry] = useState('');
+  const [filterForeignCity, setFilterForeignCity] = useState('');
   const [filterKeyword, setFilterKeyword] = useState('');
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
@@ -53,6 +69,48 @@ const TranslationOrderList: React.FC = () => {
     [translationProducts],
   );
   const productOptions = useMemo(() => translationProducts.map((product) => product.title), [translationProducts]);
+  const isDomesticLicenseProductSelected = filterProduct === DOMESTIC_LICENSE_PRODUCT_TITLE;
+  const processTypeOptions = useMemo(() => {
+    const sourceProducts = filterProduct
+      ? translationProducts.filter((product) => product.title === filterProduct)
+      : translationProducts;
+    const processTypeMap = new Map<string, string>();
+
+    sourceProducts.forEach((product) => {
+      product.processTypes.forEach((processType) => {
+        if (!processTypeMap.has(processType.name)) {
+          processTypeMap.set(processType.name, getProductProcessTypeLabel(processType.name, t));
+        }
+      });
+    });
+
+    return Array.from(processTypeMap, ([value, label]) => ({ value, label })).sort((a, b) =>
+      a.label.localeCompare(b.label, 'zh-CN'),
+    );
+  }, [filterProduct, t, translationProducts]);
+  const domesticOrders = useMemo(
+    () => allOrders.filter((order) => order.productName === DOMESTIC_LICENSE_PRODUCT_TITLE && order.domesticLicenseInfo),
+    [allOrders],
+  );
+  const foreignCountryOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(domesticOrders.map((order) => order.domesticLicenseInfo?.foreignCountry?.trim()).filter(Boolean) as string[]),
+      ).sort((a, b) => a.localeCompare(b, 'zh-CN')),
+    [domesticOrders],
+  );
+  const foreignCityOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          domesticOrders
+            .filter((order) => !filterForeignCountry || order.domesticLicenseInfo?.foreignCountry === filterForeignCountry)
+            .map((order) => order.domesticLicenseInfo?.foreignCity?.trim())
+            .filter(Boolean) as string[],
+        ),
+      ).sort((a, b) => a.localeCompare(b, 'zh-CN')),
+    [domesticOrders, filterForeignCountry],
+  );
 
   const getOrderProcessType = (order: Order) => {
     const product = productsById.get(order.productId);
@@ -83,20 +141,25 @@ const TranslationOrderList: React.FC = () => {
   const getOrderProcessLineClassName = (order: Order) =>
     `order-process-line order-process-line--${getOrderProcessTypeTone(order)}`;
 
-  const filteredOrders = useMemo(() => {
+  const ordersMatchingNonStatusFilters = useMemo(() => {
     const keyword = filterKeyword.trim().toLowerCase();
     const agentKeyword = filterAgent.trim().toLowerCase();
 
-    const nextOrders = allOrders.filter((order) => {
+    return allOrders.filter((order) => {
       const createdDate = order.createdAt.slice(0, 10);
 
-      if (activeStatus && getTranslationOrderStatus(order.status) !== activeStatus) return false;
       if (agentKeyword && !getAgentName(order).toLowerCase().includes(agentKeyword)) return false;
       if (filterProduct && order.productName !== filterProduct) return false;
+      if (filterProcessType && order.processType !== filterProcessType) return false;
+      if (isDomesticLicenseProductSelected) {
+        if (filterForeignCountry && order.domesticLicenseInfo?.foreignCountry !== filterForeignCountry) return false;
+        if (filterForeignCity && order.domesticLicenseInfo?.foreignCity !== filterForeignCity) return false;
+      }
       if (filterStartDate && createdDate < filterStartDate) return false;
       if (filterEndDate && createdDate > filterEndDate) return false;
 
       if (keyword) {
+        const domesticInfo = order.domesticLicenseInfo;
         const searchableText = [
           order.orderId,
           order.trackingNumber,
@@ -104,6 +167,17 @@ const TranslationOrderList: React.FC = () => {
           order.customerPhone,
           order.customerPassport,
           order.productName,
+          order.processType,
+          getLicenseName(order),
+          getLicenseNo(order),
+          getLicenseCategory(order),
+          domesticInfo?.chineseName,
+          domesticInfo?.licenseNumber,
+          domesticInfo?.classType,
+          domesticInfo?.exchangeProvince,
+          domesticInfo?.exchangeCity,
+          domesticInfo?.foreignCountry,
+          domesticInfo?.foreignCity,
         ]
           .filter(Boolean)
           .join(' ')
@@ -114,13 +188,30 @@ const TranslationOrderList: React.FC = () => {
 
       return true;
     });
+  }, [
+    allOrders,
+    filterAgent,
+    filterEndDate,
+    filterForeignCity,
+    filterForeignCountry,
+    filterKeyword,
+    filterProcessType,
+    filterProduct,
+    filterStartDate,
+    isDomesticLicenseProductSelected,
+  ]);
+
+  const filteredOrders = useMemo(() => {
+    const nextOrders = activeStatus
+      ? ordersMatchingNonStatusFilters.filter((order) => getTranslationOrderStatus(order.status) === activeStatus)
+      : ordersMatchingNonStatusFilters;
 
     if (activeStatus === 'shipped') {
       return [...nextOrders].sort((a, b) => getOrderShippedSortValue(b).localeCompare(getOrderShippedSortValue(a)));
     }
 
     return nextOrders;
-  }, [activeStatus, allOrders, filterAgent, filterEndDate, filterKeyword, filterProduct, filterStartDate]);
+  }, [activeStatus, ordersMatchingNonStatusFilters]);
 
   const paginatedOrders = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
@@ -128,17 +219,28 @@ const TranslationOrderList: React.FC = () => {
   }, [currentPage, filteredOrders, pageSize]);
 
   const statusCounts = useMemo(() => {
-    const counts: Partial<Record<TranslationOrderStatus | '', number>> = { '': allOrders.length };
+    const counts: Partial<Record<TranslationOrderStatus | '', number>> = { '': ordersMatchingNonStatusFilters.length };
     TRANSLATION_STATUS_TABS.forEach((tab) => {
       if (tab.value) {
-        counts[tab.value] = allOrders.filter((order) => getTranslationOrderStatus(order.status) === tab.value).length;
+        counts[tab.value] = ordersMatchingNonStatusFilters.filter(
+          (order) => getTranslationOrderStatus(order.status) === tab.value,
+        ).length;
       }
     });
     return counts;
-  }, [allOrders]);
+  }, [ordersMatchingNonStatusFilters]);
 
-  const activeFilterCount = [activeStatus, filterAgent, filterProduct, filterKeyword, filterStartDate, filterEndDate].filter(Boolean)
-    .length;
+  const activeFilterCount = [
+    activeStatus,
+    filterAgent,
+    filterProduct,
+    filterProcessType,
+    filterForeignCountry,
+    filterForeignCity,
+    filterKeyword,
+    filterStartDate,
+    filterEndDate,
+  ].filter(Boolean).length;
   const showRejectReasonColumn = activeStatus === 'cancelled';
   const orderTableColumnCount = showRejectReasonColumn ? 9 : 8;
 
@@ -150,6 +252,9 @@ const TranslationOrderList: React.FC = () => {
   const handleReset = () => {
     setFilterAgent('');
     setFilterProduct('');
+    setFilterProcessType('');
+    setFilterForeignCountry('');
+    setFilterForeignCity('');
     setFilterKeyword('');
     setFilterStartDate('');
     setFilterEndDate('');
@@ -207,7 +312,8 @@ const TranslationOrderList: React.FC = () => {
 
       <div className="order-list-shell">
         <div className="order-filter-panel">
-          <div className="order-filter-grid">
+          <div className="translation-order-filter-layout">
+            <div className="order-filter-grid translation-order-filter-grid">
             <div className="form-group order-filter-field">
               <label className="form-label">选择代理商</label>
               <input
@@ -220,7 +326,17 @@ const TranslationOrderList: React.FC = () => {
 
             <div className="form-group order-filter-field">
               <label className="form-label">选择产品</label>
-              <select className="form-select" value={filterProduct} onChange={(event) => setFilterProduct(event.target.value)}>
+              <select
+                className="form-select"
+                value={filterProduct}
+                onChange={(event) => {
+                  setFilterProduct(event.target.value);
+                  setFilterProcessType('');
+                  setFilterForeignCountry('');
+                  setFilterForeignCity('');
+                  setCurrentPage(1);
+                }}
+              >
                 <option value="">全部产品</option>
                 {productOptions.map((product) => (
                   <option key={product} value={product}>
@@ -229,6 +345,66 @@ const TranslationOrderList: React.FC = () => {
                 ))}
               </select>
             </div>
+
+            <div className="form-group order-filter-field">
+              <label className="form-label">办理类型</label>
+              <select
+                className="form-select"
+                value={filterProcessType}
+                disabled={!filterProduct}
+                onChange={(event) => {
+                  setFilterProcessType(event.target.value);
+                  setCurrentPage(1);
+                }}
+              >
+                <option value="">{filterProduct ? '全部办理类型' : '请先选择产品'}</option>
+                {processTypeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {isDomesticLicenseProductSelected && (
+              <div className="form-group order-filter-field">
+                <label className="form-label">驾驶证发放国家及城市</label>
+                <div className="order-filter-linked-selects">
+                  <select
+                    className="form-select"
+                    value={filterForeignCountry}
+                    onChange={(event) => {
+                      setFilterForeignCountry(event.target.value);
+                      setFilterForeignCity('');
+                      setCurrentPage(1);
+                    }}
+                  >
+                    <option value="">全部国家</option>
+                    {foreignCountryOptions.map((country) => (
+                      <option key={country} value={country}>
+                        {country}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="form-select"
+                    value={filterForeignCity}
+                    disabled={!filterForeignCountry}
+                    onChange={(event) => {
+                      setFilterForeignCity(event.target.value);
+                      setCurrentPage(1);
+                    }}
+                  >
+                    <option value="">全部城市</option>
+                    {foreignCityOptions.map((city) => (
+                      <option key={city} value={city}>
+                        {city}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
 
             <div className="form-group order-filter-field order-filter-field--span-2">
               <label className="form-label">创建时间</label>
@@ -259,7 +435,9 @@ const TranslationOrderList: React.FC = () => {
               />
             </div>
 
-            <div className="order-filter-actions order-filter-actions--inline">
+            </div>
+
+            <div className="order-filter-actions order-filter-actions--inline translation-order-filter-actions">
               <button className="btn btn--primary" onClick={() => setCurrentPage(1)}>
                 搜索
               </button>
@@ -361,19 +539,39 @@ const TranslationOrderList: React.FC = () => {
                         <td>
                           <div className="order-cell-stack order-cell-stack--compact">
                             <div>
-                              <span className="order-cell-label">姓名：</span>
-                              <span className="order-cell-value">{getLicenseName(order)}</span>
+                                <span className="order-cell-label">中文姓名：</span>
+                                <span className="order-cell-value">
+                                  {order.domesticLicenseInfo?.chineseName || getLicenseName(order)}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="order-cell-label">
+                                  {order.domesticLicenseInfo ? 'DL/驾驶证编号：' : '驾照号：'}
+                                </span>
+                                <span className="order-cell-value">
+                                  {order.domesticLicenseInfo?.licenseNumber || getLicenseNo(order)}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="order-cell-label">准驾车型：</span>
+                                <span className="order-license-badge">
+                                  {order.domesticLicenseInfo?.classType || getLicenseCategory(order)}
+                                </span>
+                              </div>
+                              {order.domesticLicenseInfo && (
+                                <>
+                                  <div>
+                                    <span className="order-cell-label">换证城市：</span>
+                                    <span className="order-cell-value">{getDomesticExchangeCity(order) || '--'}</span>
+                                  </div>
+                                  <div>
+                                    <span className="order-cell-label">驾照发放国家及城市：</span>
+                                    <span className="order-cell-value">{getDomesticForeignLocation(order) || '--'}</span>
+                                  </div>
+                                </>
+                              )}
                             </div>
-                            <div>
-                              <span className="order-cell-label">驾照号：</span>
-                              <span className="order-cell-value">{getLicenseNo(order)}</span>
-                            </div>
-                            <div>
-                              <span className="order-cell-label">准驾车型：</span>
-                              <span className="order-license-badge">{getLicenseCategory(order)}</span>
-                            </div>
-                          </div>
-                        </td>
+                          </td>
 
                         <td>
                           <div className="order-cell-stack order-cell-stack--compact">

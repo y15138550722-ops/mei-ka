@@ -16,7 +16,35 @@ export type ProcessType = 'normal' | 'priority' | 'urgent';
 export type PushTimeliness = 'instant' | 'within_2h' | 'same_day' | 'next_day';
 export type AgentLevel = 'self' | 'l1' | 'l2' | 'l3';
 export type Channel = 'ctrip' | 'fliggy' | 'private' | 'offline';
-export type ProductCategory = 'translation' | 'notary' | 'idp';
+export type ProductCategory = 'translation' | 'notary' | 'idp' | 'domestic_license';
+
+export interface DomesticLicenseInfo {
+  exchangeProvince: string;
+  exchangeCity: string;
+  foreignCountry: string;
+  foreignCity: string;
+  chineseName: string;
+  licenseNumber: string;
+  expiryDate: string;
+  surname: string;
+  givenName: string;
+  birthDate: string;
+  rstr: string;
+  sex: string;
+  hairColor: string;
+  eyeColor: string;
+  height: string;
+  weight: string;
+  issueDate: string;
+  fileNumber: string;
+  classType: string;
+  endorsements: string;
+  restrictions: string;
+  other: string;
+  frontPhoto: string;
+  backPhoto: string;
+  passportPhoto?: string;
+}
 
 export interface Order {
   orderId: string;
@@ -74,6 +102,7 @@ export interface Order {
   idpSignature?: string;
   language?: string;
   useCountry?: string;
+  domesticLicenseInfo?: DomesticLicenseInfo;
   // ---------------------
   createdAt: string;
   updatedAt: string;

@@ -114,6 +114,7 @@ const ProductForm: React.FC = () => {
             <label className="form-label form-label--required">{t('product.field.category')}</label>
             <select className="form-select" value={category} onChange={e => setCategory(e.target.value as ProductCategory)}>
               <option value="translation">{t('product.category.translation')}</option>
+              <option value="domestic_license">{t('product.category.domestic_license')}</option>
               <option value="notary">{t('product.category.notary')}</option>
               <option value="idp">{t('product.category.idp')}</option>
             </select>

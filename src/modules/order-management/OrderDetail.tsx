@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { getOrderById, updateOrder } from '../../services/mockDataService';
 import { formatBeijingTimestamp } from '../../shared/utils/dateTime';
 import { orderPreviewAssets } from '../../shared/config/orderPreviewAssets';
-import type { Order, OrderLog, OrderStatus, ProductCategory } from '../../shared/types';
+import type { DomesticLicenseInfo, Order, OrderLog, OrderStatus, ProductCategory } from '../../shared/types';
 import idpPassportFrontDefault from './assets/idp-passport-front.png';
 import idpSignatureDefault from './assets/idp-signature.png';
 import idpWhitePhotoDefault from './assets/idp-white-photo.png';
@@ -46,6 +46,28 @@ type OrderEditForm = {
   deliveryAddress: string;
   whiteBackgroundPhoto: string;
   signatureImage: string;
+  domesticExchangeProvince: string;
+  domesticExchangeCity: string;
+  domesticForeignCountry: string;
+  domesticForeignCity: string;
+  domesticChineseName: string;
+  domesticLicenseNumber: string;
+  domesticExpiryDate: string;
+  domesticSurname: string;
+  domesticGivenName: string;
+  domesticBirthDate: string;
+  domesticRstr: string;
+  domesticSex: string;
+  domesticHairColor: string;
+  domesticEyeColor: string;
+  domesticHeight: string;
+  domesticWeight: string;
+  domesticIssueDate: string;
+  domesticFileNumber: string;
+  domesticClassType: string;
+  domesticEndorsements: string;
+  domesticRestrictions: string;
+  domesticOther: string;
 };
 
 type OrderListSource = {
@@ -65,6 +87,57 @@ type DetailFieldItem = {
   fieldClassName?: string;
   labelClassName?: string;
 };
+
+const DOMESTIC_EXCHANGE_LOCATION_OPTIONS = [
+  { province: '北京市', cities: ['北京市'] },
+  { province: '天津市', cities: ['天津市'] },
+  { province: '河北省', cities: ['石家庄市', '唐山市', '秦皇岛市', '邯郸市', '邢台市', '保定市', '张家口市', '承德市', '沧州市', '廊坊市', '衡水市'] },
+  { province: '山西省', cities: ['太原市', '大同市', '阳泉市', '长治市', '晋城市', '朔州市', '晋中市', '运城市', '忻州市', '临汾市', '吕梁市'] },
+  { province: '内蒙古自治区', cities: ['呼和浩特市', '包头市', '乌海市', '赤峰市', '通辽市', '鄂尔多斯市', '呼伦贝尔市', '巴彦淖尔市', '乌兰察布市', '兴安盟', '锡林郭勒盟', '阿拉善盟'] },
+  { province: '辽宁省', cities: ['沈阳市', '大连市', '鞍山市', '抚顺市', '本溪市', '丹东市', '锦州市', '营口市', '阜新市', '辽阳市', '盘锦市', '铁岭市', '朝阳市', '葫芦岛市'] },
+  { province: '吉林省', cities: ['长春市', '吉林市', '四平市', '辽源市', '通化市', '白山市', '松原市', '白城市', '延边朝鲜族自治州'] },
+  { province: '黑龙江省', cities: ['哈尔滨市', '齐齐哈尔市', '鸡西市', '鹤岗市', '双鸭山市', '大庆市', '伊春市', '佳木斯市', '七台河市', '牡丹江市', '黑河市', '绥化市', '大兴安岭地区'] },
+  { province: '上海市', cities: ['上海市'] },
+  { province: '江苏省', cities: ['南京市', '无锡市', '徐州市', '常州市', '苏州市', '南通市', '连云港市', '淮安市', '盐城市', '扬州市', '镇江市', '泰州市', '宿迁市'] },
+  { province: '浙江省', cities: ['杭州市', '宁波市', '温州市', '嘉兴市', '湖州市', '绍兴市', '金华市', '衢州市', '舟山市', '台州市', '丽水市'] },
+  { province: '安徽省', cities: ['合肥市', '芜湖市', '蚌埠市', '淮南市', '马鞍山市', '淮北市', '铜陵市', '安庆市', '黄山市', '滁州市', '阜阳市', '宿州市', '六安市', '亳州市', '池州市', '宣城市'] },
+  { province: '福建省', cities: ['福州市', '厦门市', '莆田市', '三明市', '泉州市', '漳州市', '南平市', '龙岩市', '宁德市'] },
+  { province: '江西省', cities: ['南昌市', '景德镇市', '萍乡市', '九江市', '新余市', '鹰潭市', '赣州市', '吉安市', '宜春市', '抚州市', '上饶市'] },
+  { province: '山东省', cities: ['济南市', '青岛市', '淄博市', '枣庄市', '东营市', '烟台市', '潍坊市', '济宁市', '泰安市', '威海市', '日照市', '临沂市', '德州市', '聊城市', '滨州市', '菏泽市'] },
+  { province: '河南省', cities: ['郑州市', '开封市', '洛阳市', '平顶山市', '安阳市', '鹤壁市', '新乡市', '焦作市', '濮阳市', '许昌市', '漯河市', '三门峡市', '南阳市', '商丘市', '信阳市', '周口市', '驻马店市', '济源市'] },
+  { province: '湖北省', cities: ['武汉市', '黄石市', '十堰市', '宜昌市', '襄阳市', '鄂州市', '荆门市', '孝感市', '荆州市', '黄冈市', '咸宁市', '随州市', '恩施土家族苗族自治州', '仙桃市', '潜江市', '天门市', '神农架林区'] },
+  { province: '湖南省', cities: ['长沙市', '株洲市', '湘潭市', '衡阳市', '邵阳市', '岳阳市', '常德市', '张家界市', '益阳市', '郴州市', '永州市', '怀化市', '娄底市', '湘西土家族苗族自治州'] },
+  { province: '广东省', cities: ['广州市', '韶关市', '深圳市', '珠海市', '汕头市', '佛山市', '江门市', '湛江市', '茂名市', '肇庆市', '惠州市', '梅州市', '汕尾市', '河源市', '阳江市', '清远市', '东莞市', '中山市', '潮州市', '揭阳市', '云浮市'] },
+  { province: '广西壮族自治区', cities: ['南宁市', '柳州市', '桂林市', '梧州市', '北海市', '防城港市', '钦州市', '贵港市', '玉林市', '百色市', '贺州市', '河池市', '来宾市', '崇左市'] },
+  { province: '海南省', cities: ['海口市', '三亚市', '三沙市', '儋州市', '五指山市', '琼海市', '文昌市', '万宁市', '东方市'] },
+  { province: '重庆市', cities: ['重庆市'] },
+  { province: '四川省', cities: ['成都市', '自贡市', '攀枝花市', '泸州市', '德阳市', '绵阳市', '广元市', '遂宁市', '内江市', '乐山市', '南充市', '眉山市', '宜宾市', '广安市', '达州市', '雅安市', '巴中市', '资阳市', '阿坝藏族羌族自治州', '甘孜藏族自治州', '凉山彝族自治州'] },
+  { province: '贵州省', cities: ['贵阳市', '六盘水市', '遵义市', '安顺市', '毕节市', '铜仁市', '黔西南布依族苗族自治州', '黔东南苗族侗族自治州', '黔南布依族苗族自治州'] },
+  { province: '云南省', cities: ['昆明市', '曲靖市', '玉溪市', '保山市', '昭通市', '丽江市', '普洱市', '临沧市', '楚雄彝族自治州', '红河哈尼族彝族自治州', '文山壮族苗族自治州', '西双版纳傣族自治州', '大理白族自治州', '德宏傣族景颇族自治州', '怒江傈僳族自治州', '迪庆藏族自治州'] },
+  { province: '西藏自治区', cities: ['拉萨市', '日喀则市', '昌都市', '林芝市', '山南市', '那曲市', '阿里地区'] },
+  { province: '陕西省', cities: ['西安市', '铜川市', '宝鸡市', '咸阳市', '渭南市', '延安市', '汉中市', '榆林市', '安康市', '商洛市'] },
+  { province: '甘肃省', cities: ['兰州市', '嘉峪关市', '金昌市', '白银市', '天水市', '武威市', '张掖市', '平凉市', '酒泉市', '庆阳市', '定西市', '陇南市', '临夏回族自治州', '甘南藏族自治州'] },
+  { province: '青海省', cities: ['西宁市', '海东市', '海北藏族自治州', '黄南藏族自治州', '海南藏族自治州', '果洛藏族自治州', '玉树藏族自治州', '海西蒙古族藏族自治州'] },
+  { province: '宁夏回族自治区', cities: ['银川市', '石嘴山市', '吴忠市', '固原市', '中卫市'] },
+  { province: '新疆维吾尔自治区', cities: ['乌鲁木齐市', '克拉玛依市', '吐鲁番市', '哈密市', '昌吉回族自治州', '博尔塔拉蒙古自治州', '巴音郭楞蒙古自治州', '阿克苏地区', '克孜勒苏柯尔克孜自治州', '喀什地区', '和田地区', '伊犁哈萨克自治州', '塔城地区', '阿勒泰地区', '石河子市', '阿拉尔市', '图木舒克市', '五家渠市', '北屯市', '铁门关市', '双河市', '可克达拉市', '昆玉市', '胡杨河市', '新星市', '白杨市'] },
+  { province: '香港特别行政区', cities: ['香港特别行政区'] },
+  { province: '澳门特别行政区', cities: ['澳门特别行政区'] },
+  { province: '台湾省', cities: ['台北市', '新北市', '桃园市', '台中市', '台南市', '高雄市', '基隆市', '新竹市', '嘉义市'] },
+] as const;
+
+const DOMESTIC_FOREIGN_LICENSE_LOCATION_OPTIONS = [
+  { country: '美国', cities: ['加利福尼亚州', '纽约州', '德克萨斯州', '华盛顿州', '佛罗里达州'] },
+  { country: '加拿大', cities: ['安大略省', '不列颠哥伦比亚省', '阿尔伯塔省', '魁北克省'] },
+  { country: '澳大利亚', cities: ['新南威尔士州', '维多利亚州', '昆士兰州', '西澳大利亚州'] },
+  { country: '新西兰', cities: ['奥克兰', '惠灵顿', '基督城'] },
+  { country: '英国', cities: ['伦敦', '曼彻斯特', '伯明翰'] },
+  { country: '日本', cities: ['东京', '大阪', '名古屋'] },
+] as const;
+
+const getMergedLocationKeys = <T extends string>(
+  sourceOptions: readonly T[],
+  currentValue: string,
+) => (currentValue && !sourceOptions.includes(currentValue as T) ? [currentValue, ...sourceOptions] : [...sourceOptions]);
 
 const CERTIFICATE_IMAGES: CertificateImage[] = [
   {
@@ -218,7 +291,12 @@ const currencyFormatter = new Intl.NumberFormat('zh-CN', {
 
 const getCurrentTimestamp = () => formatBeijingTimestamp();
 
+const getCompactTimestamp = (timestamp = getCurrentTimestamp()) => timestamp.replace(/\D/g, '').slice(0, 14);
+
 const getOrderSeed = (orderId: string) => Number(orderId.replace(/\D/g, '').slice(-6) || '0');
+
+const getLicenseOfficerPushOrderId = (order: Pick<Order, 'managementOrderId'>, timestamp = getCurrentTimestamp()) =>
+  order.managementOrderId?.trim() || getCompactTimestamp(timestamp);
 
 const padNumber = (value: number) => String(value).padStart(2, '0');
 
@@ -273,6 +351,10 @@ const ORDER_LIST_SOURCE_MAP: Record<ProductCategory, OrderListSource> = {
     path: '/orders',
     label: '翻译订单管理',
   },
+  domestic_license: {
+    path: '/orders',
+    label: '翻译订单管理',
+  },
   idp: {
     path: '/order-management/idp-orders',
     label: 'IDP订单管理',
@@ -292,6 +374,10 @@ const getOrderCategoryLabel = (category: ProductCategory) => {
 
   if (category === 'notary') {
     return '公证订单';
+  }
+
+  if (category === 'domestic_license') {
+    return '换国内驾照翻译件订单';
   }
 
   return '翻译订单';
@@ -705,6 +791,7 @@ const buildLicenseAuditProfile = (order: Order) => {
 
 const buildOrderEditForm = (order: Order): OrderEditForm => {
   const auditProfile = buildLicenseAuditProfile(order);
+  const domesticInfo = order.domesticLicenseInfo;
   const nameParts = getDisplayNameParts(auditProfile.licenseName === '--' ? '' : auditProfile.licenseName);
   const selectedResidenceSource = resolvePersistedValue(order.licenseAddress, order.deliveryAddress || '');
   const selectedResidence = getIdpGeneratedAddress(selectedResidenceSource);
@@ -750,6 +837,28 @@ const buildOrderEditForm = (order: Order): OrderEditForm => {
     deliveryAddress: toEditableValue(order.deliveryAddress),
     whiteBackgroundPhoto: toEditableValue(order.idpWhitePhoto, idpWhitePhotoDefault),
     signatureImage: toEditableValue(order.idpSignature, idpSignatureDefault),
+    domesticExchangeProvince: toEditableValue(domesticInfo?.exchangeProvince),
+    domesticExchangeCity: toEditableValue(domesticInfo?.exchangeCity),
+    domesticForeignCountry: toEditableValue(domesticInfo?.foreignCountry),
+    domesticForeignCity: toEditableValue(domesticInfo?.foreignCity),
+    domesticChineseName: toEditableValue(domesticInfo?.chineseName, order.licenseName || order.customerName),
+    domesticLicenseNumber: toEditableValue(domesticInfo?.licenseNumber, order.licenseNo || order.customerPassport),
+    domesticExpiryDate: toEditableValue(domesticInfo?.expiryDate, order.licenseValidUntilDate),
+    domesticSurname: toEditableValue(domesticInfo?.surname),
+    domesticGivenName: toEditableValue(domesticInfo?.givenName),
+    domesticBirthDate: toEditableValue(domesticInfo?.birthDate, order.licenseBirthDate),
+    domesticRstr: toEditableValue(domesticInfo?.rstr),
+    domesticSex: toEditableValue(domesticInfo?.sex, order.licenseGender),
+    domesticHairColor: toEditableValue(domesticInfo?.hairColor),
+    domesticEyeColor: toEditableValue(domesticInfo?.eyeColor),
+    domesticHeight: toEditableValue(domesticInfo?.height),
+    domesticWeight: toEditableValue(domesticInfo?.weight),
+    domesticIssueDate: toEditableValue(domesticInfo?.issueDate, order.licenseFirstIssueDate),
+    domesticFileNumber: toEditableValue(domesticInfo?.fileNumber, order.licenseArchiveNumber),
+    domesticClassType: toEditableValue(domesticInfo?.classType, order.licenseCategory),
+    domesticEndorsements: toEditableValue(domesticInfo?.endorsements),
+    domesticRestrictions: toEditableValue(domesticInfo?.restrictions),
+    domesticOther: toEditableValue(domesticInfo?.other),
   };
 };
 
@@ -788,6 +897,8 @@ const OrderDetail: React.FC = () => {
   const isReadOnlyPreview = !isAuditable;
   const isViewPreview = previewMode === 'view';
   const isIdpOrder = order?.productCategory === 'idp';
+  const domesticLicenseInfo = order?.domesticLicenseInfo || null;
+  const isDomesticLicenseOrder = Boolean(domesticLicenseInfo);
   const auditPageTitle = isAuditable ? '订单审核' : '查看审核';
 
   const inferredOrderListSource = order ? getOrderListSource(order.productCategory) : null;
@@ -818,6 +929,38 @@ const OrderDetail: React.FC = () => {
 
   const handleEditFieldChange = (field: keyof OrderEditForm, value: string) => {
     setEditForm((currentForm) => (currentForm ? { ...currentForm, [field]: value } : currentForm));
+  };
+
+  const handleDomesticExchangeProvinceChange = (province: string) => {
+    const cityOptions: string[] = [
+      ...(DOMESTIC_EXCHANGE_LOCATION_OPTIONS.find((item) => item.province === province)?.cities ?? []),
+    ];
+
+    setEditForm((currentForm) =>
+      currentForm
+        ? {
+            ...currentForm,
+            domesticExchangeProvince: province,
+            domesticExchangeCity: cityOptions.includes(currentForm.domesticExchangeCity) ? currentForm.domesticExchangeCity : '',
+          }
+        : currentForm,
+    );
+  };
+
+  const handleDomesticForeignCountryChange = (country: string) => {
+    const cityOptions: string[] = [
+      ...(DOMESTIC_FOREIGN_LICENSE_LOCATION_OPTIONS.find((item) => item.country === country)?.cities ?? []),
+    ];
+
+    setEditForm((currentForm) =>
+      currentForm
+        ? {
+            ...currentForm,
+            domesticForeignCountry: country,
+            domesticForeignCity: cityOptions.includes(currentForm.domesticForeignCity) ? currentForm.domesticForeignCity : '',
+          }
+        : currentForm,
+    );
   };
 
   const handleIdpImageUpload = (field: EditableIdpImageField, file: File | null) => {
@@ -855,18 +998,25 @@ const OrderDetail: React.FC = () => {
   };
 
   const handleApprove = () => {
-    updateOrder(order.orderId, {
+    const timestamp = getCurrentTimestamp();
+    const nextUpdates: Partial<Order> = {
       status: 'pending_production',
-      updatedAt: getCurrentTimestamp(),
+      updatedAt: timestamp,
       logs: [
         ...order.logs,
         {
-          time: getCurrentTimestamp(),
+          time: timestamp,
           operator: '审核员',
           action: '审核通过',
         },
       ],
-    });
+    };
+
+    if (isDomesticLicenseOrder) {
+      nextUpdates.managementOrderId = getLicenseOfficerPushOrderId(order, timestamp);
+    }
+
+    updateOrder(order.orderId, nextUpdates);
 
     showToast('success', '审核通过，订单已转入待制作');
     window.setTimeout(() => navigate(sourceListPath), 1200);
@@ -980,6 +1130,97 @@ const OrderDetail: React.FC = () => {
       return;
     }
 
+    if (isDomesticLicenseOrder && domesticLicenseInfo) {
+      const requiredFields: Array<{ key: keyof OrderEditForm; label: string }> = [
+        { key: 'domesticExchangeProvince', label: '换证省份' },
+        { key: 'domesticExchangeCity', label: '换证城市' },
+        { key: 'domesticForeignCountry', label: '境外发放国家' },
+        { key: 'domesticForeignCity', label: '境外发放城市' },
+        { key: 'domesticChineseName', label: '中文姓名' },
+        { key: 'customerName', label: '收货人' },
+        { key: 'customerPhone', label: '联系电话' },
+        { key: 'deliveryAddress', label: '收货地址' },
+      ];
+
+      const missingField = requiredFields.find(({ key }) => !editForm[key].trim());
+      if (missingField) {
+        showToast('error', `请填写${missingField.label}`);
+        return;
+      }
+
+      const nextDomesticLicenseInfo: DomesticLicenseInfo = {
+        ...domesticLicenseInfo,
+        exchangeProvince: editForm.domesticExchangeProvince.trim(),
+        exchangeCity: editForm.domesticExchangeCity.trim(),
+        foreignCountry: editForm.domesticForeignCountry.trim(),
+        foreignCity: editForm.domesticForeignCity.trim(),
+        chineseName: editForm.domesticChineseName.trim(),
+        licenseNumber: editForm.domesticLicenseNumber.trim(),
+        expiryDate: editForm.domesticExpiryDate.trim(),
+        surname: editForm.domesticSurname.trim(),
+        givenName: editForm.domesticGivenName.trim(),
+        birthDate: editForm.domesticBirthDate.trim(),
+        rstr: editForm.domesticRstr.trim(),
+        sex: editForm.domesticSex.trim(),
+        hairColor: editForm.domesticHairColor.trim(),
+        eyeColor: editForm.domesticEyeColor.trim(),
+        height: editForm.domesticHeight.trim(),
+        weight: editForm.domesticWeight.trim(),
+        issueDate: editForm.domesticIssueDate.trim(),
+        fileNumber: editForm.domesticFileNumber.trim(),
+        classType: editForm.domesticClassType.trim(),
+        endorsements: editForm.domesticEndorsements.trim(),
+        restrictions: editForm.domesticRestrictions.trim(),
+        other: editForm.domesticOther.trim(),
+      };
+      const timestamp = getCurrentTimestamp();
+      const exchangeLocation = [nextDomesticLicenseInfo.exchangeProvince, nextDomesticLicenseInfo.exchangeCity]
+        .filter(Boolean)
+        .join(' ');
+      const foreignLocation = [nextDomesticLicenseInfo.foreignCountry, nextDomesticLicenseInfo.foreignCity]
+        .filter(Boolean)
+        .join(' ');
+      const nextUpdates: Partial<Order> = {
+        domesticLicenseInfo: nextDomesticLicenseInfo,
+        licenseNo: nextDomesticLicenseInfo.licenseNumber,
+        licenseName: nextDomesticLicenseInfo.chineseName,
+        licenseGender: nextDomesticLicenseInfo.sex,
+        licenseBirthDate: nextDomesticLicenseInfo.birthDate,
+        licenseCategory: nextDomesticLicenseInfo.classType,
+        licenseAddress: foreignLocation,
+        licenseFirstIssueDate: nextDomesticLicenseInfo.issueDate,
+        licenseValidUntilDate: nextDomesticLicenseInfo.expiryDate,
+        licenseArchiveNumber: nextDomesticLicenseInfo.fileNumber,
+        licenseIssuingRegion: exchangeLocation,
+        useCountry: nextDomesticLicenseInfo.foreignCountry,
+        customerName: editForm.customerName.trim(),
+        customerPhone: editForm.customerPhone.trim(),
+        deliveryAddress: editForm.deliveryAddress.trim(),
+        updatedAt: timestamp,
+        logs: [
+          ...order.logs,
+          {
+            time: timestamp,
+            operator: '审核员',
+            action: '修改换国内驾照翻译件信息',
+          },
+        ],
+      };
+
+      updateOrder(order.orderId, nextUpdates);
+
+      const nextOrder = {
+        ...order,
+        ...nextUpdates,
+      } as Order;
+
+      setOrder(nextOrder);
+      setEditForm(buildOrderEditForm(nextOrder));
+      setIsEditing(false);
+      showToast('success', '换国内驾照翻译件信息已更新');
+      return;
+    }
+
     const requiredFields: Array<{ key: keyof OrderEditForm; label: string }> = [
       { key: 'licenseNo', label: '驾证号码' },
       { key: 'licenseName', label: '姓名' },
@@ -1071,6 +1312,35 @@ const OrderDetail: React.FC = () => {
       />
     );
   };
+
+  const renderSelectEditor = (
+    field: keyof OrderEditForm,
+    options: string[],
+    placeholder: string,
+    onValueChange?: (value: string) => void,
+    disabled = false,
+  ) => (
+    <select
+      className="form-select order-audit-field__editor"
+      value={editForm[field]}
+      disabled={disabled}
+      onChange={(event) => {
+        if (onValueChange) {
+          onValueChange(event.target.value);
+          return;
+        }
+
+        handleEditFieldChange(field, event.target.value);
+      }}
+    >
+      <option value="">{placeholder}</option>
+      {options.map((option) => (
+        <option key={option} value={option}>
+          {option}
+        </option>
+      ))}
+    </select>
+  );
 
   const idpDisplayName = joinNameParts(
     isEditing ? editForm.surname : auditProfile.licenseName === '--' ? '' : getDisplayNameParts(auditProfile.licenseName).surname,
@@ -1190,6 +1460,30 @@ const OrderDetail: React.FC = () => {
     },
   ];
 
+  const domesticLicenseImageItems: CertificateImage[] = domesticLicenseInfo
+    ? [
+        {
+          key: 'domestic-license-front',
+          label: '驾照正面照片',
+          src: domesticLicenseInfo.frontPhoto || null,
+        },
+        {
+          key: 'domestic-license-back',
+          label: '驾照反面照片',
+          src: domesticLicenseInfo.backPhoto || null,
+        },
+        ...(domesticLicenseInfo.passportPhoto
+          ? [
+              {
+                key: 'domestic-passport',
+                label: '护照',
+                src: domesticLicenseInfo.passportPhoto || null,
+              },
+            ]
+          : []),
+      ]
+    : [];
+
   const auditCertificateImages = isIdpOrder
     ? IDP_CERTIFICATE_IMAGES.map((item) => {
         if (item.key === 'white-background-photo') {
@@ -1208,8 +1502,27 @@ const OrderDetail: React.FC = () => {
 
         return item;
       })
-    : CERTIFICATE_IMAGES;
-  const auditImageTitle = isIdpOrder ? '\u8bc1\u4ef6\u4fe1\u606f' : '\u8bc1\u4ef6\u56fe\u7247';
+    : domesticLicenseImageItems.length > 0
+      ? domesticLicenseImageItems
+      : CERTIFICATE_IMAGES;
+  const auditImageTitle = isIdpOrder ? '\u8bc1\u4ef6\u4fe1\u606f' : isDomesticLicenseOrder ? '驾照附件' : '\u8bc1\u4ef6\u56fe\u7247';
+
+  const domesticExchangeProvinceOptions = getMergedLocationKeys(
+    DOMESTIC_EXCHANGE_LOCATION_OPTIONS.map((item) => item.province),
+    editForm.domesticExchangeProvince,
+  );
+  const domesticExchangeCityOptions = getMergedLocationKeys(
+    [...(DOMESTIC_EXCHANGE_LOCATION_OPTIONS.find((item) => item.province === editForm.domesticExchangeProvince)?.cities ?? [])],
+    editForm.domesticExchangeCity,
+  );
+  const domesticForeignCountryOptions = getMergedLocationKeys(
+    DOMESTIC_FOREIGN_LICENSE_LOCATION_OPTIONS.map((item) => item.country),
+    editForm.domesticForeignCountry,
+  );
+  const domesticForeignCityOptions = getMergedLocationKeys(
+    [...(DOMESTIC_FOREIGN_LICENSE_LOCATION_OPTIONS.find((item) => item.country === editForm.domesticForeignCountry)?.cities ?? [])],
+    editForm.domesticForeignCity,
+  );
 
   const orderInfoItems: DetailFieldItem[] = [
     {
@@ -1234,7 +1547,7 @@ const OrderDetail: React.FC = () => {
     },
     {
       label: '驾照官推送订单号',
-      value: '--',
+      value: getDisplayValue(order.managementOrderId),
       fieldClassName: 'order-audit-field--wide-label',
       labelClassName: 'order-audit-field__label--nowrap',
     },
@@ -1267,56 +1580,235 @@ const OrderDetail: React.FC = () => {
     },
   ];
 
-  const licenseInfoItems: DetailFieldItem[] = [
-    {
-      label: '驾证号码',
-      value: isEditing ? renderEditor('licenseNo', { placeholder: '请输入驾证号码' }) : auditProfile.licenseNo,
-    },
-    {
-      label: '姓名',
-      value: isEditing ? renderEditor('licenseName', { placeholder: '请输入姓名' }) : auditProfile.licenseName,
-    },
-    { label: '姓氏拼音', value: isEditing ? pinyinPreview.surnamePinyin : auditProfile.surnamePinyin },
-    { label: '名字拼音', value: isEditing ? pinyinPreview.givenNamePinyin : auditProfile.givenNamePinyin },
-    { label: '性别', value: isEditing ? renderEditor('gender', { placeholder: '请输入性别' }) : auditProfile.gender },
-    {
-      label: '国籍',
-      value: isEditing ? renderEditor('nationality', { placeholder: '请输入国籍' }) : auditProfile.nationality,
-    },
-    {
-      label: '出生日期',
-      value: isEditing ? renderEditor('birthDate', { type: 'date' }) : auditProfile.birthDate,
-    },
-    {
-      label: '准驾车型',
-      value: isEditing ? renderEditor('licenseCategory', { placeholder: '如 C1 / C2' }) : auditProfile.vehicleCategory,
-    },
-    {
-      label: '驾照地址详情',
-      value: isEditing ? renderEditor('licenseAddress', { multiline: true, rows: 3, placeholder: '请输入驾照地址' }) : auditProfile.licenseAddress,
-      fullWidth: true,
-    },
-    {
-      label: '初次领证日期',
-      value: isEditing ? renderEditor('firstIssueDate', { type: 'date' }) : auditProfile.firstIssueDate,
-    },
-    {
-      label: '有效起始日期',
-      value: isEditing ? renderEditor('validFromDate', { type: 'date' }) : auditProfile.validFromDate,
-    },
-    {
-      label: '有效年限',
-      value: isEditing ? renderEditor('validYears', { placeholder: '如 10年' }) : auditProfile.validYears,
-    },
-    {
-      label: '发证机关',
-      value: isEditing ? renderEditor('issuingAuthority', { placeholder: '请输入发证机关' }) : auditProfile.issuingAuthority,
-    },
-    {
-      label: '发证地区',
-      value: isEditing ? renderEditor('issuingRegion', { placeholder: '请输入发证地区' }) : auditProfile.issuingRegion,
-    },
-  ];
+  const domesticLicenseInfoItems: DetailFieldItem[] = domesticLicenseInfo
+    ? [
+        {
+          label: '换证城市',
+          value: isEditing ? (
+            <div className="order-audit-field__inline-editors">
+              {renderSelectEditor(
+                'domesticExchangeProvince',
+                domesticExchangeProvinceOptions,
+                '请选择省份',
+                handleDomesticExchangeProvinceChange,
+              )}
+              {renderSelectEditor(
+                'domesticExchangeCity',
+                domesticExchangeCityOptions,
+                '请选择城市',
+                undefined,
+                !editForm.domesticExchangeProvince,
+              )}
+            </div>
+          ) : (
+            getDisplayValue(
+              order.licenseIssuingRegion ||
+                [domesticLicenseInfo.exchangeProvince, domesticLicenseInfo.exchangeCity].filter(Boolean).join(' '),
+            )
+          ),
+        },
+        {
+          label: '境外发放国家及城市',
+          value: isEditing ? (
+            <div className="order-audit-field__inline-editors">
+              {renderSelectEditor(
+                'domesticForeignCountry',
+                domesticForeignCountryOptions,
+                '请选择国家',
+                handleDomesticForeignCountryChange,
+              )}
+              {renderSelectEditor(
+                'domesticForeignCity',
+                domesticForeignCityOptions,
+                '请选择城市/州',
+                undefined,
+                !editForm.domesticForeignCountry,
+              )}
+            </div>
+          ) : (
+            getDisplayValue([domesticLicenseInfo.foreignCountry, domesticLicenseInfo.foreignCity].filter(Boolean).join(' '))
+          ),
+          fullWidth: true,
+        },
+        {
+          label: '中文姓名',
+          value: isEditing
+            ? renderEditor('domesticChineseName', { placeholder: '请输入中文姓名' })
+            : getDisplayValue(domesticLicenseInfo.chineseName || order.licenseName || order.customerName),
+        },
+        {
+          label: 'DL/驾驶证编号',
+          value: isEditing
+            ? renderEditor('domesticLicenseNumber', { placeholder: '请输入 DL/驾驶证编号' })
+            : getDisplayValue(domesticLicenseInfo.licenseNumber || order.licenseNo || order.customerPassport),
+        },
+        {
+          label: 'EXP/有效期至',
+          value: isEditing
+            ? renderEditor('domesticExpiryDate', { type: 'date' })
+            : getDisplayValue(domesticLicenseInfo.expiryDate || order.licenseValidUntilDate),
+        },
+        {
+          label: 'LN/姓',
+          value: isEditing ? renderEditor('domesticSurname', { placeholder: '请输入姓' }) : getDisplayValue(domesticLicenseInfo.surname),
+        },
+        {
+          label: 'FN/名',
+          value: isEditing ? renderEditor('domesticGivenName', { placeholder: '请输入名' }) : getDisplayValue(domesticLicenseInfo.givenName),
+        },
+        {
+          label: 'DOB/出生日期',
+          value: isEditing
+            ? renderEditor('domesticBirthDate', { type: 'date' })
+            : getDisplayValue(domesticLicenseInfo.birthDate || order.licenseBirthDate),
+        },
+        {
+          label: 'RSTR/限制条件',
+          value: isEditing ? renderEditor('domesticRstr', { placeholder: '请输入限制条件' }) : getDisplayValue(domesticLicenseInfo.rstr),
+        },
+        {
+          label: 'SEX/性别',
+          value: isEditing
+            ? renderEditor('domesticSex', { placeholder: '男/女' })
+            : getDisplayValue(domesticLicenseInfo.sex || order.licenseGender),
+        },
+        {
+          label: 'HAIR/头发颜色',
+          value: isEditing
+            ? renderEditor('domesticHairColor', { placeholder: '请输入头发颜色' })
+            : getDisplayValue(domesticLicenseInfo.hairColor),
+        },
+        {
+          label: 'EYES/眼睛',
+          value: isEditing
+            ? renderEditor('domesticEyeColor', { placeholder: '请输入眼睛颜色' })
+            : getDisplayValue(domesticLicenseInfo.eyeColor),
+        },
+        {
+          label: 'HGT/身高',
+          value: isEditing ? renderEditor('domesticHeight', { placeholder: '请输入身高' }) : getDisplayValue(domesticLicenseInfo.height),
+        },
+        {
+          label: 'WGT/体重',
+          value: isEditing ? renderEditor('domesticWeight', { placeholder: '请输入体重' }) : getDisplayValue(domesticLicenseInfo.weight),
+        },
+        {
+          label: 'ISS/签发日期',
+          value: isEditing
+            ? renderEditor('domesticIssueDate', { type: 'date' })
+            : getDisplayValue(domesticLicenseInfo.issueDate || order.licenseFirstIssueDate),
+        },
+        {
+          label: 'DD/文件识别号',
+          value: isEditing
+            ? renderEditor('domesticFileNumber', { placeholder: '请输入文件识别号' })
+            : getDisplayValue(domesticLicenseInfo.fileNumber || order.licenseArchiveNumber),
+        },
+        {
+          label: 'CLASS/准驾车型',
+          value: isEditing
+            ? renderEditor('domesticClassType', { placeholder: '请输入准驾车型' })
+            : getDisplayValue(domesticLicenseInfo.classType || order.licenseCategory),
+        },
+        {
+          label: 'ENDORSEMENTS/额外准驾车型',
+          value: isEditing
+            ? renderEditor('domesticEndorsements', { placeholder: '请输入额外准驾车型' })
+            : getDisplayValue(domesticLicenseInfo.endorsements),
+          fullWidth: true,
+          fieldClassName: 'order-audit-field--domestic-long-label',
+        },
+        {
+          label: 'RESTRICTIONS/限制条件',
+          value: isEditing
+            ? renderEditor('domesticRestrictions', { placeholder: '请输入限制条件' })
+            : getDisplayValue(domesticLicenseInfo.restrictions),
+          fullWidth: true,
+          fieldClassName: 'order-audit-field--domestic-long-label',
+        },
+        {
+          label: '其他',
+          value: isEditing
+            ? renderEditor('domesticOther', { multiline: true, rows: 3, placeholder: '请输入其他补充信息' })
+            : getDisplayValue(domesticLicenseInfo.other),
+          fullWidth: true,
+        },
+      ]
+    : [];
+
+  const licenseInfoItems: DetailFieldItem[] = isDomesticLicenseOrder
+    ? [
+        {
+          label: '中文姓名',
+          value: getDisplayValue(domesticLicenseInfo?.chineseName || order.licenseName || order.customerName),
+        },
+        {
+          label: '境外发放',
+          value: getDisplayValue(
+            domesticLicenseInfo ? [domesticLicenseInfo.foreignCountry, domesticLicenseInfo.foreignCity].filter(Boolean).join(' ') : '',
+          ),
+        },
+        {
+          label: 'DL/驾驶证编号',
+          value: getDisplayValue(domesticLicenseInfo?.licenseNumber || order.licenseNo || order.customerPassport),
+        },
+        {
+          label: '准驾车型',
+          value: getDisplayValue(domesticLicenseInfo?.classType || order.licenseCategory),
+        },
+      ]
+    : [
+        {
+          label: '驾证号码',
+          value: isEditing ? renderEditor('licenseNo', { placeholder: '请输入驾证号码' }) : auditProfile.licenseNo,
+        },
+        {
+          label: '姓名',
+          value: isEditing ? renderEditor('licenseName', { placeholder: '请输入姓名' }) : auditProfile.licenseName,
+        },
+        { label: '姓氏拼音', value: isEditing ? pinyinPreview.surnamePinyin : auditProfile.surnamePinyin },
+        { label: '名字拼音', value: isEditing ? pinyinPreview.givenNamePinyin : auditProfile.givenNamePinyin },
+        { label: '性别', value: isEditing ? renderEditor('gender', { placeholder: '请输入性别' }) : auditProfile.gender },
+        {
+          label: '国籍',
+          value: isEditing ? renderEditor('nationality', { placeholder: '请输入国籍' }) : auditProfile.nationality,
+        },
+        {
+          label: '出生日期',
+          value: isEditing ? renderEditor('birthDate', { type: 'date' }) : auditProfile.birthDate,
+        },
+        {
+          label: '准驾车型',
+          value: isEditing ? renderEditor('licenseCategory', { placeholder: '如 C1 / C2' }) : auditProfile.vehicleCategory,
+        },
+        {
+          label: '驾照地址详情',
+          value: isEditing
+            ? renderEditor('licenseAddress', { multiline: true, rows: 3, placeholder: '请输入驾照地址' })
+            : auditProfile.licenseAddress,
+          fullWidth: true,
+        },
+        {
+          label: '初次领证日期',
+          value: isEditing ? renderEditor('firstIssueDate', { type: 'date' }) : auditProfile.firstIssueDate,
+        },
+        {
+          label: '有效起始日期',
+          value: isEditing ? renderEditor('validFromDate', { type: 'date' }) : auditProfile.validFromDate,
+        },
+        {
+          label: '有效年限',
+          value: isEditing ? renderEditor('validYears', { placeholder: '如 10年' }) : auditProfile.validYears,
+        },
+        {
+          label: '发证机关',
+          value: isEditing ? renderEditor('issuingAuthority', { placeholder: '请输入发证机关' }) : auditProfile.issuingAuthority,
+        },
+        {
+          label: '发证地区',
+          value: isEditing ? renderEditor('issuingRegion', { placeholder: '请输入发证地区' }) : auditProfile.issuingRegion,
+        },
+      ];
 
   const deliveryInfoItems: DetailFieldItem[] = [
     {
@@ -1381,6 +1873,22 @@ const OrderDetail: React.FC = () => {
     },
   ];
 
+  const domesticOrderDetailViewDeliveryItems: DetailFieldItem[] = [
+    {
+      label: '收件人',
+      value: getDisplayValue(order.customerName),
+    },
+    {
+      label: '联系电话',
+      value: getDisplayValue(order.customerPhone),
+    },
+    {
+      label: '收货地址',
+      value: getDisplayValue(order.deliveryAddress),
+      fullWidth: true,
+    },
+  ];
+
   const orderDetailViewProductItems: DetailFieldItem[] = [
     {
       label: '\u8ba2\u5355\u7f16\u53f7',
@@ -1395,8 +1903,40 @@ const OrderDetail: React.FC = () => {
       value: getProcessTypeLabel(order.processType),
     },
     {
-      label: '\u603b\u4ef7',
+      label: '价格',
       value: currencyFormatter.format(order.lockedPrice || 0),
+    },
+  ];
+
+  const domesticOrderDetailViewLicenseItems: DetailFieldItem[] = [
+    {
+      label: '中文姓名',
+      value: getDisplayValue(domesticLicenseInfo?.chineseName || order.licenseName || order.customerName),
+    },
+    {
+      label: '驾驶证编号',
+      value: getDisplayValue(domesticLicenseInfo?.licenseNumber || order.licenseNo || order.customerPassport),
+    },
+    {
+      label: '准驾车型',
+      value: getDisplayValue(domesticLicenseInfo?.classType || order.licenseCategory),
+    },
+    {
+      label: '换证城市',
+      value: getDisplayValue(
+        order.licenseIssuingRegion ||
+          (domesticLicenseInfo
+            ? [domesticLicenseInfo.exchangeProvince, domesticLicenseInfo.exchangeCity].filter(Boolean).join(' ')
+            : ''),
+      ),
+    },
+    {
+      label: '境外驾驶证发放国家及城市',
+      value: getDisplayValue(
+        domesticLicenseInfo ? [domesticLicenseInfo.foreignCountry, domesticLicenseInfo.foreignCity].filter(Boolean).join(' ') : '',
+      ),
+      fullWidth: true,
+      fieldClassName: 'order-detail-view-field--wide-label',
     },
   ];
 
@@ -1463,7 +2003,7 @@ const OrderDetail: React.FC = () => {
               </div>
               <div className="card__body order-detail-view-card__body">
                 <div className="order-detail-view-grid order-detail-view-grid--delivery">
-                  {orderDetailViewDeliveryItems.map((item) => (
+                  {(isDomesticLicenseOrder ? domesticOrderDetailViewDeliveryItems : orderDetailViewDeliveryItems).map((item) => (
                     <div
                       key={item.label}
                       className={`order-detail-view-field ${item.fullWidth ? 'order-detail-view-field--full' : ''}`}
@@ -1476,11 +2016,11 @@ const OrderDetail: React.FC = () => {
               </div>
             </section>
 
-            <section className="card order-detail-view-card">
-              <div className="card__header order-audit-card__header order-detail-view-card__header">
-                <h2 className="order-audit-card__title">{'\u5546\u54c1\u4fe1\u606f'}</h2>
-              </div>
-              <div className="card__body order-detail-view-card__body">
+              <section className="card order-detail-view-card">
+                <div className="card__header order-audit-card__header order-detail-view-card__header">
+                  <h2 className="order-audit-card__title">{'\u5546\u54c1\u4fe1\u606f'}</h2>
+                </div>
+                <div className="card__body order-detail-view-card__body">
                 <div className="order-detail-view-grid order-detail-view-grid--product">
                   {orderDetailViewProductItems.map((item) => (
                     <div key={item.label} className="order-detail-view-field">
@@ -1488,12 +2028,35 @@ const OrderDetail: React.FC = () => {
                       <div className="order-detail-view-field__value">{item.value}</div>
                     </div>
                   ))}
+                  </div>
                 </div>
-              </div>
-            </section>
+              </section>
+
+              {isDomesticLicenseOrder && (
+                <>
+                  <section className="card order-detail-view-card">
+                    <div className="card__header order-audit-card__header order-detail-view-card__header">
+                      <h2 className="order-audit-card__title">驾照信息</h2>
+                    </div>
+                    <div className="card__body order-detail-view-card__body">
+                      <div className="order-detail-view-grid order-detail-view-grid--domestic">
+                        {domesticOrderDetailViewLicenseItems.map((item) => (
+                          <div
+                            key={item.label}
+                            className={`order-detail-view-field ${item.fullWidth ? 'order-detail-view-field--full' : ''} ${item.fieldClassName || ''}`.trim()}
+                          >
+                            <span className="order-detail-view-field__label">{item.label}:</span>
+                            <div className="order-detail-view-field__value">{item.value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </section>
+                </>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
       {!isViewPreview && (
       <div className="app-main order-audit-page">
@@ -1669,25 +2232,49 @@ const OrderDetail: React.FC = () => {
               </div>
             </section>
 
-            <section className="card order-audit-card">
-              <div className="card__header order-audit-card__header">
-                <h2 className="order-audit-card__title">驾照信息</h2>
-                {isEditing && <span className="order-audit-editing-tip">编辑中</span>}
-              </div>
-              <div className="card__body order-audit-card__body">
-                <div className="order-audit-grid">
-                  {licenseInfoItems.map((item) => (
-                    <div
-                      key={item.label}
-                      className={`order-audit-field ${item.fullWidth ? 'order-audit-field--full' : ''} ${item.fieldClassName || ''}`.trim()}
-                    >
-                      <span className={`order-audit-field__label ${item.labelClassName || ''}`.trim()}>{item.label}:</span>
-                      <div className="order-audit-field__value">{item.value}</div>
-                    </div>
-                  ))}
+            {!isDomesticLicenseOrder && (
+              <section className="card order-audit-card">
+                <div className="card__header order-audit-card__header">
+                  <h2 className="order-audit-card__title">驾照信息</h2>
+                  {isEditing && <span className="order-audit-editing-tip">编辑中</span>}
                 </div>
-              </div>
-            </section>
+                <div className="card__body order-audit-card__body">
+                  <div className="order-audit-grid">
+                    {licenseInfoItems.map((item) => (
+                      <div
+                        key={item.label}
+                        className={`order-audit-field ${item.fullWidth ? 'order-audit-field--full' : ''} ${item.fieldClassName || ''}`.trim()}
+                      >
+                        <span className={`order-audit-field__label ${item.labelClassName || ''}`.trim()}>{item.label}:</span>
+                        <div className="order-audit-field__value">{item.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {isDomesticLicenseOrder && (
+              <section className="card order-audit-card">
+                <div className="card__header order-audit-card__header">
+                  <h2 className="order-audit-card__title">驾照信息</h2>
+                  {isEditing && <span className="order-audit-editing-tip">编辑中</span>}
+                </div>
+                <div className="card__body order-audit-card__body">
+                  <div className="order-audit-grid order-audit-grid--domestic-license">
+                    {domesticLicenseInfoItems.map((item) => (
+                      <div
+                        key={item.label}
+                        className={`order-audit-field ${item.fullWidth ? 'order-audit-field--full' : ''} ${item.fieldClassName || ''}`.trim()}
+                      >
+                        <span className={`order-audit-field__label ${item.labelClassName || ''}`.trim()}>{item.label}:</span>
+                        <div className="order-audit-field__value">{item.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            )}
 
             <section className="card order-audit-card">
               <div className="card__header order-audit-card__header">

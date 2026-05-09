@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { addOrder, getOrders, getProducts } from '../../services/mockDataService';
+import { addOrder, getOrders, getProducts, updateOrder } from '../../services/mockDataService';
 import type { Order, OrderStatus, ProductProcessType } from '../../shared/types';
 import { LICENSE_ISSUING_AUTHORITY_OPTIONS } from '../../shared/config/licenseIssuingAuthority';
 import { orderPreviewAssets } from '../../shared/config/orderPreviewAssets';
@@ -32,16 +32,124 @@ const SECTION_SCROLL_OFFSET = 78;
 const ORDER_LIST_PAGE_SIZE = 10;
 const AGENT_ACTIVE_VIEW_STORAGE_KEY = 'meika-agent-system-active-view';
 
+type DomesticLicenseFormState = {
+  exchangeProvince: string;
+  exchangeCity: string;
+  foreignCountry: string;
+  foreignCity: string;
+  chineseName: string;
+  licenseNumber: string;
+  expiryDate: string;
+  surname: string;
+  givenName: string;
+  birthDate: string;
+  rstr: string;
+  sex: string;
+  hairColor: string;
+  eyeColor: string;
+  height: string;
+  weight: string;
+  issueDate: string;
+  fileNumber: string;
+  classType: string;
+  endorsements: string;
+  restrictions: string;
+  other: string;
+  frontPhoto: string;
+  backPhoto: string;
+  passportPhoto: string;
+  frontPhotoName: string;
+  backPhotoName: string;
+  passportPhotoName: string;
+};
+
+const DOMESTIC_LICENSE_PRODUCT_TITLE = '换国内驾照翻译件';
+
+const domesticLicenseForeignLocationOptions = [
+  { country: '美国', cities: ['加利福尼亚州', '纽约州', '德克萨斯州', '华盛顿州', '佛罗里达州'] },
+  { country: '加拿大', cities: ['安大略省', '不列颠哥伦比亚省', '阿尔伯塔省', '魁北克省'] },
+  { country: '澳大利亚', cities: ['新南威尔士州', '维多利亚州', '昆士兰州', '西澳大利亚州'] },
+  { country: '新西兰', cities: ['奥克兰', '惠灵顿', '基督城'] },
+  { country: '英国', cities: ['伦敦', '曼彻斯特', '伯明翰'] },
+  { country: '日本', cities: ['东京', '大阪', '名古屋'] },
+] as const;
+
+const domesticLicenseAttachmentFields = [
+  { key: 'frontPhoto', nameKey: 'frontPhotoName', label: '驾照正面照片', required: true },
+  { key: 'backPhoto', nameKey: 'backPhotoName', label: '驾照反面照片', required: true },
+  { key: 'passportPhoto', nameKey: 'passportPhotoName', label: '护照', required: false },
+] as const;
+
+const createDomesticLicenseFormState = (): DomesticLicenseFormState => ({
+  exchangeProvince: '',
+  exchangeCity: '',
+  foreignCountry: '',
+  foreignCity: '',
+  chineseName: '',
+  licenseNumber: '',
+  expiryDate: '',
+  surname: '',
+  givenName: '',
+  birthDate: '',
+  rstr: '',
+  sex: '男',
+  hairColor: '',
+  eyeColor: '',
+  height: '',
+  weight: '',
+  issueDate: '',
+  fileNumber: '',
+  classType: '',
+  endorsements: '',
+  restrictions: '',
+  other: '',
+  frontPhoto: '',
+  backPhoto: '',
+  passportPhoto: '',
+  frontPhotoName: '',
+  backPhotoName: '',
+  passportPhotoName: '',
+});
+
+const resizeImageDataUrl = (file: File, maxSize = 1280, quality = 0.78) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const image = new Image();
+
+      image.onload = () => {
+        const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+
+        const context = canvas.getContext('2d');
+        if (!context) {
+          reject(new Error('Canvas context is unavailable'));
+          return;
+        }
+
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      image.onerror = () => reject(new Error('Image load failed'));
+      image.src = typeof reader.result === 'string' ? reader.result : '';
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+
 const uploadItems = [
-  { title: '驾照正面照片', tone: 'green' },
-  { title: '驾照反面照片', tone: 'green' },
-  { title: '驾照副页正面照片', tone: 'green' },
-  { title: '驾照副页反面照片', tone: 'green' },
-  { title: '身份证正面', tone: 'blue' },
-  { title: '身份证反面', tone: 'blue' },
-  { title: '电子驾照', tone: 'blue' },
-  { title: '电子签名', tone: 'plain' },
-];
+  { key: 'license-front', title: '驾照正面照片', tone: 'green' },
+  { key: 'license-back', title: '驾照反面照片', tone: 'green' },
+  { key: 'license-extra-front', title: '驾照副页正面照片', tone: 'green' },
+  { key: 'license-extra-back', title: '驾照副页反面照片', tone: 'green' },
+  { key: 'id-card-front', title: '身份证正面', tone: 'blue' },
+  { key: 'id-card-back', title: '身份证反面', tone: 'blue' },
+  { key: 'digital-license', title: '电子驾照', tone: 'blue' },
+  { key: 'signature', title: '电子签名', tone: 'plain' },
+] as const;
 
 const validityPeriods: ValidityPeriod[] = ['6年', '10年', '60年', '长期', '自定义'];
 
@@ -181,28 +289,23 @@ const getAgentOrderStatusClassName = (status: OrderStatus) => {
   return `agent-order-status agent-order-status--${statusValue}`;
 };
 
-const PRODUCTION_RECORD_KEYWORDS = ['翻译', '制作', '制作完成', '发货', '物流', '生产端'];
-const NON_PRODUCTION_RECORD_KEYWORDS = ['公证处', '送审', '审核', '驳回', '拒绝', '接收', '待审核'];
+const PRODUCTION_NODE_ACTIONS = ['已翻译', '已制作', '已发货'] as const;
 
 const getProductionOrderRecords = (order: Order) => {
-  const matchedLogs = order.logs.filter((log) => {
-    const logText = `${log.operator} ${log.action}`;
-    const isProductionEvent = PRODUCTION_RECORD_KEYWORDS.some((keyword) => logText.includes(keyword));
-    const isNotaryOrAuditEvent = NON_PRODUCTION_RECORD_KEYWORDS.some((keyword) => logText.includes(keyword));
-
-    return isProductionEvent && !isNotaryOrAuditEvent;
+  const nodeRecords = PRODUCTION_NODE_ACTIONS.flatMap((action) => {
+    const log = order.logs.find((item) => item.operator === '生产端' && item.action === action);
+    return log ? [`${action} ${log.time.slice(0, 16)}`] : [];
   });
 
-  if (matchedLogs.length > 0) {
-    return matchedLogs.map((log) => `${log.time.slice(0, 16)} ${log.action}`);
+  if (nodeRecords.length > 0) {
+    return nodeRecords;
   }
 
   const status = getAgentOrderStatus(order.status);
 
   if (status === 'shipped') {
-    return [
-      `发货：${order.logisticsCompany || '已发货'}${order.trackingNumber ? ` ${order.trackingNumber}` : ''}`,
-    ];
+    const shippedTime = (order.shippedAt || order.updatedAt || order.createdAt).slice(0, 16);
+    return [`已发货 ${shippedTime}`];
   }
 
   return [];
@@ -213,6 +316,15 @@ const isAgentSubmittedOrder = (order: Order) =>
   order.logs.some((log) => log.operator === '代理端' || log.action.includes('代理端'));
 
 const isNotaryOrder = (order: Order) => order.productCategory === 'notary';
+
+const canCancelAgentOrder = (order: Order) => order.status === 'pending_review' || order.status === 'translating';
+
+const getDomesticExchangeCity = (order: Order) =>
+  order.licenseIssuingRegion ||
+  [order.domesticLicenseInfo?.exchangeProvince, order.domesticLicenseInfo?.exchangeCity].filter(Boolean).join(' ');
+
+const getDomesticForeignLocation = (order: Order) =>
+  [order.domesticLicenseInfo?.foreignCountry, order.domesticLicenseInfo?.foreignCity].filter(Boolean).join(' ');
 
 const getInitialAgentPageView = (): AgentPageView => {
   if (typeof window === 'undefined') return 'orderEntry';
@@ -244,12 +356,14 @@ const AgentSystemPage: React.FC = () => {
   const navigate = useNavigate();
   const orderEntryDropdownRef = useRef<HTMLDivElement | null>(null);
   const orderProductFilterRef = useRef<HTMLDivElement | null>(null);
+  const systemSwitchRef = useRef<HTMLDivElement | null>(null);
   const sectionRefs = useRef<Array<HTMLElement | null>>([]);
   const certificateFormRef = useRef<HTMLFormElement | null>(null);
   const deliveryFormRef = useRef<HTMLFormElement | null>(null);
   const [activeView, setActiveView] = useState<AgentPageView>(() => getInitialAgentPageView());
   const [orderEntryType, setOrderEntryType] = useState<OrderEntryType>('notary');
   const [isOrderEntryDropdownOpen, setIsOrderEntryDropdownOpen] = useState(false);
+  const [isSystemSwitchOpen, setIsSystemSwitchOpen] = useState(false);
   const [orderListStatus, setOrderListStatus] = useState<AgentOrderStatusTab>('');
   const [orderListProductIds, setOrderListProductIds] = useState<string[]>([]);
   const [isOrderProductFilterOpen, setIsOrderProductFilterOpen] = useState(false);
@@ -257,7 +371,12 @@ const AgentSystemPage: React.FC = () => {
   const [orderListStartDate, setOrderListStartDate] = useState('');
   const [orderListEndDate, setOrderListEndDate] = useState('');
   const [orderListPage, setOrderListPage] = useState(1);
+  const [uploadedCertificates, setUploadedCertificates] = useState<Record<string, { name: string; src: string }>>({});
   const orderEntryLabel = orderEntryOptions.find((item) => item.value === orderEntryType)?.label || '公证产品下单';
+  const isDomesticLicenseEntry = orderEntryType === 'domesticLicenseTranslation';
+  const [domesticLicenseForm, setDomesticLicenseForm] = useState<DomesticLicenseFormState>(() =>
+    createDomesticLicenseFormState(),
+  );
   const orderListProducts = useMemo(
     () =>
       getProducts()
@@ -266,11 +385,21 @@ const AgentSystemPage: React.FC = () => {
     [],
   );
   const activeProducts = useMemo(() => {
-    const activeCategory = orderEntryType === 'notary' ? 'notary' : 'translation';
+    const activeCategory = orderEntryType === 'notary' ? 'notary' : 'domestic_license';
+    const products = getProducts().filter((product) => product.category === activeCategory && product.status === 'active');
 
-    return getProducts()
-      .filter((product) => product.category === activeCategory && product.status === 'active')
-      .sort((a, b) => b.weight - a.weight || a.title.localeCompare(b.title, 'zh-CN'));
+    return products.sort((a, b) => {
+      if (orderEntryType === 'domesticLicenseTranslation') {
+        const aIsTarget = a.title === DOMESTIC_LICENSE_PRODUCT_TITLE;
+        const bIsTarget = b.title === DOMESTIC_LICENSE_PRODUCT_TITLE;
+
+        if (aIsTarget !== bIsTarget) {
+          return aIsTarget ? -1 : 1;
+        }
+      }
+
+      return b.weight - a.weight || a.title.localeCompare(b.title, 'zh-CN');
+    });
   }, [orderEntryType]);
   const [selectedProductId, setSelectedProductId] = useState('');
   const [selectedProcessTypeId, setSelectedProcessTypeId] = useState('');
@@ -303,6 +432,15 @@ const AgentSystemPage: React.FC = () => {
   const cityOptions = useMemo(
     () => provinceCityOptions.find((item) => item.province === selectedProvince)?.cities ?? [],
     [selectedProvince],
+  );
+  const domesticExchangeCityOptions = useMemo(
+    () => provinceCityOptions.find((item) => item.province === domesticLicenseForm.exchangeProvince)?.cities ?? [],
+    [domesticLicenseForm.exchangeProvince],
+  );
+  const domesticForeignCityOptions = useMemo(
+    () =>
+      domesticLicenseForeignLocationOptions.find((item) => item.country === domesticLicenseForm.foreignCountry)?.cities ?? [],
+    [domesticLicenseForm.foreignCountry],
   );
   const deliveryCityOptions = useMemo(
     () => deliveryRegionOptions.find((item) => item.province === deliveryProvince)?.cities ?? [],
@@ -344,8 +482,16 @@ const AgentSystemPage: React.FC = () => {
           order.productName,
           order.customerName,
           order.customerPhone,
+          order.customerPassport,
           order.trackingNumber,
           order.deliveryAddress,
+          order.licenseName,
+          order.licenseNo,
+          order.licenseCategory,
+          order.domesticLicenseInfo?.chineseName,
+          order.domesticLicenseInfo?.licenseNumber,
+          getDomesticExchangeCity(order),
+          getDomesticForeignLocation(order),
         ]
           .filter(Boolean)
           .join(' ')
@@ -405,6 +551,24 @@ const AgentSystemPage: React.FC = () => {
       setSelectedCity('');
     }
   }, [cityOptions, selectedCity]);
+
+  useEffect(() => {
+    if (
+      domesticLicenseForm.exchangeCity &&
+      !(domesticExchangeCityOptions as readonly string[]).includes(domesticLicenseForm.exchangeCity)
+    ) {
+      setDomesticLicenseForm((currentForm) => ({ ...currentForm, exchangeCity: '' }));
+    }
+  }, [domesticExchangeCityOptions, domesticLicenseForm.exchangeCity]);
+
+  useEffect(() => {
+    if (
+      domesticLicenseForm.foreignCity &&
+      !(domesticForeignCityOptions as readonly string[]).includes(domesticLicenseForm.foreignCity)
+    ) {
+      setDomesticLicenseForm((currentForm) => ({ ...currentForm, foreignCity: '' }));
+    }
+  }, [domesticForeignCityOptions, domesticLicenseForm.foreignCity]);
 
   useEffect(() => {
     if (!deliveryCityOptions.some((item) => item.city === deliveryCity)) {
@@ -467,6 +631,30 @@ const AgentSystemPage: React.FC = () => {
   }, [isOrderProductFilterOpen]);
 
   useEffect(() => {
+    if (!isSystemSwitchOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!systemSwitchRef.current?.contains(event.target as Node)) {
+        setIsSystemSwitchOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsSystemSwitchOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isSystemSwitchOpen]);
+
+  useEffect(() => {
     const updateActiveSection = () => {
       const pageBottomReached =
         window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
@@ -501,6 +689,58 @@ const AgentSystemPage: React.FC = () => {
     window.setTimeout(() => setToast(null), 2600);
   };
 
+  const updateDomesticLicenseForm = (patch: Partial<DomesticLicenseFormState>) => {
+    setDomesticLicenseForm((currentForm) => ({ ...currentForm, ...patch }));
+  };
+
+  const handleDomesticLicenseFileChange = async (
+    field: 'frontPhoto' | 'backPhoto' | 'passportPhoto',
+    nameField: 'frontPhotoName' | 'backPhotoName' | 'passportPhotoName',
+    file: File | null,
+  ) => {
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      showToast('请上传图片格式的附件');
+      return;
+    }
+
+    try {
+      const dataUrl = await resizeImageDataUrl(file);
+      updateDomesticLicenseForm({ [field]: dataUrl, [nameField]: file.name } as Partial<DomesticLicenseFormState>);
+      showToast(`${file.name} 已上传`);
+    } catch {
+      showToast('附件读取失败，请重新上传');
+    }
+  };
+
+  const handleCertificateFileChange = async (key: string, title: string, file: File | null) => {
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      showToast('请上传图片格式的附件');
+      return;
+    }
+
+    try {
+      const dataUrl = await resizeImageDataUrl(file);
+      setUploadedCertificates((currentItems) => ({
+        ...currentItems,
+        [key]: {
+          name: file.name,
+          src: dataUrl,
+        },
+      }));
+      showToast(`${title} 已上传`);
+    } catch {
+      showToast('附件读取失败，请重新上传');
+    }
+  };
+
   const handleProductChange = (value: string) => {
     const nextProduct = activeProducts.find((product) => product.productId === value) || null;
 
@@ -513,6 +753,11 @@ const AgentSystemPage: React.FC = () => {
     setOrderEntryType(value);
     setActiveView('orderEntry');
     setIsOrderEntryDropdownOpen(false);
+  };
+
+  const handleSystemSwitch = (targetPath: string) => {
+    setIsSystemSwitchOpen(false);
+    navigate(targetPath);
   };
 
   const handleAddressRecognition = () => {
@@ -555,6 +800,8 @@ const AgentSystemPage: React.FC = () => {
     setAddressRecognitionText('');
     setAddressRecognitionError('');
     setUseCountry('');
+    setDomesticLicenseForm(createDomesticLicenseFormState());
+    setUploadedCertificates({});
     setActiveSectionIndex(0);
     setSelectedProductId('');
     setSelectedProcessTypeId('');
@@ -576,6 +823,119 @@ const AgentSystemPage: React.FC = () => {
     const processType = selectedProcessType;
     if (!processType) {
       showToast('请先选择办理类型');
+      return;
+    }
+
+    if (isDomesticLicenseEntry) {
+      const missingMessage = (() => {
+        if (!domesticLicenseForm.exchangeProvince || !domesticLicenseForm.exchangeCity) return '请选择换证城市';
+        if (!domesticLicenseForm.foreignCountry || !domesticLicenseForm.foreignCity) return '请选择境外驾驶证发放国家及城市';
+        if (!domesticLicenseForm.chineseName.trim()) return '请填写中文姓名';
+        if (!domesticLicenseForm.frontPhoto) return '请上传驾照正面照片';
+        if (!domesticLicenseForm.backPhoto) return '请上传驾照反面照片';
+        return '';
+      })();
+
+      if (missingMessage) {
+        showToast(missingMessage);
+        return;
+      }
+
+      const deliveryData = deliveryFormRef.current ? new FormData(deliveryFormRef.current) : new FormData();
+      const deliveryAddress =
+        joinAddressSegments([
+          deliveryProvince,
+          deliveryCity,
+          deliveryDistrict,
+          readFormValue(deliveryData, 'deliveryAddress'),
+        ]) ||
+        addressRecognitionText.trim() ||
+        '待补充';
+      const currentTimestamp = formatBeijingTimestamp();
+      const customerName = readFormValue(deliveryData, 'customerName') || domesticLicenseForm.chineseName.trim();
+      setIsSubmittingOrder(true);
+      const licenseNumber = domesticLicenseForm.licenseNumber.trim() || `DL${Date.now().toString().slice(-8)}`;
+      let createdOrder: Order;
+
+      try {
+        createdOrder = addOrder({
+          customerName,
+          customerPhone: readFormValue(deliveryData, 'customerPhone') || '13800138000',
+          customerPassport: licenseNumber,
+          customerEmail: `agent-${Date.now()}@example.com`,
+          productId: product.productId,
+          productName: product.title,
+          productCategory: product.category,
+          processType: processType.name,
+          processTypeId: processType.typeId,
+          pushTimeliness: 'instant',
+          channel: 'private',
+          agentLevel: 'self',
+          lockedPrice: getProcessTypePrice(processType),
+          status: 'pending_review',
+          deliveryAddress,
+          logisticsCompany: '',
+          trackingNumber: '',
+          remark: '代理端提交',
+          licenseName: domesticLicenseForm.chineseName.trim(),
+          licenseNo: licenseNumber,
+          licenseCategory: domesticLicenseForm.classType.trim(),
+          licenseGender: domesticLicenseForm.sex,
+          licenseNationality: domesticLicenseForm.foreignCountry,
+          licenseBirthDate: domesticLicenseForm.birthDate,
+          licenseAddress: joinAddressSegments([domesticLicenseForm.foreignCountry, domesticLicenseForm.foreignCity]),
+          licenseFirstIssueDate: domesticLicenseForm.issueDate,
+          licenseValidUntilDate: domesticLicenseForm.expiryDate,
+          licenseArchiveNumber: domesticLicenseForm.fileNumber.trim(),
+          licenseIssuingRegion: joinAddressSegments([domesticLicenseForm.exchangeProvince, domesticLicenseForm.exchangeCity]),
+          useCountry: domesticLicenseForm.foreignCountry,
+          domesticLicenseInfo: {
+            exchangeProvince: domesticLicenseForm.exchangeProvince,
+            exchangeCity: domesticLicenseForm.exchangeCity,
+            foreignCountry: domesticLicenseForm.foreignCountry,
+            foreignCity: domesticLicenseForm.foreignCity,
+            chineseName: domesticLicenseForm.chineseName.trim(),
+            licenseNumber,
+            expiryDate: domesticLicenseForm.expiryDate,
+            surname: domesticLicenseForm.surname.trim(),
+            givenName: domesticLicenseForm.givenName.trim(),
+            birthDate: domesticLicenseForm.birthDate,
+            rstr: domesticLicenseForm.rstr.trim(),
+            sex: domesticLicenseForm.sex,
+            hairColor: domesticLicenseForm.hairColor.trim(),
+            eyeColor: domesticLicenseForm.eyeColor.trim(),
+            height: domesticLicenseForm.height.trim(),
+            weight: domesticLicenseForm.weight.trim(),
+            issueDate: domesticLicenseForm.issueDate,
+            fileNumber: domesticLicenseForm.fileNumber.trim(),
+            classType: domesticLicenseForm.classType.trim(),
+            endorsements: domesticLicenseForm.endorsements.trim(),
+            restrictions: domesticLicenseForm.restrictions.trim(),
+            other: domesticLicenseForm.other.trim(),
+            frontPhoto: domesticLicenseForm.frontPhoto,
+            backPhoto: domesticLicenseForm.backPhoto,
+            passportPhoto: domesticLicenseForm.passportPhoto || undefined,
+          },
+          createdAt: currentTimestamp,
+          updatedAt: currentTimestamp,
+          logs: [
+            {
+              time: currentTimestamp,
+              operator: '代理端',
+              action: `订单创建：代理端${DOMESTIC_LICENSE_PRODUCT_TITLE}确认提交`,
+            },
+          ],
+        });
+      } catch {
+        setIsSubmittingOrder(false);
+        showToast('订单提交失败，请重新上传较小的证件图片后再试');
+        return;
+      }
+
+      setAllAgentOrders((orders) => [createdOrder, ...orders.filter((order) => order.orderId !== createdOrder.orderId)]);
+      resetOrderEntryForm();
+      showToast(`订单 ${createdOrder.orderId} 提交成功`);
+      window.setTimeout(() => setIsSubmittingOrder(false), 700);
       return;
     }
 
@@ -678,11 +1038,44 @@ const AgentSystemPage: React.FC = () => {
     );
   };
 
+  const handleCancelAgentOrder = (order: Order) => {
+    if (!canCancelAgentOrder(order)) {
+      showToast('仅待审核订单可取消');
+      return;
+    }
+
+    const currentTimestamp = formatBeijingTimestamp();
+    const nextOrder: Order = {
+      ...order,
+      status: 'cancelled',
+      updatedAt: currentTimestamp,
+      logs: [
+        ...order.logs,
+        {
+          time: currentTimestamp,
+          operator: '代理端',
+          action: '取消订单',
+        },
+      ],
+    };
+
+    updateOrder(order.orderId, {
+      status: nextOrder.status,
+      updatedAt: nextOrder.updatedAt,
+      logs: nextOrder.logs,
+    });
+    setAllAgentOrders((orders) => orders.map((item) => (item.orderId === order.orderId ? nextOrder : item)));
+    setOrderDetailModalOrder((currentOrder) => (currentOrder?.orderId === order.orderId ? nextOrder : currentOrder));
+    setLicenseInfoModalOrder((currentOrder) => (currentOrder?.orderId === order.orderId ? nextOrder : currentOrder));
+    showToast(`订单 ${order.orderId} 已取消`);
+  };
+
   const renderOrderDetailModal = () => {
     if (!orderDetailModalOrder) return null;
 
     const order = orderDetailModalOrder;
     const shouldShowNotaryFields = isNotaryOrder(order);
+    const domesticInfo = order.domesticLicenseInfo;
 
     return (
       <div className="agent-modal-backdrop" role="presentation" onMouseDown={() => setOrderDetailModalOrder(null)}>
@@ -751,17 +1144,39 @@ const AgentSystemPage: React.FC = () => {
               <h3>驾照信息</h3>
               <div className="agent-modal__detail-grid agent-modal__detail-grid--three">
                 <div className="agent-modal__detail-item">
-                  <span>驾证号码：</span>
-                  <strong>{order.licenseNo || order.customerPassport}</strong>
-                </div>
-                <div className="agent-modal__detail-item">
-                  <span>姓名：</span>
-                  <strong>{order.licenseName || order.customerName}</strong>
+                  <span>{domesticInfo ? '中文姓名：' : '姓名：'}</span>
+                  <strong>{domesticInfo?.chineseName || order.licenseName || order.customerName}</strong>
                 </div>
                 <div className="agent-modal__detail-item">
                   <span>准驾车型：</span>
-                  <strong>{order.licenseCategory || 'C1'}</strong>
+                  <strong>{domesticInfo?.classType || order.licenseCategory || 'C1'}</strong>
                 </div>
+                {domesticInfo && (
+                  <>
+                    <div className="agent-modal__detail-item">
+                      <span>换证城市：</span>
+                      <strong>{getDomesticExchangeCity(order) || '-'}</strong>
+                    </div>
+                    <div className="agent-modal__detail-item agent-modal__detail-item--wide">
+                      <span>境外驾驶证发放国家及城市：</span>
+                      <strong>{getDomesticForeignLocation(order) || '-'}</strong>
+                    </div>
+                    <div className="agent-modal__detail-item">
+                      <span>DL/驾驶证编号：</span>
+                      <strong>{domesticInfo.licenseNumber || order.licenseNo || order.customerPassport}</strong>
+                    </div>
+                    <div className="agent-modal__detail-item">
+                      <span>有效期至：</span>
+                      <strong>{domesticInfo.expiryDate || '-'}</strong>
+                    </div>
+                  </>
+                )}
+                {!domesticInfo && (
+                  <div className="agent-modal__detail-item">
+                    <span>驾照编号：</span>
+                    <strong>{order.licenseNo || order.customerPassport}</strong>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -800,12 +1215,43 @@ const AgentSystemPage: React.FC = () => {
     if (!licenseInfoModalOrder) return null;
 
     const order = licenseInfoModalOrder;
-    const licensePhotoItems = [
-      { label: '驾照正面', src: orderPreviewAssets.licenseFront },
-      { label: '驾照反面', src: orderPreviewAssets.licenseBack },
-      { label: '驾照副页正面照片', src: orderPreviewAssets.extraFront },
-      { label: '驾照副页反面照片', src: orderPreviewAssets.extraBack },
-    ];
+    const domesticInfo = order.domesticLicenseInfo;
+    const licensePhotoItems = domesticInfo
+      ? [
+          { label: '驾照正面照片', src: domesticInfo.frontPhoto },
+          { label: '驾照反面照片', src: domesticInfo.backPhoto },
+          ...(domesticInfo.passportPhoto ? [{ label: '护照', src: domesticInfo.passportPhoto }] : []),
+        ]
+      : [
+          { label: '驾照正面', src: orderPreviewAssets.licenseFront },
+          { label: '驾照反面', src: orderPreviewAssets.licenseBack },
+          { label: '驾照副页正面照片', src: orderPreviewAssets.extraFront },
+          { label: '驾照副页反面照片', src: orderPreviewAssets.extraBack },
+        ];
+    const domesticLicenseFieldItems: Array<[string, string | undefined]> = domesticInfo
+      ? [
+          ['中文姓名', domesticInfo.chineseName || order.licenseName || order.customerName],
+          ['换证城市', getDomesticExchangeCity(order)],
+          ['境外驾驶证发放国家及城市', getDomesticForeignLocation(order)],
+          ['DL/驾驶证编号', domesticInfo.licenseNumber || order.licenseNo || order.customerPassport],
+          ['EXP/有效期至', domesticInfo.expiryDate],
+          ['LN/姓', domesticInfo.surname],
+          ['FN/名', domesticInfo.givenName],
+          ['DOB/出生日期', domesticInfo.birthDate],
+          ['RSTR/限制条件', domesticInfo.rstr],
+          ['SEX/性别', domesticInfo.sex],
+          ['HAIR/头发颜色', domesticInfo.hairColor],
+          ['EYES/眼睛', domesticInfo.eyeColor],
+          ['HGT/身高', domesticInfo.height],
+          ['WGT/体重', domesticInfo.weight],
+          ['ISS/签发日期', domesticInfo.issueDate],
+          ['DD/文件识别号', domesticInfo.fileNumber],
+          ['CLASS/准驾车型', domesticInfo.classType || order.licenseCategory],
+          ['ENDORSEMENTS/额外准驾车型', domesticInfo.endorsements],
+          ['RESTRICTIONS/限制条件', domesticInfo.restrictions],
+          ['其他', domesticInfo.other],
+        ]
+      : [];
 
     return (
       <div className="agent-modal-backdrop" role="presentation" onMouseDown={() => setLicenseInfoModalOrder(null)}>
@@ -828,22 +1274,35 @@ const AgentSystemPage: React.FC = () => {
               <section className="agent-license-modal__panel">
                 <h3>驾照信息</h3>
                 <div className="agent-license-modal__fields">
-                  <div><span>驾证号码：</span><strong>{order.licenseNo || order.customerPassport}</strong></div>
-                  <div><span>姓名：</span><strong>{order.licenseName || order.customerName}</strong></div>
-                  <div><span>姓氏拼音：</span><strong>{order.idpSurnameEn || '-'}</strong></div>
-                  <div><span>名字拼音：</span><strong>{order.idpGivenNameEn || '-'}</strong></div>
-                  <div><span>性别：</span><strong>{order.licenseGender || '-'}</strong></div>
-                  <div><span>国籍：</span><strong>{order.licenseNationality || '-'}</strong></div>
-                  <div><span>出生日期：</span><strong>{order.licenseBirthDate || '-'}</strong></div>
-                  <div><span>驾照地址详情：</span><strong>{order.licenseAddress || '-'}</strong></div>
-                  <div><span>准驾车型：</span><strong>{order.licenseCategory || 'C1'}</strong></div>
-                  <div><span>档案编号：</span><strong>{order.licenseArchiveNumber || '-'}</strong></div>
-                  <div><span>条形码：</span><strong>{order.licenseBarcodeNumber || '-'}</strong></div>
-                  <div><span>初次领证日期：</span><strong>{order.licenseFirstIssueDate || '-'}</strong></div>
-                  <div><span>有效起始日期：</span><strong>{order.licenseValidFromDate || '-'}</strong></div>
-                  <div><span>有效年限：</span><strong>{order.licenseValidYears || '-'}</strong></div>
-                  <div><span>发证地区(省市)：</span><strong>{order.licenseIssuingRegion || '-'}</strong></div>
-                  <div><span>发证机构：</span><strong>{order.licenseIssuingAuthority || '-'}</strong></div>
+                  {domesticInfo ? (
+                    <>
+                      {domesticLicenseFieldItems.map(([label, value]) => (
+                        <div key={label}>
+                          <span>{label}：</span>
+                          <strong>{value || '-'}</strong>
+                        </div>
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      <div><span>驾证号码：</span><strong>{order.licenseNo || order.customerPassport}</strong></div>
+                      <div><span>姓名：</span><strong>{order.licenseName || order.customerName}</strong></div>
+                      <div><span>姓氏拼音：</span><strong>{order.idpSurnameEn || '-'}</strong></div>
+                      <div><span>名字拼音：</span><strong>{order.idpGivenNameEn || '-'}</strong></div>
+                      <div><span>性别：</span><strong>{order.licenseGender || '-'}</strong></div>
+                      <div><span>国籍：</span><strong>{order.licenseNationality || '-'}</strong></div>
+                      <div><span>出生日期：</span><strong>{order.licenseBirthDate || '-'}</strong></div>
+                      <div><span>驾照地址详情：</span><strong>{order.licenseAddress || '-'}</strong></div>
+                      <div><span>准驾车型：</span><strong>{order.licenseCategory || 'C1'}</strong></div>
+                      <div><span>档案编号：</span><strong>{order.licenseArchiveNumber || '-'}</strong></div>
+                      <div><span>条形码：</span><strong>{order.licenseBarcodeNumber || '-'}</strong></div>
+                      <div><span>初次领证日期：</span><strong>{order.licenseFirstIssueDate || '-'}</strong></div>
+                      <div><span>有效起始日期：</span><strong>{order.licenseValidFromDate || '-'}</strong></div>
+                      <div><span>有效年限：</span><strong>{order.licenseValidYears || '-'}</strong></div>
+                      <div><span>发证地区(省市)：</span><strong>{order.licenseIssuingRegion || '-'}</strong></div>
+                      <div><span>发证机构：</span><strong>{order.licenseIssuingAuthority || '-'}</strong></div>
+                    </>
+                  )}
                 </div>
               </section>
 
@@ -977,6 +1436,10 @@ const AgentSystemPage: React.FC = () => {
               {paginatedAgentOrders.map((order) => {
                 const productionRecords = getProductionOrderRecords(order);
                 const shouldShowNotaryFields = isNotaryOrder(order);
+                const domesticInfo = order.domesticLicenseInfo;
+                const agentOrderStatus = getAgentOrderStatus(order.status);
+                const shouldShowShippingInfo =
+                  agentOrderStatus === 'shipped' && Boolean(order.logisticsCompany || order.trackingNumber);
 
                 return (
                   <tr key={order.orderId}>
@@ -991,30 +1454,62 @@ const AgentSystemPage: React.FC = () => {
                           <span className="agent-order-table__language-pill">{order.language}</span>
                         )}
                       </div>
-                      <div className="agent-order-table__meta">
-                        收件人：{order.customerName}
-                        <br />
-                        手机：{order.customerPhone}
-                        <br />
-                        收货地址：{order.deliveryAddress}
-                        <br />
-                        办理类型：
-                        <span className="agent-order-table__process-pill">{order.processType || '正常办理'}</span>
+                      <div className="agent-order-table__meta agent-order-table__product-meta">
+                        <div>
+                          <span>收件人</span>
+                          <strong>{order.customerName}</strong>
+                        </div>
+                        <div>
+                          <span>手机</span>
+                          <strong>{order.customerPhone}</strong>
+                        </div>
+                        <div>
+                          <span>收货地址</span>
+                          <strong>{order.deliveryAddress}</strong>
+                        </div>
+                        <div className="agent-order-table__product-process">
+                          <span className="agent-order-table__process-pill">{order.processType || '正常办理'}</span>
+                        </div>
                       </div>
                     </td>
                     <td>
-                      <div className="agent-order-table__meta">
-                        准驾车型：{order.licenseCategory || 'C1'}
-                        <br />
-                        姓名：{order.licenseName || order.customerName}
-                        <br />
-                        驾照号：{order.licenseNo || order.customerPassport}
+                      <div className="agent-order-table__meta agent-order-table__license-meta">
+                        <div>
+                          <span>准驾车型</span>
+                          <strong>{domesticInfo?.classType || order.licenseCategory || 'C1'}</strong>
+                        </div>
+                        <div>
+                          <span>{domesticInfo ? '中文姓名' : '姓名'}</span>
+                          <strong>{domesticInfo?.chineseName || order.licenseName || order.customerName}</strong>
+                        </div>
+                        <div>
+                          <span>驾照编号</span>
+                          <strong>{domesticInfo?.licenseNumber || order.licenseNo || order.customerPassport}</strong>
+                        </div>
+                        {domesticInfo && (
+                          <>
+                            <div>
+                              <span>换证城市</span>
+                              <strong>{getDomesticExchangeCity(order) || '-'}</strong>
+                            </div>
+                            <div>
+                              <span>境外驾驶证发放国家及城市</span>
+                              <strong>{getDomesticForeignLocation(order) || '-'}</strong>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </td>
                     <td>
                       <span className={getAgentOrderStatusClassName(order.status)}>
                         {getAgentOrderStatusLabel(order.status)}
                       </span>
+                      {shouldShowShippingInfo && (
+                        <div className="agent-order-status__shipping">
+                          <span>{order.logisticsCompany || '物流已发出'}</span>
+                          <span>{order.trackingNumber || '--'}</span>
+                        </div>
+                      )}
                     </td>
                     <td className="agent-order-table__record">
                       {productionRecords.length > 0 ? (
@@ -1033,8 +1528,8 @@ const AgentSystemPage: React.FC = () => {
                         <button type="button" onClick={() => setLicenseInfoModalOrder(order)}>
                           驾照信息
                         </button>
-                        {getAgentOrderStatus(order.status) === 'pending_review' && (
-                          <button type="button" onClick={() => showToast('取消订单入口已打开')}>
+                        {canCancelAgentOrder(order) && (
+                          <button type="button" onClick={() => handleCancelAgentOrder(order)}>
                             取消订单
                           </button>
                         )}
@@ -1155,9 +1650,35 @@ const AgentSystemPage: React.FC = () => {
           ))}
         </nav>
 
-        <button type="button" className="agent-system-header__back" onClick={() => navigate('/')}>
-          返回后台
-        </button>
+        <div
+          ref={systemSwitchRef}
+          className={`agent-system-switch ${isSystemSwitchOpen ? 'agent-system-switch--open' : ''}`}
+        >
+          <button
+            type="button"
+            className="agent-system-switch__trigger"
+            onClick={() => setIsSystemSwitchOpen((prev) => !prev)}
+            aria-haspopup="menu"
+            aria-expanded={isSystemSwitchOpen}
+          >
+            切换系统
+            <span aria-hidden="true">⌄</span>
+          </button>
+          {isSystemSwitchOpen && (
+            <div className="agent-system-switch__menu" role="menu" aria-label="切换系统">
+              <button type="button" role="menuitem" onClick={() => handleSystemSwitch('/')}>
+                切换管理端
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => handleSystemSwitch('/license-officer/orders/chinese-translation')}
+              >
+                切换生产端
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
       {activeView === 'orderList' ? (
@@ -1180,10 +1701,10 @@ const AgentSystemPage: React.FC = () => {
 
           <main className="agent-order-main animate-fadeIn">
           <section ref={(node) => assignSectionRef(0, node)} className="agent-panel agent-product-panel">
-            <div className="agent-panel__title">选择产品 - {orderEntryLabel}</div>
+            <div className="agent-panel__title">选择产品</div>
             <div className="agent-product-stack">
               <label className="agent-field agent-field--wide">
-                <span>选择{orderEntryLabel}</span>
+                <span>选择产品</span>
                 <select
                   value={selectedProductId}
                   disabled={activeProducts.length === 0}
@@ -1201,41 +1722,323 @@ const AgentSystemPage: React.FC = () => {
                   )}
                 </select>
               </label>
-              <div className="agent-field agent-field--wide agent-field--radio">
-                <span>语言选择</span>
-                <div className="agent-radio-group agent-language-group" aria-label="语言选择">
-                  {languageOptions.length > 0 ? (
-                    languageOptions.map((language) => (
-                      <label key={language}>
-                        <input
-                          type="radio"
-                          name="language"
-                          value={language}
-                          checked={selectedLanguage === language}
-                          onChange={(event) => setSelectedLanguage(event.target.value)}
-                        />
-                        {language}
-                      </label>
-                    ))
-                  ) : (
-                    <span className="agent-empty-hint">请先选择产品</span>
-                  )}
-                </div>
-              </div>
-              <label className="agent-field agent-field--wide">
-                <span>使用国家 <em className="agent-required">*</em></span>
-                <input
-                  value={useCountry}
-                  placeholder="请输入使用国家"
-                  onChange={(event) => setUseCountry(event.target.value)}
-                />
-              </label>
+              {isDomesticLicenseEntry ? (
+                <>
+                  <div className="agent-field agent-field--wide">
+                    <span>换证城市 <em className="agent-required">*</em></span>
+                    <div className="agent-region-selects">
+                      <select
+                        value={domesticLicenseForm.exchangeProvince}
+                        onChange={(event) =>
+                          updateDomesticLicenseForm({ exchangeProvince: event.target.value, exchangeCity: '' })
+                        }
+                      >
+                        <option value="" disabled>请选择省份</option>
+                        {provinceCityOptions.map((item) => (
+                          <option key={item.province} value={item.province}>
+                            {item.province}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={domesticLicenseForm.exchangeCity}
+                        disabled={!domesticLicenseForm.exchangeProvince}
+                        onChange={(event) => updateDomesticLicenseForm({ exchangeCity: event.target.value })}
+                      >
+                        <option value="" disabled>请选择城市</option>
+                        {domesticExchangeCityOptions.map((city) => (
+                          <option key={city} value={city}>
+                            {city}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="agent-field agent-field--wide">
+                    <span>境外驾驶证发放国家及城市 <em className="agent-required">*</em></span>
+                    <div className="agent-region-selects">
+                      <select
+                        value={domesticLicenseForm.foreignCountry}
+                        onChange={(event) =>
+                          updateDomesticLicenseForm({ foreignCountry: event.target.value, foreignCity: '' })
+                        }
+                      >
+                        <option value="" disabled>请选择国家</option>
+                        {domesticLicenseForeignLocationOptions.map((item) => (
+                          <option key={item.country} value={item.country}>
+                            {item.country}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={domesticLicenseForm.foreignCity}
+                        disabled={!domesticLicenseForm.foreignCountry}
+                        onChange={(event) => updateDomesticLicenseForm({ foreignCity: event.target.value })}
+                      >
+                        <option value="" disabled>请选择城市/州</option>
+                        {domesticForeignCityOptions.map((city) => (
+                          <option key={city} value={city}>
+                            {city}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <label className="agent-field agent-field--wide">
+                    <span>中文姓名 <em className="agent-required">*</em></span>
+                    <input
+                      value={domesticLicenseForm.chineseName}
+                      placeholder="请输入最终翻译件体现的中文姓名"
+                      onChange={(event) => updateDomesticLicenseForm({ chineseName: event.target.value })}
+                    />
+                  </label>
+                </>
+              ) : (
+                <>
+                  <div className="agent-field agent-field--wide agent-field--radio">
+                    <span>语言选择</span>
+                    <div className="agent-radio-group agent-language-group" aria-label="语言选择">
+                      {languageOptions.length > 0 ? (
+                        languageOptions.map((language) => (
+                          <label key={language}>
+                            <input
+                              type="radio"
+                              name="language"
+                              value={language}
+                              checked={selectedLanguage === language}
+                              onChange={(event) => setSelectedLanguage(event.target.value)}
+                            />
+                            {language}
+                          </label>
+                        ))
+                      ) : (
+                        <span className="agent-empty-hint">请先选择产品</span>
+                      )}
+                    </div>
+                  </div>
+                  <label className="agent-field agent-field--wide">
+                    <span>使用国家 <em className="agent-required">*</em></span>
+                    <input
+                      value={useCountry}
+                      placeholder="请输入使用国家"
+                      onChange={(event) => setUseCountry(event.target.value)}
+                    />
+                  </label>
+                </>
+              )}
             </div>
           </section>
 
           <section ref={(node) => assignSectionRef(1, node)} className="agent-panel">
             <div className="agent-panel__title">确认驾照信息</div>
             <div className="agent-certificate-layout">
+              {isDomesticLicenseEntry ? (
+                <>
+                  <form className="agent-form-grid agent-form-grid--domestic">
+                    <label className="agent-field">
+                      <span>DL/驾驶证编号</span>
+                      <input
+                        value={domesticLicenseForm.licenseNumber}
+                        placeholder="请输入驾驶证编号"
+                        onChange={(event) => updateDomesticLicenseForm({ licenseNumber: event.target.value })}
+                      />
+                    </label>
+                    <label className="agent-field">
+                      <span>EXP/有效期至</span>
+                      <DatePickerInput
+                        ariaLabel="有效期至"
+                        placeholder="请选择有效期"
+                        value={domesticLicenseForm.expiryDate}
+                        onChange={(value) => updateDomesticLicenseForm({ expiryDate: value })}
+                      />
+                    </label>
+                    <label className="agent-field">
+                      <span>LN/姓</span>
+                      <input
+                        value={domesticLicenseForm.surname}
+                        placeholder="请输入姓"
+                        onChange={(event) => updateDomesticLicenseForm({ surname: event.target.value })}
+                      />
+                    </label>
+                    <label className="agent-field">
+                      <span>FN/名</span>
+                      <input
+                        value={domesticLicenseForm.givenName}
+                        placeholder="请输入名"
+                        onChange={(event) => updateDomesticLicenseForm({ givenName: event.target.value })}
+                      />
+                    </label>
+                    <label className="agent-field">
+                      <span>DOB/出生日期</span>
+                      <DatePickerInput
+                        ariaLabel="出生日期"
+                        placeholder="请选择出生日期"
+                        value={domesticLicenseForm.birthDate}
+                        onChange={(value) => updateDomesticLicenseForm({ birthDate: value })}
+                      />
+                    </label>
+                    <label className="agent-field">
+                      <span>RSTR/限制条件</span>
+                      <input
+                        value={domesticLicenseForm.rstr}
+                        placeholder="请输入限制条件"
+                        onChange={(event) => updateDomesticLicenseForm({ rstr: event.target.value })}
+                      />
+                    </label>
+                    <div className="agent-field agent-field--radio">
+                      <span>SEX/性别</span>
+                      <div className="agent-radio-group">
+                        {['男', '女'].map((sex) => (
+                          <label key={sex}>
+                            <input
+                              type="radio"
+                              name="domestic-sex"
+                              value={sex}
+                              checked={domesticLicenseForm.sex === sex}
+                              onChange={(event) => updateDomesticLicenseForm({ sex: event.target.value })}
+                            />
+                            {sex}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <label className="agent-field">
+                      <span>HAIR/头发颜色</span>
+                      <select
+                        value={domesticLicenseForm.hairColor}
+                        onChange={(event) => updateDomesticLicenseForm({ hairColor: event.target.value })}
+                      >
+                        <option value="">请选择头发颜色</option>
+                        {['黑色', '棕色', '金色', '灰色', '红色', '其他'].map((color) => (
+                          <option key={color} value={color}>{color}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="agent-field">
+                      <span>EYES/眼睛</span>
+                      <select
+                        value={domesticLicenseForm.eyeColor}
+                        onChange={(event) => updateDomesticLicenseForm({ eyeColor: event.target.value })}
+                      >
+                        <option value="">请选择眼睛颜色</option>
+                        {['黑色', '棕色', '蓝色', '绿色', '灰色', '其他'].map((color) => (
+                          <option key={color} value={color}>{color}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="agent-field">
+                      <span>HGT/身高</span>
+                      <input
+                        value={domesticLicenseForm.height}
+                        placeholder="例如 170cm / 5-08"
+                        onChange={(event) => updateDomesticLicenseForm({ height: event.target.value })}
+                      />
+                    </label>
+                    <label className="agent-field">
+                      <span>WGT/体重</span>
+                      <input
+                        value={domesticLicenseForm.weight}
+                        placeholder="例如 65kg / 145lb"
+                        onChange={(event) => updateDomesticLicenseForm({ weight: event.target.value })}
+                      />
+                    </label>
+                    <label className="agent-field">
+                      <span>ISS/签发日期</span>
+                      <DatePickerInput
+                        ariaLabel="签发日期"
+                        placeholder="请选择签发日期"
+                        value={domesticLicenseForm.issueDate}
+                        onChange={(value) => updateDomesticLicenseForm({ issueDate: value })}
+                      />
+                    </label>
+                    <label className="agent-field">
+                      <span>DD/文件识别号</span>
+                      <input
+                        value={domesticLicenseForm.fileNumber}
+                        placeholder="请输入文件识别号"
+                        onChange={(event) => updateDomesticLicenseForm({ fileNumber: event.target.value })}
+                      />
+                    </label>
+                    <label className="agent-field">
+                      <span>CLASS/准驾车型</span>
+                      <input
+                        value={domesticLicenseForm.classType}
+                        placeholder="请输入准驾车型"
+                        onChange={(event) => updateDomesticLicenseForm({ classType: event.target.value })}
+                      />
+                    </label>
+                    <label className="agent-field">
+                      <span>ENDORSEMENTS/额外准驾车型</span>
+                      <input
+                        value={domesticLicenseForm.endorsements}
+                        placeholder="请输入额外准驾车型"
+                        onChange={(event) => updateDomesticLicenseForm({ endorsements: event.target.value })}
+                      />
+                    </label>
+                    <label className="agent-field">
+                      <span>RESTRICTIONS/限制条件</span>
+                      <input
+                        value={domesticLicenseForm.restrictions}
+                        placeholder="请输入限制条件"
+                        onChange={(event) => updateDomesticLicenseForm({ restrictions: event.target.value })}
+                      />
+                    </label>
+                    <label className="agent-field agent-field--textarea">
+                      <span>其他</span>
+                      <textarea
+                        value={domesticLicenseForm.other}
+                        placeholder="请输入其他需要体现在翻译件中的信息"
+                        onChange={(event) => updateDomesticLicenseForm({ other: event.target.value })}
+                      />
+                    </label>
+                    <div className="agent-form-actions agent-form-actions--compact">
+                      <button type="button" className="agent-button agent-button--primary" onClick={() => showToast('驾照信息已确认')}>
+                        确认驾照信息
+                      </button>
+                    </div>
+                  </form>
+
+                  <div className="agent-upload-board" aria-label="上传附件">
+                    <div className="agent-upload-board__title">上传相关证件</div>
+                    <div className="agent-upload-grid">
+                      {domesticLicenseAttachmentFields.map((item) => {
+                        const previewSrc = domesticLicenseForm[item.key];
+                        const fileName = domesticLicenseForm[item.nameKey];
+
+                        return (
+                          <label
+                            key={item.key}
+                            className={`agent-upload-card agent-upload-card--green ${previewSrc ? 'agent-upload-card--filled' : ''}`}
+                          >
+                            {previewSrc ? (
+                              <span className="agent-upload-card__preview">
+                                <img src={previewSrc} alt={`${item.label}预览`} />
+                              </span>
+                            ) : (
+                              <span className="agent-upload-card__icon">+</span>
+                            )}
+                            <span className="agent-upload-card__label">
+                              {item.label}
+                              {item.required && <em className="agent-required">*</em>}
+                            </span>
+                            <small>{fileName || (previewSrc ? '点击更换图片' : '点击上传图片')}</small>
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/jpg,image/webp"
+                              className="agent-upload-card__input"
+                              onChange={(event) => {
+                                void handleDomesticLicenseFileChange(item.key, item.nameKey, event.target.files?.[0] || null);
+                                event.target.value = '';
+                              }}
+                            />
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
               <form ref={certificateFormRef} className="agent-form-grid">
                 <label className="agent-field">
                   <span>驾驶证号码</span>
@@ -1379,19 +2182,39 @@ const AgentSystemPage: React.FC = () => {
               <div className="agent-upload-board" aria-label="上传材料">
                 <div className="agent-upload-board__title">上传相关证件</div>
                 <div className="agent-upload-grid">
-                  {uploadItems.map((item) => (
-                    <button
-                      key={item.title}
-                      type="button"
-                      className={`agent-upload-card agent-upload-card--${item.tone}`}
-                      onClick={() => showToast(`${item.title}上传入口已打开`)}
-                    >
-                      <span className="agent-upload-card__icon">+</span>
-                      <span>{item.title}</span>
-                    </button>
-                  ))}
+                  {uploadItems.map((item) => {
+                    const uploadedItem = uploadedCertificates[item.key];
+
+                    return (
+                      <label
+                        key={item.key}
+                        className={`agent-upload-card agent-upload-card--${item.tone} ${uploadedItem ? 'agent-upload-card--filled' : ''}`}
+                      >
+                        {uploadedItem ? (
+                          <span className="agent-upload-card__preview">
+                            <img src={uploadedItem.src} alt={`${item.title}预览`} />
+                          </span>
+                        ) : (
+                          <span className="agent-upload-card__icon">+</span>
+                        )}
+                        <span className="agent-upload-card__label">{item.title}</span>
+                        <small>{uploadedItem?.name || (uploadedItem ? '点击更换图片' : '点击上传图片')}</small>
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/jpg,image/webp"
+                          className="agent-upload-card__input"
+                          onChange={(event) => {
+                            void handleCertificateFileChange(item.key, item.title, event.target.files?.[0] || null);
+                            event.target.value = '';
+                          }}
+                        />
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
+                </>
+              )}
             </div>
           </section>
 
