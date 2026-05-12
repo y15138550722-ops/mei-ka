@@ -3,6 +3,11 @@ export interface NotaryExportImageSource {
   src: string;
 }
 
+export interface NotaryExportImageBlob {
+  blob: Blob;
+  label?: string;
+}
+
 const INVALID_DOWNLOAD_FILENAME_PATTERN = /[\\/:*?"<>|]/g;
 
 interface PdfImagePage {
@@ -120,10 +125,9 @@ const canvasToJpegBlob = (canvas: HTMLCanvasElement) =>
     );
   });
 
-const buildPdfImagePage = async ({ src }: NotaryExportImageSource): Promise<PdfImagePage> => {
+const buildPdfImagePageFromBlob = async (sourceBlob: Blob): Promise<PdfImagePage> => {
   ensureBrowserRuntime();
 
-  const sourceBlob = await fetchAssetBlob(src);
   const image = await loadImageElement(sourceBlob);
   const orientation = image.naturalWidth > image.naturalHeight ? 'landscape' : 'portrait';
   const { width: pageWidth, height: pageHeight } = PDF_PAGE_SIZE[orientation];
@@ -163,6 +167,12 @@ const buildPdfImagePage = async ({ src }: NotaryExportImageSource): Promise<PdfI
     x: (pageWidth - drawWidth) / 2,
     y: (pageHeight - drawHeight) / 2,
   };
+};
+
+const buildPdfImagePage = async ({ src }: NotaryExportImageSource): Promise<PdfImagePage> => {
+  const sourceBlob = await fetchAssetBlob(src);
+
+  return buildPdfImagePageFromBlob(sourceBlob);
 };
 
 const buildPdfDocument = (pages: PdfImagePage[]) => {
@@ -266,6 +276,24 @@ export const exportNotaryImagesToPdf = async (images: NotaryExportImageSource[],
 
   for (const image of validImages) {
     pages.push(await buildPdfImagePage(image));
+  }
+
+  const pdfBytes = buildPdfDocument(pages);
+  const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+  triggerBlobDownload(pdfBlob, fileName);
+};
+
+export const exportNotaryImageBlobsToPdf = async (images: NotaryExportImageBlob[], fileName: string) => {
+  const validImages = images.filter((image) => image.blob.size > 0);
+
+  if (validImages.length === 0) {
+    throw new Error('No images available for export');
+  }
+
+  const pages: PdfImagePage[] = [];
+
+  for (const image of validImages) {
+    pages.push(await buildPdfImagePageFromBlob(image.blob));
   }
 
   const pdfBytes = buildPdfDocument(pages);

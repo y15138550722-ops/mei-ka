@@ -9,3 +9,4 @@ dev-server*.log
 dev-server*.err.log
 cloudflared-tunnel*.log
 static-server*.log
+temp/

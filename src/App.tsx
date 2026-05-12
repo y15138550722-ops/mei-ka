@@ -20,6 +20,7 @@ const NotaryOrderPreview = lazy(() => import('./modules/notary-office/NotaryOrde
 const AgentSystemPage = lazy(() => import('./modules/agent-system/AgentSystemPage'));
 const LicenseOfficerLayout = lazy(() => import('./modules/license-officer/LicenseOfficerLayout'));
 const ChineseTranslationOrders = lazy(() => import('./modules/license-officer/ChineseTranslationOrders'));
+const DomesticLicenseTranslationEditor = lazy(() => import('./modules/license-officer/DomesticLicenseTranslationEditor'));
 const LoginPage = lazy(() => import('./modules/auth/LoginPage'));
 
 interface ProtectedLayoutProps {
@@ -98,6 +99,7 @@ const App: React.FC = () => {
             element={<Navigate to="/license-officer/orders/chinese-translation" replace />}
           />
           <Route path="/license-officer/orders/chinese-translation" element={<ChineseTranslationOrders />} />
+          <Route path="/license-officer/orders/chinese-translation/docx/:orderId" element={<DomesticLicenseTranslationEditor />} />
         </Route>
 
         <Route element={<ProtectedLayout currentUser={currentUser} onLogout={handleLogout} />}>

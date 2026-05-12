@@ -25,6 +25,7 @@ const PRODUCT_STORAGE_KEY = 'meika-products';
 const PRODUCT_NEXT_ID_STORAGE_KEY = 'meika-products-next-id';
 const ORDER_STORAGE_KEY = 'meika-orders';
 const ORDER_DATA_VERSION_STORAGE_KEY = 'meika-order-data-version';
+export const ORDER_DATA_CHANGED_EVENT = 'meika-orders-changed';
 const ORDER_DATA_VERSION = 'notary-management-all-pending-review-v3';
 const REMOVED_ORDER_IDS = new Set(['MK2600057', 'MK2600061']);
 
@@ -63,6 +64,7 @@ const PRODUCT_CATEGORIES: ProductCategory[] = ['translation', 'notary', 'idp', '
 const EXTRA_IDP_PENDING_ORDER_COUNT = 5;
 const NOTARY_PENDING_REVIEW_ORDER_COUNT = 20;
 const DOMESTIC_LICENSE_PRODUCT_TITLE = '换国内驾照翻译件';
+const DOMESTIC_LICENSE_UNTRANSLATED_ORDER_IDS = ['MK2600087', 'MK2600088', 'MK2600089', 'MK2600090', 'MK2600091'];
 const PRODUCT_SEEDS: Array<{
   title: string;
   category: ProductCategory;
@@ -479,6 +481,7 @@ const persistOrders = () => {
   if (!isBrowser()) return;
   window.localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(_orders));
   window.localStorage.setItem(ORDER_DATA_VERSION_STORAGE_KEY, ORDER_DATA_VERSION);
+  window.dispatchEvent(new Event(ORDER_DATA_CHANGED_EVENT));
 };
 
 const loadProducts = (): Product[] => {
@@ -573,7 +576,15 @@ const loadOrders = (products: Product[]): Order[] => {
       (order) => !existingNonNotaryOrderIds.has(order.orderId),
     );
     const missingDefaultNonNotaryOrderIds = new Set(missingDefaultNonNotaryOrders.map((order) => order.orderId));
-    const occupiedOrderIds = new Set([...storedOrders.map((order) => order.orderId), ...missingDefaultNonNotaryOrderIds]);
+    const missingDomesticUntranslatedOrders = createDomesticLicenseUntranslatedOrders(products).filter(
+      (order) => !existingNonNotaryOrderIds.has(order.orderId) && !missingDefaultNonNotaryOrderIds.has(order.orderId),
+    );
+    const missingDomesticUntranslatedOrderIds = new Set(missingDomesticUntranslatedOrders.map((order) => order.orderId));
+    const occupiedOrderIds = new Set([
+      ...storedOrders.map((order) => order.orderId),
+      ...missingDefaultNonNotaryOrderIds,
+      ...missingDomesticUntranslatedOrderIds,
+    ]);
     const hasDomesticLicenseOrders = storedOrders.some((order) => order.domesticLicenseInfo);
     const missingDomesticLicenseOrders = hasDomesticLicenseOrders
       ? []
@@ -600,8 +611,13 @@ const loadOrders = (products: Product[]): Order[] => {
             };
           });
     const resetKeptOrderIds = new Set(
-      [...storedNonNotaryOrders, ...storedAgentSubmittedNotaryOrders, ...missingDefaultNonNotaryOrders, ...missingDomesticLicenseOrders]
-        .map((order) => order.orderId),
+      [
+        ...storedNonNotaryOrders,
+        ...storedAgentSubmittedNotaryOrders,
+        ...missingDefaultNonNotaryOrders,
+        ...missingDomesticUntranslatedOrders,
+        ...missingDomesticLicenseOrders,
+      ].map((order) => order.orderId),
     );
     const resetDefaultNotaryOrders = defaultNotaryOrders.filter((order) => !resetKeptOrderIds.has(order.orderId));
     const mergedOrders = shouldResetNotaryOrders
@@ -609,10 +625,11 @@ const loadOrders = (products: Product[]): Order[] => {
           ...storedNonNotaryOrders,
           ...storedAgentSubmittedNotaryOrders,
           ...missingDefaultNonNotaryOrders,
+          ...missingDomesticUntranslatedOrders,
           ...missingDomesticLicenseOrders,
           ...resetDefaultNotaryOrders,
         ]
-      : [...storedOrders, ...missingDefaultNonNotaryOrders, ...missingDomesticLicenseOrders];
+      : [...storedOrders.map(normalizeDomesticLicenseDemoOrder), ...missingDefaultNonNotaryOrders, ...missingDomesticUntranslatedOrders, ...missingDomesticLicenseOrders];
     window.localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(mergedOrders));
     window.localStorage.setItem(ORDER_DATA_VERSION_STORAGE_KEY, ORDER_DATA_VERSION);
     return mergedOrders;
@@ -685,6 +702,85 @@ const buildDomesticLicenseInfo = (index: number, customerName: string, licenseNu
     backPhoto: '',
     passportPhoto: '',
   };
+};
+
+const normalizeDomesticLicenseDemoOrder = (order: Order): Order => {
+  if (!DOMESTIC_LICENSE_UNTRANSLATED_ORDER_IDS.includes(order.orderId)) {
+    return order;
+  }
+
+  return {
+    ...order,
+    status: 'pending_production',
+    remark: order.remark === '系统生成未制作测试订单' ? '' : order.remark,
+    logs: order.logs.filter((log) => !(log.operator === '生产端' && log.action === '已翻译')),
+  };
+};
+
+const createDomesticLicenseUntranslatedOrders = (products: Product[]): Order[] => {
+  const product = products.find((item) => item.title === DOMESTIC_LICENSE_PRODUCT_TITLE);
+  const processTypes = product?.processTypes || [];
+
+  if (!product || processTypes.length === 0) {
+    return [];
+  }
+
+  const baseCreatedAt = '2026-05-11 09:20:00';
+
+  return DOMESTIC_LICENSE_UNTRANSLATED_ORDER_IDS.map((orderId, index) => {
+    const seed = 80 + index;
+    const processType = processTypes[index % processTypes.length] || processTypes[0];
+    const customerName = NAMES[seed % NAMES.length];
+    const customerPassport = PASSPORTS[seed % PASSPORTS.length];
+    const agentLevel = AGENT_LEVELS[seed % AGENT_LEVELS.length];
+    const createdAt = addSecondsToTimestamp(baseCreatedAt, index * 60);
+    const domesticLicenseInfo = buildDomesticLicenseInfo(seed, customerName, customerPassport);
+    const domesticExchangeLocation = [domesticLicenseInfo.exchangeProvince, domesticLicenseInfo.exchangeCity].join(' ');
+    const domesticForeignLocation = [domesticLicenseInfo.foreignCountry, domesticLicenseInfo.foreignCity].join(' ');
+    const lockedPrice = processType.pricing.find((item) => item.agentLevel === agentLevel)?.price || product.defaultPrice || 289;
+
+    return {
+      orderId,
+      customerName,
+      customerPhone: PHONES[seed % PHONES.length],
+      customerPassport,
+      customerEmail: `domestic-untranslated-${index + 1}@example.com`,
+      productId: product.productId,
+      productName: product.title,
+      productCategory: product.category,
+      processType: processType.name,
+      processTypeId: processType.typeId,
+      pushTimeliness: getPushTimeliness(processType, seed),
+      channel: CHANNELS[seed % CHANNELS.length],
+      agentLevel,
+      lockedPrice,
+      status: 'pending_production',
+      deliveryAddress: ADDRESSES[seed % ADDRESSES.length],
+      logisticsCompany: '',
+      trackingNumber: '',
+      remark: '',
+      licenseName: domesticLicenseInfo.chineseName,
+      licenseNo: domesticLicenseInfo.licenseNumber,
+      licenseCategory: domesticLicenseInfo.classType,
+      licenseGender: domesticLicenseInfo.sex,
+      licenseBirthDate: domesticLicenseInfo.birthDate,
+      licenseAddress: domesticForeignLocation,
+      licenseFirstIssueDate: domesticLicenseInfo.issueDate,
+      licenseValidUntilDate: domesticLicenseInfo.expiryDate,
+      licenseArchiveNumber: domesticLicenseInfo.fileNumber,
+      licenseIssuingRegion: domesticExchangeLocation,
+      useCountry: domesticLicenseInfo.foreignCountry,
+      managementOrderId: getCompactTimestamp(addSecondsToTimestamp(createdAt, index)),
+      domesticLicenseInfo,
+      createdAt,
+      updatedAt: addSecondsToTimestamp(createdAt, 600),
+      shippedAt: undefined,
+      logs: [
+        { time: createdAt, operator: '系统', action: '订单创建' },
+        { time: addSecondsToTimestamp(createdAt, 600), operator: '运营-小王', action: '审核通过' },
+      ],
+    };
+  });
 };
 
 function createOrders(products: Product[]): Order[] {
@@ -875,6 +971,14 @@ function createOrders(products: Product[]): Order[] {
       logs: [{ time: createdAt, operator: '系统', action: '订单创建' }],
     });
   }
+
+  const existingOrderIds = new Set(orders.map((order) => order.orderId));
+  createDomesticLicenseUntranslatedOrders(products).forEach((order) => {
+    if (!existingOrderIds.has(order.orderId)) {
+      orders.push(order);
+      existingOrderIds.add(order.orderId);
+    }
+  });
 
   return orders;
 }

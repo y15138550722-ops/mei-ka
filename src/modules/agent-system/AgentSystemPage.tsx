@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { addOrder, getOrders, getProducts, updateOrder } from '../../services/mockDataService';
+import { ORDER_DATA_CHANGED_EVENT, addOrder, getOrders, getProducts, updateOrder } from '../../services/mockDataService';
 import type { Order, OrderStatus, ProductProcessType } from '../../shared/types';
 import { LICENSE_ISSUING_AUTHORITY_OPTIONS } from '../../shared/config/licenseIssuingAuthority';
 import { orderPreviewAssets } from '../../shared/config/orderPreviewAssets';
@@ -466,6 +466,13 @@ const AgentSystemPage: React.FC = () => {
       .filter(isAgentSubmittedOrder)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
   );
+  const refreshAgentOrders = () => {
+    setAllAgentOrders(
+      getOrders()
+        .filter(isAgentSubmittedOrder)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    );
+  };
   const filteredAgentOrders = useMemo(() => {
     const keyword = orderListKeyword.trim().toLowerCase();
 
@@ -518,6 +525,16 @@ const AgentSystemPage: React.FC = () => {
   useEffect(() => {
     setOrderListPage(1);
   }, [orderListEndDate, orderListKeyword, orderListProductIds, orderListStartDate, orderListStatus]);
+
+  useEffect(() => {
+    window.addEventListener(ORDER_DATA_CHANGED_EVENT, refreshAgentOrders);
+    window.addEventListener('storage', refreshAgentOrders);
+
+    return () => {
+      window.removeEventListener(ORDER_DATA_CHANGED_EVENT, refreshAgentOrders);
+      window.removeEventListener('storage', refreshAgentOrders);
+    };
+  }, []);
 
   useEffect(() => {
     if (orderListPage > orderListPageCount) {
@@ -829,7 +846,7 @@ const AgentSystemPage: React.FC = () => {
     if (isDomesticLicenseEntry) {
       const missingMessage = (() => {
         if (!domesticLicenseForm.exchangeProvince || !domesticLicenseForm.exchangeCity) return '请选择换证城市';
-        if (!domesticLicenseForm.foreignCountry || !domesticLicenseForm.foreignCity) return '请选择境外驾驶证发放国家及城市';
+        if (!domesticLicenseForm.foreignCountry || !domesticLicenseForm.foreignCity) return '请选择驾驶证发放国家及城市';
         if (!domesticLicenseForm.chineseName.trim()) return '请填写中文姓名';
         if (!domesticLicenseForm.frontPhoto) return '请上传驾照正面照片';
         if (!domesticLicenseForm.backPhoto) return '请上传驾照反面照片';
@@ -1158,7 +1175,7 @@ const AgentSystemPage: React.FC = () => {
                       <strong>{getDomesticExchangeCity(order) || '-'}</strong>
                     </div>
                     <div className="agent-modal__detail-item agent-modal__detail-item--wide">
-                      <span>境外驾驶证发放国家及城市：</span>
+                      <span>驾驶证发放国家及城市：</span>
                       <strong>{getDomesticForeignLocation(order) || '-'}</strong>
                     </div>
                     <div className="agent-modal__detail-item">
@@ -1232,7 +1249,7 @@ const AgentSystemPage: React.FC = () => {
       ? [
           ['中文姓名', domesticInfo.chineseName || order.licenseName || order.customerName],
           ['换证城市', getDomesticExchangeCity(order)],
-          ['境外驾驶证发放国家及城市', getDomesticForeignLocation(order)],
+          ['驾驶证发放国家及城市', getDomesticForeignLocation(order)],
           ['DL/驾驶证编号', domesticInfo.licenseNumber || order.licenseNo || order.customerPassport],
           ['EXP/有效期至', domesticInfo.expiryDate],
           ['LN/姓', domesticInfo.surname],
@@ -1493,7 +1510,7 @@ const AgentSystemPage: React.FC = () => {
                               <strong>{getDomesticExchangeCity(order) || '-'}</strong>
                             </div>
                             <div>
-                              <span>境外驾驶证发放国家及城市</span>
+                              <span>驾驶证发放国家及城市</span>
                               <strong>{getDomesticForeignLocation(order) || '-'}</strong>
                             </div>
                           </>
@@ -1512,13 +1529,9 @@ const AgentSystemPage: React.FC = () => {
                       )}
                     </td>
                     <td className="agent-order-table__record">
-                      {productionRecords.length > 0 ? (
-                        productionRecords.map((record) => (
-                          <div key={record}>{record}</div>
-                        ))
-                      ) : (
-                        <span className="agent-order-table__record-empty">暂无生产端事件</span>
-                      )}
+                      {productionRecords.map((record) => (
+                        <div key={record}>{record}</div>
+                      ))}
                     </td>
                     <td>
                       <div className="agent-order-table__actions">
@@ -1755,7 +1768,7 @@ const AgentSystemPage: React.FC = () => {
                     </div>
                   </div>
                   <div className="agent-field agent-field--wide">
-                    <span>境外驾驶证发放国家及城市 <em className="agent-required">*</em></span>
+                    <span>驾驶证发放国家及城市 <em className="agent-required">*</em></span>
                     <div className="agent-region-selects">
                       <select
                         value={domesticLicenseForm.foreignCountry}

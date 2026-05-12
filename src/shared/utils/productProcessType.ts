@@ -109,6 +109,7 @@ export const getProcessTypeTone = (value: string, estimatedDays?: number): Proce
   }
 
   if (
+    compactValue.startsWith('紧急办理') ||
     compactValue.startsWith('加急办理') ||
     compactValue.startsWith('urgent')
   ) {
@@ -132,6 +133,7 @@ export const getProcessTypeTone = (value: string, estimatedDays?: number): Proce
   }
 
   if (
+    normalizedValue.includes('紧急') ||
     normalizedValue.includes('加急') ||
     normalizedValue.includes('urgent') ||
     normalizedValue.includes('express') ||

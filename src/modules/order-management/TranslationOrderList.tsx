@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getOrders, getProducts } from '../../services/mockDataService';
+import { ORDER_DATA_CHANGED_EVENT, getOrders, getProducts } from '../../services/mockDataService';
 import { useTranslation } from '../../shared/i18n/config';
 import ListUnifiedPagination from '../../shared/components/list/ListUnifiedPagination';
 import { exportTranslationOrders } from '../../shared/utils/exportTranslationOrders';
@@ -18,6 +18,7 @@ import {
   getLogisticsInfo,
   getOrderListExportFileName,
   getOrderShippedSortValue,
+  getProductionOrderRecords,
   getRecipientInfo,
   getRejectReason,
   getTranslationOrderStatus,
@@ -45,10 +46,7 @@ const TranslationOrderList: React.FC = () => {
     () => getProducts().filter((product) => isDomesticLicenseProduct(product.title)).sort((a, b) => b.weight - a.weight),
     [],
   );
-  const allOrders = useMemo(
-    () => getOrders().filter(isDomesticLicenseOrder),
-    [],
-  );
+  const [allOrders, setAllOrders] = useState<Order[]>(() => getOrders().filter(isDomesticLicenseOrder));
 
   const [activeStatus, setActiveStatus] = useState<TranslationOrderStatus | ''>('');
   const [filterAgent, setFilterAgent] = useState('');
@@ -242,12 +240,26 @@ const TranslationOrderList: React.FC = () => {
     filterEndDate,
   ].filter(Boolean).length;
   const showRejectReasonColumn = activeStatus === 'cancelled';
-  const orderTableColumnCount = showRejectReasonColumn ? 9 : 8;
+  const orderTableColumnCount = showRejectReasonColumn ? 10 : 9;
 
   const showToast = (type: 'success' | 'error', message: string) => {
     setToast({ type, message });
     window.setTimeout(() => setToast(null), 3000);
   };
+
+  useEffect(() => {
+    const refreshOrders = () => {
+      setAllOrders(getOrders().filter(isDomesticLicenseOrder));
+    };
+
+    window.addEventListener(ORDER_DATA_CHANGED_EVENT, refreshOrders);
+    window.addEventListener('storage', refreshOrders);
+
+    return () => {
+      window.removeEventListener(ORDER_DATA_CHANGED_EVENT, refreshOrders);
+      window.removeEventListener('storage', refreshOrders);
+    };
+  }, []);
 
   const handleReset = () => {
     setFilterAgent('');
@@ -483,6 +495,7 @@ const TranslationOrderList: React.FC = () => {
                   <th style={{ minWidth: 170 }}>代理商</th>
                   <th style={{ minWidth: 240 }}>驾照信息</th>
                   <th style={{ minWidth: 260 }}>收货地址</th>
+                  <th style={{ minWidth: 220 }}>订单记录</th>
                   {showRejectReasonColumn && <th style={{ minWidth: 220 }}>驳回原因</th>}
                   <th style={{ minWidth: 170 }}>订单状态</th>
                   <th style={{ minWidth: 168 }}>操作</th>
@@ -587,6 +600,24 @@ const TranslationOrderList: React.FC = () => {
                               <span className="order-cell-label">收货地址：</span>
                               <span className="order-cell-value">{order.deliveryAddress}</span>
                             </div>
+                          </div>
+                        </td>
+
+                        <td>
+                          <div className="order-cell-stack order-cell-stack--compact">
+                            {(() => {
+                              const productionRecords = getProductionOrderRecords(order);
+
+                              return productionRecords.length > 0 ? (
+                                productionRecords.map((record) => (
+                                  <div key={record} className="order-cell-value">
+                                    {record}
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="order-cell-value">--</div>
+                              );
+                            })()}
                           </div>
                         </td>
 

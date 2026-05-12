@@ -1931,7 +1931,7 @@ const OrderDetail: React.FC = () => {
       ),
     },
     {
-      label: '境外驾驶证发放国家及城市',
+      label: '驾驶证发放国家及城市',
       value: getDisplayValue(
         domesticLicenseInfo ? [domesticLicenseInfo.foreignCountry, domesticLicenseInfo.foreignCity].filter(Boolean).join(' ') : '',
       ),

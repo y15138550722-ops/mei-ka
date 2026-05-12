@@ -77,6 +77,18 @@ const getExcelJsRuntimeFromWindow = () => {
   return runtime;
 };
 
+const loadBundledExcelJsRuntime = async () => {
+  const runtimeModule = await import('exceljs');
+  const runtimeContainer = runtimeModule as ExcelJsNamespace & { default?: ExcelJsNamespace };
+  const runtime = runtimeContainer.Workbook ? runtimeContainer : runtimeContainer.default;
+
+  if (!runtime?.Workbook) {
+    throw new Error('Failed to initialize Excel export module');
+  }
+
+  return runtime as ExcelJsNamespace;
+};
+
 const loadExcelJsRuntime = async () => {
   if (typeof window === 'undefined') {
     throw new Error('Excel export is only available in the browser');
@@ -113,8 +125,10 @@ const loadExcelJsRuntime = async () => {
 
     const handleError = () => {
       cleanup();
-      excelJsRuntimePromise = null;
-      reject(new Error('Failed to load Excel export runtime'));
+      loadBundledExcelJsRuntime().then(resolve).catch((error) => {
+        excelJsRuntimePromise = null;
+        reject(error);
+      });
     };
 
     script.addEventListener('load', handleLoad);

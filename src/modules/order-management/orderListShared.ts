@@ -249,6 +249,28 @@ export const getOrderShippedSortValue = (order: Order) => {
   return order.updatedAt || order.createdAt || '';
 };
 
+const PRODUCTION_NODE_ACTIONS = ['已翻译', '已制作', '已发货'] as const;
+
+export const getProductionOrderRecords = (order: Order) => {
+  const nodeRecords = PRODUCTION_NODE_ACTIONS.flatMap((action) => {
+    const log = order.logs.find((item) => item.operator === '生产端' && item.action === action);
+    return log ? [`${action} ${log.time.slice(0, 16)}`] : [];
+  });
+
+  if (nodeRecords.length > 0) {
+    return nodeRecords;
+  }
+
+  const shippedStatus = getTranslationOrderStatus(order.status) === 'shipped';
+
+  if (shippedStatus) {
+    const shippedTime = (order.shippedAt || order.updatedAt || order.createdAt).slice(0, 16);
+    return [`已发货 ${shippedTime}`];
+  }
+
+  return [];
+};
+
 export const getCurrentTimestamp = () => new Date().toISOString().replace('T', ' ').substring(0, 16);
 
 export const getOrderListExportFileName = (prefix: string) =>
