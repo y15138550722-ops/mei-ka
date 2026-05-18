@@ -12,6 +12,8 @@ const NotaryOrderManagementList = lazy(() => import('./modules/order-management/
 const NotaryOrderManagementPreview = lazy(() => import('./modules/order-management/NotaryOrderManagementPreview'));
 const KlookOrderManagement = lazy(() => import('./modules/order-management/KlookOrderManagement'));
 const KlookOrderDetail = lazy(() => import('./modules/order-management/KlookOrderDetail'));
+const HelloOrderManagement = lazy(() => import('./modules/order-management/HelloOrderManagement'));
+const HelloOrderDetail = lazy(() => import('./modules/order-management/HelloOrderDetail'));
 const ProductList = lazy(() => import('./modules/product-management/ProductList'));
 const ProductForm = lazy(() => import('./modules/product-management/ProductForm'));
 const ProductProcessTypeManagement = lazy(() => import('./modules/product-management/ProductProcessTypeManagement'));
@@ -113,7 +115,12 @@ const App: React.FC = () => {
           <Route path="/order-management/notary-orders/:id/preview" element={<NotaryOrderManagementPreview />} />
           <Route path="/order-management/api-orders" element={<Navigate to="/order-management/api-orders/klook" replace />} />
           <Route path="/order-management/api-orders/klook" element={<KlookOrderManagement />} />
-          <Route path="/order-management/api-orders/klook/:id" element={<KlookOrderDetail />} />
+          <Route
+            path="/order-management/api-orders/klook/:id"
+            element={<KlookOrderDetail enableFullLicenseEdit generateManagementOrderIdOnApprove />}
+          />
+          <Route path="/order-management/api-orders/hello" element={<HelloOrderManagement />} />
+          <Route path="/order-management/api-orders/hello/:id" element={<HelloOrderDetail />} />
           <Route path="/products" element={<ProductList />} />
           <Route path="/products/new" element={<ProductForm />} />
           <Route path="/products/:id/edit" element={<ProductForm />} />

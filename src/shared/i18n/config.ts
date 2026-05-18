@@ -343,6 +343,10 @@ const menuLabelTranslations: Record<string, Record<Locale, string>> = {
     'zh-CN': 'Klook订单管理',
     'en-US': 'Klook Order Management',
   },
+  'menu.helloOrderManagement': {
+    'zh-CN': '哈啰订单管理',
+    'en-US': 'Hello Order Management',
+  },
 };
 
 export function setLocale(locale: Locale) {

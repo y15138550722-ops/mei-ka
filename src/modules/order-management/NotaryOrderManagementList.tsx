@@ -17,7 +17,7 @@ import { formatBeijingTimestamp } from '../../shared/utils/dateTime';
 import { exportTranslationOrders } from '../../shared/utils/exportTranslationOrders';
 import { getProcessTypeTone, getProductProcessTypeLabel } from '../../shared/utils/productProcessType';
 
-type NotaryManagementStatus = 'pending_review' | 'pending_production' | 'shipped' | 'cancelled';
+type NotaryManagementStatus = 'pending_review' | 'pending_production' | 'shipped' | 'rejected' | 'cancelled';
 
 type SubmissionMaterialImage = {
   key: string;
@@ -82,6 +82,7 @@ const STATUS_TABS: Array<{ label: string; value: NotaryManagementStatus | '' }> 
   { label: '待制作', value: 'pending_production' },
   { label: '已发货', value: 'shipped' },
   { label: '已取消', value: 'cancelled' },
+  { label: '驳回', value: 'rejected' },
 ];
 
 const NOTARY_PRODUCT_OPTIONS = ['公证单号', '公证双号', '公证海牙单号', '公证海牙双号'];
@@ -112,7 +113,13 @@ const AGENT_NAMES: Record<AgentLevel, string> = {
 const getInitialStatus = (value: string | null): NotaryManagementStatus | '' => {
   if (!value) return '';
 
-  if (value === 'pending_review' || value === 'pending_production' || value === 'shipped' || value === 'cancelled') {
+  if (
+    value === 'pending_review' ||
+    value === 'pending_production' ||
+    value === 'shipped' ||
+    value === 'rejected' ||
+    value === 'cancelled'
+  ) {
     return value;
   }
 
@@ -128,21 +135,22 @@ const getManagementStatus = (status: OrderStatus): NotaryManagementStatus => {
     shipped: 'shipped',
     completed: 'shipped',
     cancelled: 'cancelled',
-    rejected: 'cancelled',
+    rejected: 'rejected',
   };
 
   return mapping[status];
 };
 
-const getStatusTagClass = (status: OrderStatus) => {
+const getStatusTagClass = (status: NotaryManagementStatus) => {
   const mapping: Record<NotaryManagementStatus, string> = {
     pending_review: 'pending',
     pending_production: 'processing',
     shipped: 'shipped',
+    rejected: 'rejected',
     cancelled: 'cancelled',
   };
 
-  return `tag tag--${mapping[getManagementStatus(status)]}`;
+  return `tag tag--${mapping[status]}`;
 };
 
 const getAgentName = (order: Order) => AGENT_NAMES[order.agentLevel] || '美卡自营';
@@ -218,7 +226,7 @@ const getProductionDisplayNotaryOfficeName = (order: Order) =>
   order.pushedNotaryOfficeName?.trim() ||
   '--';
 
-const NOTARY_OFFICE_REJECTION_PATTERN = /公证处审核驳回|公证处.*驳回|审核驳回/;
+const NOTARY_OFFICE_REJECTION_PATTERN = /公证处审核驳回|公证处.*驳回/;
 const NOTARY_OFFICE_SUBMISSION_PATTERN = /送审至|公证处已接收/;
 const NOTARY_OFFICE_APPROVAL_PATTERN = /公证处审核通过|审核通过，进入制作中|公证处.*审核通过/;
 const NOTARY_OFFICE_COMPLETION_PATTERN = /公证处制作完成/;
@@ -321,29 +329,26 @@ const hasNotaryOfficeRejection = (order: Order, officeOrders = getRelatedNotaryO
   const combinedLogs = [...order.logs, ...getRelatedNotaryOfficeLogs(order, officeOrders)];
   const submissionLog = findLatestOrderLog(combinedLogs, /送审至|公证处已接收/);
   const rejectionLog = findLatestOrderLog(combinedLogs, NOTARY_OFFICE_REJECTION_PATTERN);
-  const hasNotaryOfficeContext = Boolean(
-    submissionLog ||
-      order.pushedNotaryOfficeName?.trim() ||
-      order.productionDisplayNotaryOfficeName?.trim() ||
-      officeOrders.length > 0,
-  );
   const hasOfficeOrderRejection = Boolean(
     hasSubmittedToNotaryOffice(order, officeOrders) &&
       isLogAtOrAfter(latestOfficeOrder?.updatedAt, submissionLog?.time) &&
-      (latestOfficeOrder?.status === 'rejected' || latestOfficeOrder?.status === 'cancelled'),
-  );
-  const hasStoredRejection = Boolean(
-    (order.status === 'pending_production' || getManagementStatus(order.status) === 'cancelled') &&
-      (order.rejectReason?.trim() || order.remark?.trim()) &&
-      hasNotaryOfficeContext &&
-      (!submissionLog || isLogAtOrAfter(order.updatedAt, submissionLog.time)),
+      latestOfficeOrder?.status === 'rejected',
   );
 
   return Boolean(
-    hasStoredRejection ||
     (rejectionLog && isLogAtOrAfter(rejectionLog.time, submissionLog?.time)) ||
       hasOfficeOrderRejection,
   );
+};
+
+const getVisibleManagementStatus = (order: Order): NotaryManagementStatus => {
+  const baseStatus = getManagementStatus(order.status);
+
+  if (baseStatus === 'rejected' || baseStatus === 'cancelled' || baseStatus === 'shipped') {
+    return baseStatus;
+  }
+
+  return hasNotaryOfficeRejection(order) ? 'rejected' : baseStatus;
 };
 
 const hasAnyNotaryOfficeRejectionRecord = (
@@ -363,7 +368,7 @@ const hasAnyNotaryOfficeRejectionRecord = (
   return Boolean(
     rejectionLog ||
       (hasNotaryOfficeContext && (order.rejectReason?.trim() || order.remark?.trim())) ||
-      officeOrders.some((officeOrder) => officeOrder.status === 'rejected' || officeOrder.status === 'cancelled'),
+      officeOrders.some((officeOrder) => officeOrder.status === 'rejected'),
   );
 };
 
@@ -400,7 +405,10 @@ const getRejectReason = (order: Order) => {
     return directReason;
   }
 
-  if (order.remark?.trim() && getManagementStatus(order.status) === 'cancelled') {
+  if (
+    order.remark?.trim() &&
+    (getManagementStatus(order.status) === 'rejected' || getManagementStatus(order.status) === 'cancelled')
+  ) {
     return order.remark.trim();
   }
 
@@ -492,26 +500,13 @@ const getOrderRecordItems = (order: Order): NotaryOrderRecordItem[] => {
   const approvalLog = findLatestOrderLog(combinedLogs, NOTARY_OFFICE_APPROVAL_PATTERN);
   const rejectionLog = findLatestOrderLog(combinedLogs, NOTARY_OFFICE_REJECTION_PATTERN);
   const completionLog = findLatestOrderLog(combinedLogs, NOTARY_OFFICE_COMPLETION_PATTERN);
-  const hasNotaryOfficeContext = Boolean(
-    submissionLog ||
-      order.pushedNotaryOfficeName?.trim() ||
-      order.productionDisplayNotaryOfficeName?.trim() ||
-      officeOrders.length > 0,
-  );
   const hasOfficeOrderRejection = Boolean(
     hasSubmittedToNotaryOffice(order, officeOrders) &&
       isLogAtOrAfter(latestOfficeOrder?.updatedAt, submissionLog?.time) &&
-      (latestOfficeOrder?.status === 'rejected' || latestOfficeOrder?.status === 'cancelled'),
-  );
-  const hasStoredRejection = Boolean(
-    (order.status === 'pending_production' || getManagementStatus(order.status) === 'cancelled') &&
-      (order.rejectReason?.trim() || order.remark?.trim()) &&
-      hasNotaryOfficeContext &&
-      (!submissionLog || isLogAtOrAfter(order.updatedAt, submissionLog.time)),
+      latestOfficeOrder?.status === 'rejected',
   );
   const hasRejectionAfterSubmission = Boolean(
     (rejectionLog && (!submissionLog || isLogAtOrAfter(rejectionLog.time, submissionLog.time))) ||
-      hasStoredRejection ||
       hasOfficeOrderRejection,
   );
   const hasApprovalAfterSubmission = Boolean(
@@ -1043,7 +1038,7 @@ const NotaryOrderManagementList: React.FC = () => {
     const exactKeyword = filterKeyword.trim().toLowerCase();
 
     const nextOrders = notaryOrders.filter((order) => {
-      const visibleStatus = getManagementStatus(order.status);
+      const visibleStatus = getVisibleManagementStatus(order);
       const createdDate = order.createdAt.slice(0, 10);
       const agentName = getAgentName(order).toLowerCase();
 
@@ -1107,13 +1102,13 @@ const NotaryOrderManagementList: React.FC = () => {
         return;
       }
 
-      counts[tab.value] = notaryOrders.filter((order) => getManagementStatus(order.status) === tab.value).length;
+      counts[tab.value] = notaryOrders.filter((order) => getVisibleManagementStatus(order) === tab.value).length;
     });
 
     return counts;
   }, [notaryOrders]);
 
-  const showRejectReasonColumn = activeStatus === 'cancelled';
+  const showRejectReasonColumn = activeStatus === 'rejected';
   const orderTableColumnCount = showRejectReasonColumn ? 10 : 9;
   const activeFilterCount = [
     filterAgent.trim(),
@@ -1161,7 +1156,7 @@ const NotaryOrderManagementList: React.FC = () => {
           agentName: getAgentName(order),
           recipientInfo: getRecipientInfo(order),
           licenseInfo: getLicenseInfo(order),
-          statusLabel: t(`order.status.${getManagementStatus(order.status)}`),
+          statusLabel: t(`order.status.${getVisibleManagementStatus(order)}`),
           logisticsInfo: getLogisticsInfo(order),
           price: order.lockedPrice,
           primaryAccount: '',
@@ -1361,6 +1356,7 @@ const NotaryOrderManagementList: React.FC = () => {
     const currentTimestamp = formatBeijingTimestamp();
     const nextOrder: Order = {
       ...submissionPreviewOrder,
+      status: 'pending_production',
       pushedNotaryOfficeId: selectedOffice.id,
       pushedNotaryOfficeName: selectedOffice.name,
       productionDisplayNotaryOfficeId: selectedOffice.id,
@@ -1379,6 +1375,7 @@ const NotaryOrderManagementList: React.FC = () => {
     };
 
     updateOrder(submissionPreviewOrder.orderId, {
+      status: nextOrder.status,
       pushedNotaryOfficeId: nextOrder.pushedNotaryOfficeId,
       pushedNotaryOfficeName: nextOrder.pushedNotaryOfficeName,
       productionDisplayNotaryOfficeId: nextOrder.productionDisplayNotaryOfficeId,
@@ -1397,6 +1394,35 @@ const NotaryOrderManagementList: React.FC = () => {
     handleCloseSubmissionPreview();
     setOrdersRevision((currentRevision) => currentRevision + 1);
     showToast('success', `已送审至${selectedOffice.name}`);
+  };
+
+  const handleCancelOrder = (order: Order) => {
+    if (!window.confirm('确认取消该订单？取消后订单状态将变为已取消。')) {
+      return;
+    }
+
+    const currentTimestamp = formatBeijingTimestamp();
+
+    updateOrder(order.orderId, {
+      status: 'cancelled',
+      rejectReason: undefined,
+      remark: '',
+      updatedAt: currentTimestamp,
+      logs: [
+        ...order.logs,
+        {
+          time: currentTimestamp,
+          operator: currentAccountId || '运营',
+          action: '取消订单',
+        },
+      ],
+    });
+
+    setOrdersRevision((currentRevision) => currentRevision + 1);
+    setActiveStatus('cancelled');
+    setCurrentPage(1);
+    setSearchParams({ status: 'cancelled' });
+    showToast('success', '订单已取消');
   };
 
   const handleOpenLogisticsModal = (order: Order) => {
@@ -1595,10 +1621,9 @@ const NotaryOrderManagementList: React.FC = () => {
                   </tr>
                 ) : (
                   paginatedOrders.map((order) => {
-                    const visibleStatus = getManagementStatus(order.status);
+                    const visibleStatus = getVisibleManagementStatus(order);
                     const viewPath = `${NOTARY_ORDER_MANAGEMENT_PATH}/${order.orderId}/preview?mode=view`;
                     const auditPath = `${NOTARY_ORDER_MANAGEMENT_PATH}/${order.orderId}/preview?mode=audit`;
-                    const actionPath = auditPath;
                     const orderRecordItems = getOrderRecordItems(order);
 
                     return (
@@ -1676,7 +1701,7 @@ const NotaryOrderManagementList: React.FC = () => {
 
                         <td>
                           <div className="order-status-cell">
-                            <span className={`${getStatusTagClass(order.status)} order-list-status-tag`}>
+                            <span className={`${getStatusTagClass(visibleStatus)} order-list-status-tag`}>
                               {t(`order.status.${visibleStatus}`)}
                             </span>
                             {visibleStatus === 'shipped' && order.trackingNumber && (
@@ -1713,23 +1738,49 @@ const NotaryOrderManagementList: React.FC = () => {
                         </td>
 
                         <td className="order-actions-cell">
-                          <button
-                            type="button"
-                            className="order-text-action order-text-action--view"
-                            onClick={() => navigate(viewPath, { state: previewState })}
-                          >
-                            查看订单
-                          </button>
+                          {visibleStatus !== 'rejected' && (
+                            <button
+                              type="button"
+                              className="order-text-action order-text-action--view"
+                              onClick={() => navigate(viewPath, { state: previewState })}
+                            >
+                              查看订单
+                            </button>
+                          )}
                           {visibleStatus !== 'cancelled' && (
                             <button
                               type="button"
                               className={`order-text-action ${
-                                order.status === 'pending_review' ? 'order-text-action--audit' : 'order-text-action--review'
+                                order.status === 'pending_review' || visibleStatus === 'rejected'
+                                  ? 'order-text-action--audit'
+                                  : 'order-text-action--review'
                               }`}
-                              onClick={() => navigate(actionPath, { state: previewState })}
+                              onClick={() => navigate(auditPath, { state: previewState })}
                             >
-                              {order.status === 'pending_review' ? '订单审核' : '查看审核'}
+                              {visibleStatus === 'rejected'
+                                ? '订单修改'
+                                : order.status === 'pending_review'
+                                  ? '订单审核'
+                                  : '查看审核'}
                             </button>
+                          )}
+                          {visibleStatus === 'rejected' && (
+                            <>
+                              <button
+                                type="button"
+                                className="order-text-action order-text-action--push"
+                                onClick={() => handleOpenSubmissionPreview(order)}
+                              >
+                                送审
+                              </button>
+                              <button
+                                type="button"
+                                className="order-text-action order-text-action--review"
+                                onClick={() => handleCancelOrder(order)}
+                              >
+                                取消订单
+                              </button>
+                            </>
                           )}
                           {visibleStatus === 'pending_production' &&
                             (shouldShowNotarySubmissionAction(order) ? (

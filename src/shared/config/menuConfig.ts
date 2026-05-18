@@ -51,6 +51,12 @@ export const menuConfig: MenuItem[] = [
             icon: 'K',
             path: '/order-management/api-orders/klook',
           },
+          {
+            key: 'order-hello-order-management',
+            labelKey: 'menu.helloOrderManagement',
+            icon: '哈',
+            path: '/order-management/api-orders/hello',
+          },
         ],
       },
     ],

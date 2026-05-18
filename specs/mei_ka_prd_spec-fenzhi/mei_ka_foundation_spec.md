@@ -1,14 +1,15 @@
 # 美卡基础平台能力 Specification
 
 > **模块**: 基础平台能力（登录认证 / 受保护路由 / Dashboard / 全局导航）
-> **版本**: v1.0
-> **最后更新**: 2026-04-17
+> **版本**: v1.1
+> **最后更新**: 2026-05-13
 > **作者**: Codex
 
 ---
 
 ## 更新日志
 
+- **v1.1 (2026-05-13)**: 同步当前三端入口与受保护路由：管理端、驾照官生产端、用户端均复用登录会话，补充非菜单路由和切换入口
 - **v1.0 (2026-04-17)**: 从主文档 `specs/mei_ka_prd_spec.md` 拆分基础平台能力独立 PRD
 
 ---
@@ -37,9 +38,10 @@
 
 ### 2.1 In Scope
 - 登录页：账号/密码/验证码校验
-- 受保护路由：非 `/login` 页面登录态校验
+- 受保护路由：非 `/login` 页面登录态校验，覆盖管理端、公证端、驾照官生产端与用户端
 - 全局布局：侧边栏、菜单高亮、用户菜单
 - Dashboard：经营概览、指标卡、近期订单、快捷入口
+- 系统切换入口：管理端、用户端、驾照官生产端之间复用当前会话切换
 
 ### 2.2 Out of Scope
 - 第三方单点登录（SSO）
@@ -104,6 +106,10 @@ flowchart TD
 - 菜单高亮按路径前缀匹配。
 - 侧边栏折叠状态持久化至 `meika-sidebar-collapsed`。
 - 非菜单路由（如详情页）可直达且受守卫保护。
+- 管理端主导航当前包含 Dashboard、订单管理、产品管理、公证处工作台。
+- 订单管理下包含订单列表、公证订单管理、IDP 订单管理、API 订单管理/Klook。
+- 驾照官生产端使用独立布局 `/license-officer`，当前菜单为“非标宣誓公证件 / 中文翻译件”，并可切换回管理端或用户端。
+- 用户端演示入口为 `/agent-system`，复用当前登录会话，不创建独立客户端登录态。
 
 ### 5.3 Dashboard 指标口径
 - 统计日期默认当天（北京时间）。
@@ -125,6 +131,7 @@ interface FoundationView {
   navigation: {
     activeMenuKey: string; // Derived
     sidebarCollapsed: boolean; // Stored
+    currentSystem: 'admin' | 'agent-system' | 'license-officer'; // Derived from route
   };
   dashboard: {
     selectedDate: string; // Stored
@@ -150,6 +157,8 @@ interface FoundationView {
 ### 7.2 受保护路由
 - 准入校验（Admission Guard）：`isAuthenticated === true`
 - 不通过时强制重定向 `/login`
+- `/agent-system` 与 `/license-officer/**` 均必须受登录态保护。
+- `/license-officer` 默认重定向到 `/license-officer/orders/chinese-translation`。
 
 ### 7.3 Dashboard
 - 卡片：成交总额、待发货金额
@@ -184,6 +193,8 @@ interface FoundationView {
 | TC-FD-002 | 错误验证码 | 登录失败并提示错误 |
 | TC-FD-003 | 未登录访问 `/orders` | 跳转 `/login` |
 | TC-FD-004 | 切换 Dashboard 日期 | 指标按口径重算 |
+| TC-FD-005 | 未登录访问 `/license-officer/orders/chinese-translation` | 跳转 `/login` |
+| TC-FD-006 | 已登录从驾照官生产端点击切换管理端 | 跳转管理端首页且会话保留 |
 
 ---
 

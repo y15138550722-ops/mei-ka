@@ -17,10 +17,21 @@ export interface KlookOrder {
   driverNameLatin: string;
   licenseNumber: string;
   licenseType: string;
+  licenseGender?: string;
+  licenseNationality?: string;
+  licenseBirthDate?: string;
+  licenseAddress?: string;
+  licenseFirstIssueDate?: string;
+  licenseValidFromDate?: string;
+  licenseValidUntilDate?: string;
+  licenseValidYears?: string;
+  licenseIssuingAuthority?: string;
+  licenseIssuingRegion?: string;
   recipientName: string;
   recipientPhone: string;
   deliveryAddress: string;
   status: KlookOrderStatus;
+  managementOrderId?: string;
   orderRecordLabel?: string;
   orderRecordAt?: string;
   logisticsCompany?: string;
@@ -32,7 +43,11 @@ export interface KlookOrder {
 }
 
 const STORAGE_KEY = 'meika-klook-orders';
+const HELLO_STORAGE_KEY = 'meika-hello-orders';
 const DEFAULT_LOCKED_PRICE = 289;
+const PRODUCTION_OPERATOR = '生产端';
+const PRODUCTION_NODE_ACTIONS = ['已翻译', '已制作', '已发货'] as const;
+const PRODUCTION_NODE_ACTION_SET = new Set<string>(PRODUCTION_NODE_ACTIONS);
 
 const DEFAULT_KLOOK_ORDERS: KlookOrder[] = [
   {
@@ -343,6 +358,111 @@ const DEFAULT_KLOOK_ORDERS: KlookOrder[] = [
   },
 ];
 
+const SYSTEM_GENERATED_HELLO_ORDER_IDS = new Set(
+  DEFAULT_KLOOK_ORDERS.map((_, index) => `HL${String(93200 - index * 37).padStart(5, '0')}`),
+);
+const DEFAULT_HELLO_ORDERS: KlookOrder[] = [
+  {
+    orderId: 'HE20260514001',
+    createdAt: '2026-05-14 09:18:42',
+    updatedAt: '2026-05-14 09:18:42',
+    productName: '驾照翻译国际认证件（小白本）',
+    processType: '正常办理-普通配送',
+    agentName: '哈啰',
+    driverName: '周嘉宁',
+    driverNameLatin: 'ZHOU JIANING',
+    licenseNumber: '330105199608126214',
+    licenseType: 'C1',
+    recipientName: '周嘉宁',
+    recipientPhone: '13657192840',
+    deliveryAddress: '浙江省杭州市拱墅区湖墅南路66号锦绣大厦1206室',
+    status: 'pending_review',
+    logs: [],
+  },
+  {
+    orderId: 'HE20260514002',
+    createdAt: '2026-05-14 10:07:26',
+    updatedAt: '2026-05-14 11:22:08',
+    productName: '驾照翻译国际认证件（小白本）',
+    processType: '优先办理-普通配送',
+    agentName: '哈啰',
+    driverName: '陈思远',
+    driverNameLatin: 'CHEN SIYUAN',
+    licenseNumber: '310115199402183912',
+    licenseType: 'C1',
+    recipientName: '陈思远',
+    recipientPhone: '13818274691',
+    deliveryAddress: '上海市浦东新区张杨路560号中融恒瑞国际大厦1802室',
+    status: 'pending_production',
+    orderRecordLabel: '已翻译',
+    orderRecordAt: '2026-05-14 11:22:08',
+    logs: [],
+  },
+  {
+    orderId: 'HE20260513001',
+    createdAt: '2026-05-13 14:36:55',
+    updatedAt: '2026-05-14 08:54:13',
+    productName: '驾照翻译国际认证件（小白本）',
+    processType: '加急办理-顺丰配送',
+    agentName: '哈啰',
+    driverName: '林雨桐',
+    driverNameLatin: 'LIN YUTONG',
+    licenseNumber: '440305199907224527',
+    licenseType: 'C2',
+    recipientName: '林雨桐',
+    recipientPhone: '15920041863',
+    deliveryAddress: '广东省深圳市南山区科技园科苑南路2666号中国华润大厦2601室',
+    status: 'shipped',
+    orderRecordLabel: '已发货',
+    orderRecordAt: '2026-05-14 08:54:13',
+    logisticsCompany: '顺丰速运',
+    trackingNumber: 'SF1185206051301',
+    logs: [
+      { time: '2026-05-13 17:10:34', operator: PRODUCTION_OPERATOR, action: '已翻译' },
+      { time: '2026-05-14 08:32:10', operator: PRODUCTION_OPERATOR, action: '已制作' },
+      { time: '2026-05-14 08:54:13', operator: PRODUCTION_OPERATOR, action: '已发货' },
+    ],
+  },
+  {
+    orderId: 'HE20260513002',
+    createdAt: '2026-05-13 16:12:09',
+    updatedAt: '2026-05-13 18:31:44',
+    productName: '驾照翻译国际认证件（小白本）',
+    processType: '正常办理-普通配送',
+    agentName: '哈啰',
+    driverName: '赵明轩',
+    driverNameLatin: 'ZHAO MINGXUAN',
+    licenseNumber: '110105199001075818',
+    licenseType: 'C1',
+    recipientName: '赵明轩',
+    recipientPhone: '13701048265',
+    deliveryAddress: '北京市朝阳区建国门外大街1号国贸公寓3座1508室',
+    status: 'cancelled',
+    orderRecordLabel: '已驳回',
+    orderRecordAt: '2026-05-13 18:31:44',
+    rejectReason: '驾照图片反光严重，关键信息无法识别',
+    remark: '驾照图片反光严重，关键信息无法识别',
+    logs: [],
+  },
+  {
+    orderId: 'HE20260512001',
+    createdAt: '2026-05-12 19:45:31',
+    updatedAt: '2026-05-12 19:45:31',
+    productName: '驾照翻译国际认证件（小白本）',
+    processType: '优先办理-加急配送',
+    agentName: '哈啰',
+    driverName: '吴清扬',
+    driverNameLatin: 'WU QINGYANG',
+    licenseNumber: '510107199311293047',
+    licenseType: 'C1',
+    recipientName: '吴清扬',
+    recipientPhone: '18502841760',
+    deliveryAddress: '四川省成都市武侯区天府大道北段1700号环球中心E3区901室',
+    status: 'pending_review',
+    logs: [],
+  },
+];
+
 const cloneKlookOrderLog = (log: KlookOrderLog): KlookOrderLog => ({ ...log });
 
 const buildDefaultLogs = (order: Omit<KlookOrder, 'logs'>): KlookOrderLog[] => {
@@ -357,7 +477,7 @@ const buildDefaultLogs = (order: Omit<KlookOrder, 'logs'>): KlookOrderLog[] => {
   if (order.orderRecordLabel && order.orderRecordAt) {
     logs.push({
       time: order.orderRecordAt,
-      operator: '系统',
+      operator: PRODUCTION_NODE_ACTION_SET.has(order.orderRecordLabel) ? PRODUCTION_OPERATOR : '系统',
       action: order.orderRecordLabel,
     });
   }
@@ -373,23 +493,56 @@ const buildDefaultLogs = (order: Omit<KlookOrder, 'logs'>): KlookOrderLog[] => {
   return logs;
 };
 
+const appendLegacyProductionRecordLog = (logs: KlookOrderLog[], order: Omit<KlookOrder, 'logs'>) => {
+  if (!order.orderRecordLabel || !order.orderRecordAt || !PRODUCTION_NODE_ACTION_SET.has(order.orderRecordLabel)) {
+    return logs;
+  }
+
+  const hasProductionRecord = logs.some(
+    (log) => log.operator === PRODUCTION_OPERATOR && log.action === order.orderRecordLabel,
+  );
+
+  if (hasProductionRecord) {
+    return logs;
+  }
+
+  return [
+    ...logs,
+    {
+      time: order.orderRecordAt,
+      operator: PRODUCTION_OPERATOR,
+      action: order.orderRecordLabel,
+    },
+  ];
+};
+
 const normalizeKlookOrder = (order: KlookOrder): KlookOrder => {
   const normalizedBase = {
     ...order,
     updatedAt: order.updatedAt || order.orderRecordAt || order.createdAt,
     lockedPrice: order.lockedPrice ?? DEFAULT_LOCKED_PRICE,
+    managementOrderId: order.managementOrderId || '',
+    licenseGender: order.licenseGender || '',
+    licenseNationality: order.licenseNationality || '',
+    licenseBirthDate: order.licenseBirthDate || '',
+    licenseAddress: order.licenseAddress || '',
+    licenseFirstIssueDate: order.licenseFirstIssueDate || '',
+    licenseValidFromDate: order.licenseValidFromDate || '',
+    licenseValidUntilDate: order.licenseValidUntilDate || '',
+    licenseValidYears: order.licenseValidYears || '',
+    licenseIssuingAuthority: order.licenseIssuingAuthority || '',
+    licenseIssuingRegion: order.licenseIssuingRegion || '',
     logisticsCompany: order.logisticsCompany || '',
     trackingNumber: order.trackingNumber || '',
     remark: order.remark || '',
     rejectReason: order.rejectReason || '',
   };
+  const sourceLogs = Array.isArray(order.logs) ? order.logs : [];
+  const normalizedLogs = sourceLogs.length > 0 ? sourceLogs.map(cloneKlookOrderLog) : buildDefaultLogs(normalizedBase);
 
   return {
     ...normalizedBase,
-    logs:
-      order.logs.length > 0
-        ? order.logs.map(cloneKlookOrderLog)
-        : buildDefaultLogs(normalizedBase),
+    logs: appendLegacyProductionRecordLog(normalizedLogs, normalizedBase),
   };
 };
 
@@ -398,23 +551,27 @@ const cloneKlookOrder = (order: KlookOrder): KlookOrder => ({
   logs: order.logs.map(cloneKlookOrderLog),
 });
 
-const persistKlookOrders = (orders: KlookOrder[]) => {
+const persistOrders = (storageKey: string, orders: KlookOrder[]) => {
   if (typeof window === 'undefined') {
     return;
   }
 
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
+  window.localStorage.setItem(storageKey, JSON.stringify(orders));
 };
 
-const loadKlookOrders = (): KlookOrder[] => {
+const persistKlookOrders = (orders: KlookOrder[]) => persistOrders(STORAGE_KEY, orders);
+
+const persistHelloOrders = (orders: KlookOrder[]) => persistOrders(HELLO_STORAGE_KEY, orders);
+
+const loadOrders = (storageKey: string, defaultOrders: KlookOrder[]): KlookOrder[] => {
   if (typeof window === 'undefined') {
-    return DEFAULT_KLOOK_ORDERS.map(normalizeKlookOrder);
+    return defaultOrders.map(normalizeKlookOrder);
   }
 
-  const storedValue = window.localStorage.getItem(STORAGE_KEY);
+  const storedValue = window.localStorage.getItem(storageKey);
   if (!storedValue) {
-    const fallbackOrders = DEFAULT_KLOOK_ORDERS.map(normalizeKlookOrder);
-    persistKlookOrders(fallbackOrders);
+    const fallbackOrders = defaultOrders.map(normalizeKlookOrder);
+    persistOrders(storageKey, fallbackOrders);
     return fallbackOrders;
   }
 
@@ -423,13 +580,56 @@ const loadKlookOrders = (): KlookOrder[] => {
     return parsedValue.map(normalizeKlookOrder);
   } catch (error) {
     console.error(error);
-    const fallbackOrders = DEFAULT_KLOOK_ORDERS.map(normalizeKlookOrder);
-    persistKlookOrders(fallbackOrders);
+    const fallbackOrders = defaultOrders.map(normalizeKlookOrder);
+    persistOrders(storageKey, fallbackOrders);
     return fallbackOrders;
   }
 };
 
+const loadKlookOrders = (): KlookOrder[] => loadOrders(STORAGE_KEY, DEFAULT_KLOOK_ORDERS);
+
+const loadHelloOrders = (): KlookOrder[] => {
+  const defaultOrderMap = new Map(DEFAULT_HELLO_ORDERS.map((order) => [order.orderId, normalizeKlookOrder(order)]));
+  const storedOrders = loadOrders(HELLO_STORAGE_KEY, DEFAULT_HELLO_ORDERS).filter(
+    (order) => !SYSTEM_GENERATED_HELLO_ORDER_IDS.has(order.orderId),
+  );
+  const mergedStoredOrders = storedOrders.map((order) => {
+    const defaultOrder = defaultOrderMap.get(order.orderId);
+    if (!defaultOrder) {
+      return order;
+    }
+
+    const existingProductionActions = new Set(
+      order.logs
+        .filter((log) => log.operator === PRODUCTION_OPERATOR && PRODUCTION_NODE_ACTION_SET.has(log.action))
+        .map((log) => log.action),
+    );
+    const missingDefaultLogs = defaultOrder.logs.filter(
+      (log) =>
+        log.operator === PRODUCTION_OPERATOR &&
+        PRODUCTION_NODE_ACTION_SET.has(log.action) &&
+        !existingProductionActions.has(log.action),
+    );
+
+    return missingDefaultLogs.length > 0
+      ? normalizeKlookOrder({
+          ...order,
+          logs: [...order.logs, ...missingDefaultLogs],
+        })
+      : order;
+  });
+  const storedOrderIds = new Set(mergedStoredOrders.map((order) => order.orderId));
+  const missingDefaultOrders = DEFAULT_HELLO_ORDERS
+    .filter((order) => !storedOrderIds.has(order.orderId))
+    .map(normalizeKlookOrder);
+  const orders = [...missingDefaultOrders, ...mergedStoredOrders];
+
+  persistHelloOrders(orders);
+  return orders;
+};
+
 let _klookOrders = loadKlookOrders();
+let _helloOrders = loadHelloOrders();
 
 export const getKlookOrders = () => _klookOrders.map(cloneKlookOrder);
 
@@ -452,4 +652,27 @@ export const updateKlookOrder = (id: string, updates: Partial<KlookOrder>) => {
   });
 
   persistKlookOrders(_klookOrders);
+};
+
+export const getHelloOrders = () => _helloOrders.map(cloneKlookOrder);
+
+export const getHelloOrderById = (id: string) => {
+  const order = _helloOrders.find((item) => item.orderId === id);
+  return order ? cloneKlookOrder(order) : undefined;
+};
+
+export const updateHelloOrder = (id: string, updates: Partial<KlookOrder>) => {
+  _helloOrders = _helloOrders.map((order) => {
+    if (order.orderId !== id) {
+      return order;
+    }
+
+    return normalizeKlookOrder({
+      ...order,
+      ...updates,
+      logs: updates.logs ? updates.logs.map(cloneKlookOrderLog) : order.logs.map(cloneKlookOrderLog),
+    });
+  });
+
+  persistHelloOrders(_helloOrders);
 };

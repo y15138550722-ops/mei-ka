@@ -88,7 +88,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
       <div className="login-page__shell animate-fadeIn">
         <section className="login-page__hero">
           <div className="login-page__hero-copy">
-            <h1 className="login-page__title">美卡认证代理平台</h1>
+            <h1 className="login-page__title">美卡认证用户端</h1>
             <p className="login-page__subtitle">保密更专业 / 团队更资深 / 性价比更高 / 时速更快</p>
           </div>
 
@@ -133,7 +133,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
         <section className="login-page__panel">
           <div className="login-card">
             <div className="login-card__header">
-              <h2 className="login-card__title">美卡认证代理平台</h2>
+              <h2 className="login-card__title">美卡认证用户端</h2>
               <p className="login-card__caption">后台登录</p>
             </div>
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import JSZip from 'jszip';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from '../../shared/i18n/config';
 import {
@@ -29,9 +30,15 @@ const NOTARY_VISIBLE_STATUSES: OrderStatus[] = [
 
 const NOTARY_PRODUCT_OPTIONS = ['公证单号', '公证双号', '公证海牙单号', '公证海牙双号'];
 
+const NOTARY_DOWNLOAD_TEMPLATE_FILE_NAME = '姓名+国家+语言+产品名称.zip';
+const NOTARY_DOWNLOAD_TEMPLATE_ROOT_NAME = '姓名+国家+语言+产品名称';
+const NOTARY_DOWNLOAD_TEMPLATE_NAME_PLACEHOLDER = '姓名';
+const NOTARY_DOWNLOAD_TEMPLATE_URL = encodeURI(`/ETC/Notary Office Template/${NOTARY_DOWNLOAD_TEMPLATE_FILE_NAME}`);
 const NOTARY_DOWNLOAD_TEMPLATE_PATHS = [
-  encodeURI('/Notary Office Template/姓名+国家+语言+产品名称.zip'),
-  encodeURI('/Preview file/姓名+国家+语言+产品名称.zip'),
+  {
+    fileName: NOTARY_DOWNLOAD_TEMPLATE_FILE_NAME,
+    path: NOTARY_DOWNLOAD_TEMPLATE_URL,
+  },
 ];
 
 const NOTARY_LANGUAGE_COUNTRY_MAP: Record<string, string> = {
@@ -65,6 +72,8 @@ const NOTARY_PRIORITY_SORT_ORDER: Record<ProcessType, number> = {
   normal: 2,
 };
 
+const NOTARY_PRODUCTION_DOWNLOAD_PATTERN = /下载制作文件|制作并下载/;
+
 const getCurrentTimestamp = () => formatBeijingTimestamp();
 
 const getNotaryVisibleStatus = (status: OrderStatus): OrderStatus => {
@@ -90,15 +99,38 @@ const getNotaryCountryLabel = (order: Order) => {
   return '国家未设置';
 };
 
-const buildNotaryZipFilename = (order: Order) => {
-  const parts = [
-    order.licenseName || order.customerName || '姓名未设置',
-    getNotaryCountryLabel(order),
-    order.language || '语种未设置',
-    order.productName || '产品未设置',
-  ].map(sanitizeDownloadPart);
+const getNotaryProductionFileContext = (order: Order) => {
+  const name = sanitizeDownloadPart(order.licenseName || order.customerName || '姓名未设置');
+  const country = sanitizeDownloadPart(getNotaryCountryLabel(order));
+  const language = sanitizeDownloadPart(order.language || '语言未设置');
+  const productName = sanitizeDownloadPart(order.productName || '产品名称未设置');
+  const rootName = [name, country, language, productName].join('+');
 
-  return `${parts.join('+')}.zip`;
+  return {
+    name,
+    country,
+    language,
+    productName,
+    rootName,
+    zipFileName: `${rootName}.zip`,
+  };
+};
+
+const buildNotaryZipFilename = (order: Order) => getNotaryProductionFileContext(order).zipFileName;
+
+const renameNotaryTemplatePath = (path: string, context: ReturnType<typeof getNotaryProductionFileContext>) => {
+  const normalizedPath = path.replace(/\\/g, '/');
+  const pathSegments = normalizedPath.split('/');
+
+  return pathSegments
+    .map((segment) =>
+      segment
+        .split(NOTARY_DOWNLOAD_TEMPLATE_ROOT_NAME)
+        .join(context.rootName)
+        .split(NOTARY_DOWNLOAD_TEMPLATE_NAME_PLACEHOLDER)
+        .join(context.name),
+    )
+    .join('/');
 };
 
 const getProductionDisplayNotaryOfficeName = (order: Order) =>
@@ -158,6 +190,9 @@ const getRejectReason = (order: Order) => {
   const parts = rejectLog.action.split(/[:：]/);
   return parts.length > 1 ? parts.slice(1).join('：').trim() || rejectLog.action : rejectLog.action;
 };
+
+const hasDownloadedProductionFile = (order: Order) =>
+  order.logs.some((log) => NOTARY_PRODUCTION_DOWNLOAD_PATTERN.test(log.action));
 
 const NotaryOrderList: React.FC = () => {
   const { t } = useTranslation();
@@ -315,34 +350,74 @@ const NotaryOrderList: React.FC = () => {
   const orderTableColumnCount = 7 + (showRejectReasonColumn ? 1 : 0) + (showBatchSelection ? 1 : 0);
 
   const applyOrderPatches = (patches: Record<string, Partial<Order>>) => {
+    const failedUpdates: string[] = [];
+
     Object.entries(patches).forEach(([orderId, patch]) => {
-      updateNotaryOfficeOrder(orderId, patch);
+      try {
+        updateNotaryOfficeOrder(orderId, patch);
+      } catch (error) {
+        failedUpdates.push(orderId);
+        console.error('[notary-download] Failed to persist notary order update', orderId, error);
+      }
     });
 
     setAllOrders((prev) =>
       prev.map((order) => (patches[order.orderId] ? { ...order, ...patches[order.orderId] } : order)),
     );
+
+    return failedUpdates.length === 0;
   };
 
-  const fetchNotaryDownloadTemplate = async () => {
-    for (const templatePath of NOTARY_DOWNLOAD_TEMPLATE_PATHS) {
-      try {
-        const response = await fetch(templatePath);
+  const getNotaryDownloadTemplate = () => NOTARY_DOWNLOAD_TEMPLATE_PATHS[0];
 
-        if (response.ok) {
-          return response.blob();
-        }
-      } catch {
-        continue;
-      }
+  const buildNotaryProductionZipBlob = async (order: Order) => {
+    const template = getNotaryDownloadTemplate();
+    const response = await fetch(template.path);
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch notary production template: ${response.status}`);
     }
 
-    throw new Error('Failed to download zip template');
+    const context = getNotaryProductionFileContext(order);
+    const templateZip = await JSZip.loadAsync(await response.arrayBuffer());
+    const productionZip = new JSZip();
+    const copyTasks: Array<Promise<void>> = [];
+
+    templateZip.forEach((relativePath, zipEntry) => {
+      const nextPath = renameNotaryTemplatePath(relativePath, context);
+
+      if (zipEntry.dir) {
+        productionZip.folder(nextPath);
+        return;
+      }
+
+      copyTasks.push(
+        zipEntry.async('uint8array').then((content) => {
+          productionZip.file(nextPath, content, {
+            date: zipEntry.date,
+            comment: zipEntry.comment,
+            unixPermissions: zipEntry.unixPermissions,
+            dosPermissions: zipEntry.dosPermissions,
+            createFolders: true,
+          });
+        }),
+      );
+    });
+
+    await Promise.all(copyTasks);
+
+    return productionZip.generateAsync({
+      type: 'blob',
+      compression: 'DEFLATE',
+      compressionOptions: {
+        level: 6,
+      },
+    });
   };
 
   const triggerNotaryZipDownload = (downloadUrl: string, filename: string) => {
     const downloadLink = document.createElement('a');
-    downloadLink.href = downloadUrl;
+    downloadLink.href = new URL(downloadUrl, window.location.origin).href;
     downloadLink.download = filename;
     document.body.appendChild(downloadLink);
     downloadLink.click();
@@ -414,18 +489,20 @@ const NotaryOrderList: React.FC = () => {
     if (!targetOrder) return;
 
     try {
-      const blob = await fetchNotaryDownloadTemplate();
+      const blob = await buildNotaryProductionZipBlob(targetOrder);
       const downloadUrl = window.URL.createObjectURL(blob);
 
       triggerNotaryZipDownload(downloadUrl, buildNotaryZipFilename(targetOrder));
       window.setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 0);
-
-      applyOrderPatches({
-        [orderId]: buildProductionOrderPatch(targetOrder, '下载制作文件'),
-      });
-    } catch {
-      window.alert('压缩包模板下载失败，请稍后重试');
+    } catch (error) {
+      console.error('[notary-download] Failed to start zip download', error);
+      window.alert('压缩包下载启动失败，请稍后重试');
+      return;
     }
+
+    applyOrderPatches({
+      [orderId]: buildProductionOrderPatch(targetOrder, '下载制作文件'),
+    });
   };
 
   const handleMarkCompleted = (orderId: string) => {
@@ -508,27 +585,30 @@ const NotaryOrderList: React.FC = () => {
     }
 
     try {
-      const blob = await fetchNotaryDownloadTemplate();
-      const downloadUrl = window.URL.createObjectURL(blob);
+      await Promise.all(
+        selectedOrders.map(async (order) => {
+          const blob = await buildNotaryProductionZipBlob(order);
+          const downloadUrl = window.URL.createObjectURL(blob);
 
-      selectedOrders.forEach((order) => {
-        triggerNotaryZipDownload(downloadUrl, buildNotaryZipFilename(order));
-      });
-
-      window.setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 0);
-
-      applyOrderPatches(
-        Object.fromEntries(
-          selectedOrders.map((order) => [
-            order.orderId,
-            buildProductionOrderPatch(order, '批量下载制作文件'),
-          ]),
-        ),
+          triggerNotaryZipDownload(downloadUrl, buildNotaryZipFilename(order));
+          window.setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 0);
+        }),
       );
-      setSelectedOrderIds([]);
-    } catch {
-      window.alert('压缩包模板下载失败，请稍后重试');
+    } catch (error) {
+      console.error('[notary-download] Failed to start batch zip download', error);
+      window.alert('压缩包下载启动失败，请稍后重试');
+      return;
     }
+
+    applyOrderPatches(
+      Object.fromEntries(
+        selectedOrders.map((order) => [
+          order.orderId,
+          buildProductionOrderPatch(order, '批量下载制作文件'),
+        ]),
+      ),
+    );
+    setSelectedOrderIds([]);
   };
 
   const statusCounts = useMemo(() => {
@@ -820,25 +900,24 @@ const NotaryOrderList: React.FC = () => {
                               </button>
                             )}
 
-                            {visibleStatus === 'in_production' && (
-                              <button
-                                type="button"
-                                className="btn btn--warning btn--sm"
-                                onClick={() => void handleProduceAndDownload(order.orderId)}
-                              >
-                                {t('order.action.produceAndDownload')}
-                              </button>
-                            )}
-
-                            {visibleStatus === 'in_production' && (
-                              <button
-                                type="button"
-                                className="btn btn--primary btn--sm"
-                                onClick={() => handleMarkCompleted(order.orderId)}
-                              >
-                                制作完成
-                              </button>
-                            )}
+                            {visibleStatus === 'in_production' &&
+                              (hasDownloadedProductionFile(order) ? (
+                                <button
+                                  type="button"
+                                  className="btn btn--primary btn--sm"
+                                  onClick={() => handleMarkCompleted(order.orderId)}
+                                >
+                                  制作完成
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn btn--warning btn--sm"
+                                  onClick={() => void handleProduceAndDownload(order.orderId)}
+                                >
+                                  {t('order.action.produceAndDownload')}
+                                </button>
+                              ))}
                           </div>
                         </td>
                       </tr>

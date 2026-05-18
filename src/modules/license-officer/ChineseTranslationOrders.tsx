@@ -15,6 +15,11 @@ import {
   getRecipientInfo,
 } from '../order-management/orderListShared';
 import { useNavigate } from 'react-router-dom';
+import {
+  CHINESE_TRANSLATION_PRODUCT_TITLE,
+  PRODUCTION_OPERATOR,
+  isProductionVisibleChineseTranslationOrder,
+} from './productionOrderVisibility';
 import './ChineseTranslationOrders.css';
 
 type ProductionOrderStatus = 'untranslated' | 'unmade' | 'unshipped' | 'shipped' | 'cancelled';
@@ -37,8 +42,6 @@ const PRODUCTION_STATUS_OPTIONS: Array<{ value: ProductionOrderStatus | ''; labe
 ];
 
 const CHINESE_TRANSLATION_TYPE = '中文翻译件';
-const CHINESE_TRANSLATION_PRODUCT_TITLE = '换国内驾照翻译件';
-const PRODUCTION_OPERATOR = '生产端';
 const TRANSLATED_ACTION = '已翻译';
 const MADE_ACTION = '已制作';
 const SHIPPED_ACTION = '已发货';
@@ -159,9 +162,6 @@ const getShippingInfo = (order: Order) => [
   `发货时间：${order.shippedAt || '--'}`,
 ];
 
-const isChineseTranslationOrder = (order: Order) =>
-  order.productName.trim() === CHINESE_TRANSLATION_PRODUCT_TITLE;
-
 const ChineseTranslationOrders: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -169,7 +169,7 @@ const ChineseTranslationOrders: React.FC = () => {
   const allOrders = useMemo(
     () =>
       getOrders()
-        .filter(isChineseTranslationOrder)
+        .filter(isProductionVisibleChineseTranslationOrder)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     [orderVersion],
   );

@@ -1,14 +1,15 @@
 # 美卡产品中心与办理类型 Specification
 
 > **模块**: 产品中心 + 办理类型管理 + 推送时效配置
-> **版本**: v1.0
-> **最后更新**: 2026-04-17
+> **版本**: v1.1
+> **最后更新**: 2026-05-13
 > **作者**: Codex
 
 ---
 
 ## 更新日志
 
+- **v1.1 (2026-05-13)**: 同步 `domestic_license` 产品分类、换国内驾照翻译件默认产品、标准办理类型模板与产品元数据回写订单展示口径
 - **v1.0 (2026-04-17)**: 从主 PRD 拆分产品侧独立规格，包含产品、办理类型、时效配置
 
 ---
@@ -81,7 +82,7 @@ interface ProductCenterView {
 interface ProductCardView {
   productId: string;
   title: string;
-  category: string;
+  category: 'translation' | 'notary' | 'idp' | 'domestic_license';
   defaultPrice: number;
   status: 'active' | 'inactive';
 }
@@ -100,6 +101,9 @@ interface ProductCardView {
 | BR-PC-005 | 推送时效按 `productId + processTypeId` 粒度保存 |
 | BR-PC-006 | 默认预计天数：`normal=15`，`priority=7`，`urgent=3` |
 | BR-PC-007 | 订单金额使用锁价，产品改价不回写历史订单金额 |
+| BR-PC-008 | 产品分类固定为 `translation` / `notary` / `idp` / `domestic_license`，其中 `domestic_license` 用于“换国内驾照翻译件” |
+| BR-PC-009 | “换国内驾照翻译件”缺失时，系统初始化或迁移时需补齐默认上架产品和办理类型 |
+| BR-PC-010 | 除“小白本”外的标准产品默认办理类型为 `normal` 与 `urgent`；“小白本”使用五档办理类型模板 |
 
 ---
 
@@ -113,11 +117,20 @@ interface ProductCardView {
 ### 7.2 新增/编辑产品
 字段：
 - `title`（必填）
-- `category`（必填）
+- `category`（必填，可选：翻译认证、换国内驾照翻译件、公证、IDP）
 - `defaultPrice`（必填 > 0）
 - `weight`（必填，非负整数）
 - `coverImage`（选填）
 - `description`（选填）
+
+分类说明：
+
+| 分类 | 使用场景 | 典型产品 |
+|---|---|---|
+| `translation` | 常规翻译认证订单 | 小白本、NAATI、NZTA、宣誓翻译 |
+| `domestic_license` | 境外驾照换领国内驾照的中文翻译件 | 换国内驾照翻译件 |
+| `notary` | 公证订单和公证处工作台 | 公证单号、双号、海牙单号、海牙双号 |
+| `idp` | IDP/IDD 模板类订单 | IDP、IDD 国际驾照 |
 
 ### 7.3 办理类型管理
 - 按当前产品维度维护
@@ -172,6 +185,8 @@ flowchart TD
 | TC-PC-002 | 办理类型重名 | 保存失败并提示 |
 | TC-PC-003 | 保存推送时效 | 配置写入并刷新后保留 |
 | TC-PC-004 | 修改默认价格 | 新单使用新价，历史订单金额不变 |
+| TC-PC-005 | 初始化缺失的换国内驾照翻译件 | 产品列表自动补齐 `domestic_license` 分类产品 |
+| TC-PC-006 | 编辑产品分类为换国内驾照翻译件 | 保存后订单展示与生产端筛选按 `domestic_license` 口径识别 |
 
 ---
 

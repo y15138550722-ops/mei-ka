@@ -21,6 +21,16 @@ type ToastState = {
   message: string;
 } | null;
 
+interface KlookOrderManagementProps {
+  pageTitle?: string;
+  listLabel?: string;
+  listPath?: string;
+  detailPathPrefix?: string;
+  getOrders?: () => KlookOrder[];
+  csvFilePrefix?: string;
+  targetProductName?: string;
+}
+
 const DEFAULT_FILTERS: KlookOrderFilterState = {
   agentName: '',
   productName: '',
@@ -46,6 +56,8 @@ const KLOOK_STATUS_TABS: Array<{ label: string; value: KlookOrderStatus | '' }> 
 ];
 
 const KLOOK_TARGET_PRODUCT_NAME = '驾照翻译国际认证件（小白本）';
+const PRODUCTION_OPERATOR = '生产端';
+const PRODUCTION_NODE_ACTIONS = ['已翻译', '已制作', '已发货'] as const;
 
 const normalizeProductName = (value: string) =>
   value
@@ -130,7 +142,20 @@ const matchesKeyword = (order: KlookOrder, keyword: string) => {
   return searchableText.includes(keyword);
 };
 
-const downloadCsv = (rows: KlookOrder[]) => {
+const getProductionOrderRecords = (order: KlookOrder) =>
+  PRODUCTION_NODE_ACTIONS.flatMap((action) => {
+    const log = order.logs.find((item) => item.operator === PRODUCTION_OPERATOR && item.action === action);
+    return log
+      ? [
+          {
+            action,
+            time: log.time.slice(0, 16),
+          },
+        ]
+      : [];
+  });
+
+const downloadCsv = (rows: KlookOrder[], filePrefix: string) => {
   const headers = [
     '订单ID',
     '下单时间',
@@ -158,7 +183,9 @@ const downloadCsv = (rows: KlookOrder[]) => {
     order.recipientPhone,
     order.deliveryAddress,
     STATUS_LABELS[order.status],
-    [order.orderRecordLabel, order.orderRecordAt].filter(Boolean).join(' '),
+    getProductionOrderRecords(order)
+      .map((record) => `${record.action} ${record.time}`)
+      .join('；'),
   ]);
 
   const escapeCell = (value: string) => `"${String(value ?? '').replace(/"/g, '""')}"`;
@@ -167,37 +194,48 @@ const downloadCsv = (rows: KlookOrder[]) => {
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `Klook订单管理_${new Date().toISOString().slice(0, 10)}.csv`;
+  link.download = `${filePrefix}_${new Date().toISOString().slice(0, 10)}.csv`;
   document.body.appendChild(link);
   link.click();
   link.remove();
   window.setTimeout(() => window.URL.revokeObjectURL(url), 0);
 };
 
-const KlookOrderManagement: React.FC = () => {
+const KlookOrderManagement: React.FC<KlookOrderManagementProps> = ({
+  pageTitle = 'Klook订单管理',
+  listLabel,
+  listPath = '/order-management/api-orders/klook',
+  detailPathPrefix,
+  getOrders = getKlookOrders,
+  csvFilePrefix,
+  targetProductName = KLOOK_TARGET_PRODUCT_NAME,
+}) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const resolvedListLabel = listLabel || pageTitle;
+  const resolvedDetailPathPrefix = detailPathPrefix || listPath;
+  const resolvedCsvFilePrefix = csvFilePrefix || pageTitle;
   const [filters, setFilters] = useState<KlookOrderFilterState>(DEFAULT_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState<KlookOrderFilterState>(DEFAULT_FILTERS);
   const [activeStatus, setActiveStatus] = useState<KlookOrderStatus | ''>('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [toast, setToast] = useState<ToastState>(null);
-  const klookOrders = useMemo(() => getKlookOrders(), []);
+  const klookOrders = useMemo(() => getOrders(), [getOrders]);
 
   const klookVisibleOrders = useMemo(
-    () => klookOrders.filter((order) => matchesProductName(order.productName, KLOOK_TARGET_PRODUCT_NAME)),
-    [klookOrders],
+    () => klookOrders.filter((order) => matchesProductName(order.productName, targetProductName)),
+    [klookOrders, targetProductName],
   );
 
   const productOptions = useMemo(
     () =>
       getProducts()
         .filter(
-          (product) => product.status === 'active' && matchesProductName(product.title, KLOOK_TARGET_PRODUCT_NAME),
+          (product) => product.status === 'active' && matchesProductName(product.title, targetProductName),
         )
         .sort(sortProductsByWeight),
-    [],
+    [targetProductName],
   );
   const klookTargetProduct = useMemo(() => productOptions[0] || null, [productOptions]);
   const processTypeOptions = useMemo(
@@ -262,7 +300,7 @@ const KlookOrderManagement: React.FC = () => {
     return counts;
   }, [klookVisibleOrders]);
 
-  const getDisplayProductName = () => klookTargetProduct?.title || KLOOK_TARGET_PRODUCT_NAME;
+  const getDisplayProductName = () => klookTargetProduct?.title || targetProductName;
 
   const getDisplayProcessType = (order: KlookOrder) => {
     if (!klookTargetProduct) {
@@ -367,6 +405,7 @@ const KlookOrderManagement: React.FC = () => {
         productName: getDisplayProductName(),
         processType: getDisplayProcessType(order),
       })),
+      resolvedCsvFilePrefix,
     );
     showToast('success', '导出成功');
   };
@@ -386,7 +425,7 @@ const KlookOrderManagement: React.FC = () => {
             <span>/</span>
             API订单管理
             <span>/</span>
-            Klook订单管理
+            {pageTitle}
           </div>
           <div className="order-list-topbar__accent" />
         </div>
@@ -527,11 +566,11 @@ const KlookOrderManagement: React.FC = () => {
                 ) : (
                   paginatedOrders.map((order) => {
                     const detailNavigationState = {
-                      from: '/order-management/api-orders/klook',
-                      listLabel: 'Klook订单管理',
+                      from: listPath,
+                      listLabel: resolvedListLabel,
                     };
-                    const viewPath = `/order-management/api-orders/klook/${order.orderId}?mode=view`;
-                    const auditPath = `/order-management/api-orders/klook/${order.orderId}?mode=audit`;
+                    const viewPath = `${resolvedDetailPathPrefix}/${order.orderId}?mode=view`;
+                    const auditPath = `${resolvedDetailPathPrefix}/${order.orderId}?mode=audit`;
 
                     return (
                     <tr key={order.orderId} className="order-list-row">
@@ -606,14 +645,22 @@ const KlookOrderManagement: React.FC = () => {
                       </td>
 
                       <td>
-                        {order.orderRecordLabel && order.orderRecordAt ? (
-                          <div className="klook-record">
-                            <span className="klook-record__label">{order.orderRecordLabel}</span>
-                            <span className="klook-record__time">{order.orderRecordAt}</span>
-                          </div>
-                        ) : (
-                          <span className="klook-record__empty">--</span>
-                        )}
+                        {(() => {
+                          const productionRecords = getProductionOrderRecords(order);
+
+                          return productionRecords.length > 0 ? (
+                            <div className="klook-record-list">
+                              {productionRecords.map((record) => (
+                                <div key={`${record.action}-${record.time}`} className="klook-record">
+                                  <span className="klook-record__label">{record.action}</span>
+                                  <span className="klook-record__time">{record.time}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="klook-record__empty">--</span>
+                          );
+                        })()}
                       </td>
 
                       <td className="order-actions-cell klook-order-actions-cell">

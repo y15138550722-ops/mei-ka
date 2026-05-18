@@ -25,6 +25,16 @@ type KlookOrderEditForm = {
   driverGivenNameLatin: string;
   licenseNumber: string;
   licenseType: string;
+  licenseGender: string;
+  licenseNationality: string;
+  licenseBirthDate: string;
+  licenseAddress: string;
+  licenseFirstIssueDate: string;
+  licenseValidFromDate: string;
+  licenseValidUntilDate: string;
+  licenseValidYears: string;
+  licenseIssuingAuthority: string;
+  licenseIssuingRegion: string;
   recipientName: string;
   recipientPhone: string;
   deliveryAddress: string;
@@ -34,6 +44,15 @@ type KlookOrderSourceState = {
   from?: string;
   listLabel?: string;
 };
+
+interface KlookOrderDetailProps {
+  listPath?: string;
+  listLabel?: string;
+  getOrderById?: (id: string) => KlookOrder | undefined;
+  updateOrder?: (id: string, updates: Partial<KlookOrder>) => void;
+  enableFullLicenseEdit?: boolean;
+  generateManagementOrderIdOnApprove?: boolean;
+}
 
 type DetailFieldItem = {
   label: string;
@@ -211,6 +230,17 @@ const addYearsToDate = (dateString: string, years: number) => {
   return `${year + years}-${padNumber(month)}-${padNumber(day)}`;
 };
 
+const formatCompactTimestamp = (timestamp: string) => timestamp.replace(/\D/g, '').slice(0, 14);
+
+const resolveEditableValue = (primary: string | undefined, fallback: string) => {
+  const normalizedPrimary = primary?.trim();
+  if (normalizedPrimary) {
+    return normalizedPrimary;
+  }
+
+  return fallback === '--' ? '' : fallback;
+};
+
 const splitChineseName = (name: string) => {
   const normalizedName = name.trim();
   if (!normalizedName) {
@@ -333,27 +363,50 @@ const buildAuditOperatorId = (order: KlookOrder, latestAuditLog?: KlookOrderLog 
 
 const buildKlookLicenseSnapshot = (order: KlookOrder, editForm: KlookOrderEditForm): KlookLicenseSnapshot => {
   const seed = getOrderSeed(order.orderId);
-  const validFromDate = createDateFromSeed(seed + 41, 2021, 4);
-  const licenseAddress = editForm.deliveryAddress.trim() || order.deliveryAddress || '';
+  const inferredValidFromDate = createDateFromSeed(seed + 41, 2021, 4);
+  const licenseAddress =
+    editForm.licenseAddress.trim() ||
+    order.licenseAddress?.trim() ||
+    editForm.deliveryAddress.trim() ||
+    order.deliveryAddress ||
+    '';
+  const validFromDate = editForm.licenseValidFromDate.trim() || order.licenseValidFromDate || inferredValidFromDate;
 
   return {
     surnameLatin: getDisplayValue(editForm.driverSurnameLatin),
     givenNameLatin: getDisplayValue(editForm.driverGivenNameLatin),
-    gender: deriveGender(editForm.licenseNumber),
-    nationality: deriveNationality(editForm.licenseNumber),
-    birthDate: deriveBirthDate(editForm.licenseNumber),
+    gender: getDisplayValue(editForm.licenseGender || order.licenseGender || deriveGender(editForm.licenseNumber)),
+    nationality: getDisplayValue(editForm.licenseNationality || order.licenseNationality || deriveNationality(editForm.licenseNumber)),
+    birthDate: getDisplayValue(editForm.licenseBirthDate || order.licenseBirthDate || deriveBirthDate(editForm.licenseNumber)),
     licenseAddress: getDisplayValue(licenseAddress),
-    firstIssueDate: createDateFromSeed(seed + 17, 2010, 8),
+    firstIssueDate: getDisplayValue(
+      editForm.licenseFirstIssueDate || order.licenseFirstIssueDate || createDateFromSeed(seed + 17, 2010, 8),
+    ),
     validFromDate,
-    validUntilDate: addYearsToDate(validFromDate, 10),
-    validYears: '10年',
-    issuingAuthority: '公安交通管理局',
-    issuingRegion: extractIssuingRegion(licenseAddress),
+    validUntilDate: getDisplayValue(editForm.licenseValidUntilDate || order.licenseValidUntilDate || addYearsToDate(validFromDate, 10)),
+    validYears: getDisplayValue(editForm.licenseValidYears || order.licenseValidYears || '10年'),
+    issuingAuthority: getDisplayValue(editForm.licenseIssuingAuthority || order.licenseIssuingAuthority || '公安交通管理局'),
+    issuingRegion: getDisplayValue(editForm.licenseIssuingRegion || order.licenseIssuingRegion || extractIssuingRegion(licenseAddress)),
   };
 };
 
 const buildEditForm = (order: KlookOrder): KlookOrderEditForm => {
   const splitPinyin = splitDriverPinyin(order.driverName, order.driverNameLatin);
+  const seed = getOrderSeed(order.orderId);
+  const defaultLicenseAddress = order.licenseAddress?.trim() || order.deliveryAddress || '';
+  const defaultValidFromDate = createDateFromSeed(seed + 41, 2021, 4);
+  const defaultLicenseSnapshot = {
+    gender: deriveGender(order.licenseNumber),
+    nationality: deriveNationality(order.licenseNumber),
+    birthDate: deriveBirthDate(order.licenseNumber),
+    licenseAddress: defaultLicenseAddress,
+    firstIssueDate: createDateFromSeed(seed + 17, 2010, 8),
+    validFromDate: defaultValidFromDate,
+    validUntilDate: addYearsToDate(defaultValidFromDate, 10),
+    validYears: '10年',
+    issuingAuthority: '公安交通管理局',
+    issuingRegion: extractIssuingRegion(defaultLicenseAddress),
+  };
 
   return {
     driverName: order.driverName,
@@ -361,20 +414,37 @@ const buildEditForm = (order: KlookOrder): KlookOrderEditForm => {
     driverGivenNameLatin: splitPinyin.givenNameLatin,
     licenseNumber: order.licenseNumber,
     licenseType: order.licenseType,
+    licenseGender: resolveEditableValue(order.licenseGender, defaultLicenseSnapshot.gender),
+    licenseNationality: resolveEditableValue(order.licenseNationality, defaultLicenseSnapshot.nationality),
+    licenseBirthDate: resolveEditableValue(order.licenseBirthDate, defaultLicenseSnapshot.birthDate),
+    licenseAddress: resolveEditableValue(order.licenseAddress, defaultLicenseSnapshot.licenseAddress),
+    licenseFirstIssueDate: resolveEditableValue(order.licenseFirstIssueDate, defaultLicenseSnapshot.firstIssueDate),
+    licenseValidFromDate: resolveEditableValue(order.licenseValidFromDate, defaultLicenseSnapshot.validFromDate),
+    licenseValidUntilDate: resolveEditableValue(order.licenseValidUntilDate, defaultLicenseSnapshot.validUntilDate),
+    licenseValidYears: resolveEditableValue(order.licenseValidYears, defaultLicenseSnapshot.validYears),
+    licenseIssuingAuthority: resolveEditableValue(order.licenseIssuingAuthority, defaultLicenseSnapshot.issuingAuthority),
+    licenseIssuingRegion: resolveEditableValue(order.licenseIssuingRegion, defaultLicenseSnapshot.issuingRegion),
     recipientName: order.recipientName,
     recipientPhone: order.recipientPhone,
     deliveryAddress: order.deliveryAddress,
   };
 };
 
-const KlookOrderDetail: React.FC = () => {
+const KlookOrderDetail: React.FC<KlookOrderDetailProps> = ({
+  listPath = '/order-management/api-orders/klook',
+  listLabel = 'Klook订单管理',
+  getOrderById = getKlookOrderById,
+  updateOrder = updateKlookOrder,
+  enableFullLicenseEdit = false,
+  generateManagementOrderIdOnApprove = false,
+}) => {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const navigate = useNavigate();
   const navigationState = location.state as KlookOrderSourceState | null;
   const previewMode = new URLSearchParams(location.search).get('mode') === 'audit' ? 'audit' : 'view';
-  const fetchedOrder = useMemo<KlookOrder | null>(() => getKlookOrderById(id || '') ?? null, [id]);
+  const fetchedOrder = useMemo<KlookOrder | null>(() => getOrderById(id || '') ?? null, [id, getOrderById]);
 
   const [order, setOrder] = useState<KlookOrder | null>(fetchedOrder);
   const [toast, setToast] = useState<{ type: string; message: string } | null>(null);
@@ -398,8 +468,8 @@ const KlookOrderDetail: React.FC = () => {
   const isReadOnlyPreview = !isAuditable;
   const isViewPreview = previewMode === 'view';
   const auditPageTitle = isAuditable ? '订单审核' : '查看审核';
-  const sourceListPath = navigationState?.from || '/order-management/api-orders/klook';
-  const sourceListLabel = navigationState?.listLabel || 'Klook订单管理';
+  const sourceListPath = navigationState?.from || listPath;
+  const sourceListLabel = navigationState?.listLabel || listLabel;
 
   if (!order || !editForm) {
     return (
@@ -437,11 +507,14 @@ const KlookOrderDetail: React.FC = () => {
 
   const handleApprove = () => {
     const currentTimestamp = getCurrentTimestamp();
+    const managementOrderId =
+      generateManagementOrderIdOnApprove && !order.managementOrderId
+        ? formatCompactTimestamp(currentTimestamp)
+        : order.managementOrderId;
     const nextUpdates: Partial<KlookOrder> = {
       status: 'pending_production',
       updatedAt: currentTimestamp,
-      orderRecordLabel: '已审核',
-      orderRecordAt: currentTimestamp,
+      ...(generateManagementOrderIdOnApprove ? { managementOrderId } : {}),
       logs: [
         ...order.logs,
         {
@@ -452,7 +525,7 @@ const KlookOrderDetail: React.FC = () => {
       ],
     };
 
-    updateKlookOrder(order.orderId, nextUpdates);
+    updateOrder(order.orderId, nextUpdates);
     showToast('success', '审核通过，订单已转入待制作');
     window.setTimeout(() => navigate(sourceListPath), 1200);
   };
@@ -469,8 +542,6 @@ const KlookOrderDetail: React.FC = () => {
       rejectReason: nextRejectReason,
       remark: nextRejectReason,
       updatedAt: currentTimestamp,
-      orderRecordLabel: '已驳回',
-      orderRecordAt: currentTimestamp,
       logs: [
         ...order.logs,
         {
@@ -481,7 +552,7 @@ const KlookOrderDetail: React.FC = () => {
       ],
     };
 
-    updateKlookOrder(order.orderId, nextUpdates);
+    updateOrder(order.orderId, nextUpdates);
     setShowRejectModal(false);
     setRejectReason('');
     showToast('error', '订单已驳回');
@@ -522,6 +593,20 @@ const KlookOrderDetail: React.FC = () => {
       driverNameLatin: joinDriverPinyin(editForm.driverSurnameLatin, editForm.driverGivenNameLatin),
       licenseNumber: editForm.licenseNumber.trim(),
       licenseType: editForm.licenseType.trim(),
+      ...(enableFullLicenseEdit
+        ? {
+            licenseGender: editForm.licenseGender.trim(),
+            licenseNationality: editForm.licenseNationality.trim(),
+            licenseBirthDate: editForm.licenseBirthDate.trim(),
+            licenseAddress: editForm.licenseAddress.trim(),
+            licenseFirstIssueDate: editForm.licenseFirstIssueDate.trim(),
+            licenseValidFromDate: editForm.licenseValidFromDate.trim(),
+            licenseValidUntilDate: editForm.licenseValidUntilDate.trim(),
+            licenseValidYears: editForm.licenseValidYears.trim(),
+            licenseIssuingAuthority: editForm.licenseIssuingAuthority.trim(),
+            licenseIssuingRegion: editForm.licenseIssuingRegion.trim(),
+          }
+        : {}),
       recipientName: editForm.recipientName.trim(),
       recipientPhone: editForm.recipientPhone.trim(),
       deliveryAddress: editForm.deliveryAddress.trim(),
@@ -536,7 +621,7 @@ const KlookOrderDetail: React.FC = () => {
       ],
     };
 
-    updateKlookOrder(order.orderId, nextUpdates);
+    updateOrder(order.orderId, nextUpdates);
 
     const nextOrder = {
       ...order,
@@ -552,13 +637,14 @@ const KlookOrderDetail: React.FC = () => {
   const renderEditor = (
     field: keyof KlookOrderEditForm,
     options: {
-      type?: 'text' | 'tel';
+      type?: 'date' | 'text' | 'tel';
       multiline?: boolean;
       rows?: number;
       placeholder?: string;
+      ariaLabel?: string;
     } = {},
   ) => {
-    const { type = 'text', multiline = false, rows = 3, placeholder } = options;
+    const { type = 'text', multiline = false, rows = 3, placeholder, ariaLabel } = options;
     const value = editForm[field];
 
     if (multiline) {
@@ -579,6 +665,7 @@ const KlookOrderDetail: React.FC = () => {
         type={type}
         value={value}
         placeholder={placeholder}
+        aria-label={ariaLabel}
         onChange={(event) => handleEditFieldChange(field, event.target.value)}
       />
     );
@@ -611,7 +698,7 @@ const KlookOrderDetail: React.FC = () => {
     },
     {
       label: '驾照官推送订单号',
-      value: '--',
+      value: getDisplayValue(order.managementOrderId),
       fieldClassName: 'klook-review-field--wide-label',
       labelClassName: 'klook-review-field__label--nowrap',
     },
@@ -636,15 +723,21 @@ const KlookOrderDetail: React.FC = () => {
     },
     {
       label: '性别',
-      value: licenseSnapshot.gender,
+      value:
+        isEditing && enableFullLicenseEdit ? renderEditor('licenseGender', { placeholder: '请输入性别' }) : licenseSnapshot.gender,
     },
     {
       label: '国籍',
-      value: licenseSnapshot.nationality,
+      value:
+        isEditing && enableFullLicenseEdit
+          ? renderEditor('licenseNationality', { placeholder: '请输入国籍' })
+          : licenseSnapshot.nationality,
     },
     {
       label: '出生日期',
-      value: licenseSnapshot.birthDate,
+      value: isEditing && enableFullLicenseEdit
+        ? renderEditor('licenseBirthDate', { type: 'date', ariaLabel: '出生日期', placeholder: '请选择出生日期' })
+        : licenseSnapshot.birthDate,
     },
     {
       label: '准驾车型',
@@ -652,28 +745,57 @@ const KlookOrderDetail: React.FC = () => {
     },
     {
       label: '驾照地址详情',
-      value: licenseSnapshot.licenseAddress,
+      value: isEditing && enableFullLicenseEdit
+        ? renderEditor('licenseAddress', { multiline: true, rows: 3, placeholder: '请输入驾照地址详情' })
+        : licenseSnapshot.licenseAddress,
       fullWidth: true,
     },
     {
       label: '初次领证日期',
-      value: licenseSnapshot.firstIssueDate,
+      value: isEditing && enableFullLicenseEdit
+        ? renderEditor('licenseFirstIssueDate', { type: 'date', ariaLabel: '初次领证日期', placeholder: '请选择初次领证日期' })
+        : licenseSnapshot.firstIssueDate,
     },
     {
       label: '有效起始日期',
-      value: licenseSnapshot.validFromDate,
+      value: isEditing && enableFullLicenseEdit
+        ? renderEditor('licenseValidFromDate', { type: 'date', ariaLabel: '有效起始日期', placeholder: '请选择有效起始日期' })
+        : licenseSnapshot.validFromDate,
     },
     {
       label: '有效年限',
-      value: licenseSnapshot.validYears,
+      value:
+        isEditing && enableFullLicenseEdit
+          ? renderEditor('licenseValidYears', { placeholder: '如 10年' })
+          : licenseSnapshot.validYears,
     },
+    ...(enableFullLicenseEdit
+      ? [
+          {
+            label: '终止日期',
+            value:
+              isEditing && enableFullLicenseEdit
+                ? renderEditor('licenseValidUntilDate', {
+                    type: 'date',
+                    ariaLabel: '终止日期',
+                    placeholder: '请选择终止日期',
+                  })
+                : licenseSnapshot.validUntilDate,
+          },
+        ]
+      : []),
     {
       label: '发证机关',
-      value: licenseSnapshot.issuingAuthority,
+      value: isEditing && enableFullLicenseEdit
+        ? renderEditor('licenseIssuingAuthority', { placeholder: '请输入发证机关' })
+        : licenseSnapshot.issuingAuthority,
     },
     {
       label: '发证地区',
-      value: licenseSnapshot.issuingRegion,
+      value:
+        isEditing && enableFullLicenseEdit
+          ? renderEditor('licenseIssuingRegion', { placeholder: '请输入发证地区' })
+          : licenseSnapshot.issuingRegion,
     },
   ];
 

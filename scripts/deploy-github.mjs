@@ -90,6 +90,14 @@ const run = (command, commandArgs, { capture = false, allowFailure = false } = {
     cwd: process.cwd(),
     encoding: 'utf8',
     stdio: capture ? 'pipe' : 'inherit',
+    env:
+      command === 'git'
+        ? {
+            ...process.env,
+            GIT_PAGER: 'cat',
+            GIT_TERMINAL_PROMPT: '0',
+          }
+        : process.env,
   });
 
   if (result.error) {

@@ -4,7 +4,7 @@ import { getOrderById, getOrders, updateOrder } from './mockDataService';
 
 const NOTARY_OFFICE_ORDER_STORAGE_KEY = 'meika-notary-office-orders';
 const NOTARY_OFFICE_ORDER_DATA_VERSION_STORAGE_KEY = 'meika-notary-office-orders-version';
-const NOTARY_OFFICE_ORDER_DATA_VERSION = 'v6-empty-notary-office-orders';
+const NOTARY_OFFICE_ORDER_DATA_VERSION = 'v7-clear-notary-office-orders';
 const REMOVED_NOTARY_OFFICE_ORDER_IDS = new Set(['MK2600057', 'MK2600061']);
 const MANAGEMENT_ORDER_ID_PATTERN = /^MK\d+$/;
 
@@ -600,7 +600,7 @@ export function syncNotaryOfficeRejectionToManagement(
           },
         ];
   const nextUpdates: Partial<Order> = {
-    status: 'pending_production',
+    status: 'rejected',
     rejectReason,
     remark: rejectReason,
     updatedAt: rejectedAt,

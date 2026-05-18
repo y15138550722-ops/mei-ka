@@ -133,7 +133,26 @@ const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   rejected: '已拒绝',
 };
 
+const NOTARY_OFFICE_REJECTION_PATTERN = /公证处审核驳回|公证处.*驳回/;
+
 const NAME_PINYIN_MAP: Record<string, string> = {
+  艾: 'AI',
+  安: 'AN',
+  敖: 'AO',
+  白: 'BAI',
+  柏: 'BAI',
+  包: 'BAO',
+  宝: 'BAO',
+  贝: 'BEI',
+  毕: 'BI',
+  卞: 'BIAN',
+  蔡: 'CAI',
+  曹: 'CAO',
+  岑: 'CEN',
+  曾: 'ZENG',
+  常: 'CHANG',
+  车: 'CHE',
+  成: 'CHENG',
   张: 'ZHANG',
   伟: 'WEI',
   王: 'WANG',
@@ -157,6 +176,7 @@ const NAME_PINYIN_MAP: Record<string, string> = {
   亮: 'LIANG',
   刘: 'LIU',
   洋: 'YANG',
+  杨: 'YANG',
   黄: 'HUANG',
   磊: 'LEI',
   何: 'HE',
@@ -174,6 +194,253 @@ const NAME_PINYIN_MAP: Record<string, string> = {
   宇: 'YU',
   韩: 'HAN',
   雪: 'XUE',
+  丁: 'DING',
+  邓: 'DENG',
+  董: 'DONG',
+  杜: 'DU',
+  段: 'DUAN',
+  范: 'FAN',
+  方: 'FANG',
+  冯: 'FENG',
+  付: 'FU',
+  傅: 'FU',
+  龚: 'GONG',
+  顾: 'GU',
+  郭: 'GUO',
+  胡: 'HU',
+  华: 'HUA',
+  蒋: 'JIANG',
+  姜: 'JIANG',
+  江: 'JIANG',
+  金: 'JIN',
+  赖: 'LAI',
+  梁: 'LIANG',
+  廖: 'LIAO',
+  罗: 'LUO',
+  陆: 'LU',
+  吕: 'LYU',
+  卢: 'LU',
+  莫: 'MO',
+  潘: 'PAN',
+  彭: 'PENG',
+  邱: 'QIU',
+  秦: 'QIN',
+  任: 'REN',
+  沈: 'SHEN',
+  史: 'SHI',
+  宋: 'SONG',
+  苏: 'SU',
+  唐: 'TANG',
+  田: 'TIAN',
+  汪: 'WANG',
+  魏: 'WEI',
+  许: 'XU',
+  肖: 'XIAO',
+  薛: 'XUE',
+  叶: 'YE',
+  殷: 'YIN',
+  余: 'YU',
+  袁: 'YUAN',
+  于: 'YU',
+  钟: 'ZHONG',
+  邹: 'ZOU',
+  祝: 'ZHU',
+  俞: 'YU',
+  姚: 'YAO',
+  夏: 'XIA',
+  知: 'ZHI',
+  书: 'SHU',
+  禾: 'HE',
+  景: 'JING',
+  川: 'CHUAN',
+  宁: 'NING',
+  若: 'RUO',
+  岚: 'LAN',
+  清: 'QING',
+  和: 'HE',
+  星: 'XING',
+  野: 'YE',
+  慕: 'MU',
+  晴: 'QING',
+  望: 'WANG',
+  舒: 'SHU',
+  砚: 'YAN',
+  秋: 'QIU',
+  子: 'ZI',
+  梓: 'ZI',
+  涵: 'HAN',
+  晨: 'CHEN',
+  辰: 'CHEN',
+  轩: 'XUAN',
+  萱: 'XUAN',
+  怡: 'YI',
+  依: 'YI',
+  嘉: 'JIA',
+  家: 'JIA',
+  涛: 'TAO',
+  鹏: 'PENG',
+  超: 'CHAO',
+  斌: 'BIN',
+  波: 'BO',
+  勇: 'YONG',
+  军: 'JUN',
+  平: 'PING',
+  玲: 'LING',
+  娜: 'NA',
+  丹: 'DAN',
+  莉: 'LI',
+  婷: 'TING',
+  倩: 'QIAN',
+  慧: 'HUI',
+  燕: 'YAN',
+  洁: 'JIE',
+  文: 'WEN',
+  博: 'BO',
+  泽: 'ZE',
+  瑞: 'RUI',
+  昊: 'HAO',
+  睿: 'RUI',
+  诚: 'CHENG',
+  皓: 'HAO',
+  诗: 'SHI',
+  雨: 'YU',
+  语: 'YU',
+  心: 'XIN',
+  可: 'KE',
+  乐: 'LE',
+  亦: 'YI',
+  思: 'SI',
+  妍: 'YAN',
+  彤: 'TONG',
+  琪: 'QI',
+  琳: 'LIN',
+  瑶: 'YAO',
+  雅: 'YA',
+  馨: 'XIN',
+};
+
+const COMPOUND_CHINESE_SURNAMES = [
+  '欧阳',
+  '太史',
+  '端木',
+  '上官',
+  '司马',
+  '东方',
+  '独孤',
+  '南宫',
+  '万俟',
+  '闻人',
+  '夏侯',
+  '诸葛',
+  '尉迟',
+  '公羊',
+  '赫连',
+  '澹台',
+  '皇甫',
+  '宗政',
+  '濮阳',
+  '公冶',
+  '太叔',
+  '申屠',
+  '公孙',
+  '慕容',
+  '仲孙',
+  '钟离',
+  '长孙',
+  '宇文',
+  '司徒',
+  '鲜于',
+  '司空',
+  '闾丘',
+  '子车',
+  '亓官',
+  '司寇',
+  '巫马',
+  '公西',
+  '颛孙',
+  '壤驷',
+  '公良',
+  '漆雕',
+  '乐正',
+  '宰父',
+  '谷梁',
+  '拓跋',
+  '夹谷',
+  '轩辕',
+  '令狐',
+  '段干',
+  '百里',
+  '呼延',
+  '东郭',
+  '南门',
+  '羊舌',
+  '微生',
+  '公户',
+  '公玉',
+  '公仪',
+  '梁丘',
+  '公仲',
+  '公上',
+  '公门',
+  '公山',
+  '公坚',
+  '左丘',
+  '公伯',
+  '西门',
+  '公祖',
+  '第五',
+  '公乘',
+  '贯丘',
+  '公皙',
+  '南荣',
+  '东里',
+  '东宫',
+  '仲长',
+  '子书',
+  '子桑',
+  '即墨',
+  '达奚',
+  '褚师',
+];
+
+const SURNAME_PINYIN_MAP: Record<string, string> = {
+  ...NAME_PINYIN_MAP,
+  殷: 'YIN',
+  单: 'SHAN',
+  仇: 'QIU',
+  区: 'OU',
+  查: 'ZHA',
+  盖: 'GE',
+  乐: 'YUE',
+  繁: 'PO',
+  朴: 'PIAO',
+  尉: 'YU',
+  令: 'LING',
+  长: 'ZHANG',
+  欧阳: 'OUYANG',
+  太史: 'TAISHI',
+  端木: 'DUANMU',
+  上官: 'SHANGGUAN',
+  司马: 'SIMA',
+  东方: 'DONGFANG',
+  独孤: 'DUGU',
+  南宫: 'NANGONG',
+  夏侯: 'XIAHOU',
+  诸葛: 'ZHUGE',
+  尉迟: 'YUCHI',
+  皇甫: 'HUANGFU',
+  公孙: 'GONGSUN',
+  慕容: 'MURONG',
+  钟离: 'ZHONGLI',
+  长孙: 'ZHANGSUN',
+  宇文: 'YUWEN',
+  司徒: 'SITU',
+  司空: 'SIKONG',
+  令狐: 'LINGHU',
+  轩辕: 'XUANYUAN',
+  呼延: 'HUYAN',
+  西门: 'XIMEN',
+  第五: 'DIWU',
 };
 
 const currencyFormatter = new Intl.NumberFormat('zh-CN', {
@@ -244,6 +511,26 @@ const getNotaryReviewStatusClass = (status: OrderStatus) => `notary-review-statu
 const getLatestAuditLog = (logs: OrderLog[]) =>
   [...logs].reverse().find((log) => /审核通过|审核拒绝|审核驳回/.test(log.action));
 
+const getLatestNotaryOfficeRejectionLog = (order: Order, officeOrder: Order | null) =>
+  [...order.logs, ...(officeOrder?.logs || [])].reverse().find((log) => NOTARY_OFFICE_REJECTION_PATTERN.test(log.action));
+
+const isNotaryOfficeRejected = (order: Order, officeOrder: Order | null) =>
+  order.status !== 'cancelled' &&
+  Boolean(
+    getLatestNotaryOfficeRejectionLog(order, officeOrder) ||
+      officeOrder?.status === 'rejected',
+  );
+
+const getDisplayOrderStatusLabel = (order: Order, officeOrder: Order | null) =>
+  order.status === 'cancelled'
+    ? ORDER_STATUS_LABELS.cancelled
+    : isNotaryOfficeRejected(order, officeOrder)
+      ? '公证处已驳回'
+      : ORDER_STATUS_LABELS[order.status];
+
+const getDisplayOrderStatusClass = (order: Order, officeOrder: Order | null) =>
+  getNotaryReviewStatusClass(order.status === 'cancelled' ? 'cancelled' : isNotaryOfficeRejected(order, officeOrder) ? 'rejected' : order.status);
+
 const getAuditTime = (order: Order, latestAuditLog: OrderLog | null | undefined) => {
   const auditTime = latestAuditLog?.time?.trim();
   if (auditTime) {
@@ -266,7 +553,7 @@ const getAuditOperatorId = (order: Order, latestAuditLog: OrderLog | null | unde
 };
 
 const getNamePinyinParts = (name: string) => {
-  const normalizedName = name.trim();
+  const normalizedName = name.replace(/[\s·.。-]/g, '').trim();
   if (!normalizedName || !/^[\u4e00-\u9fff]+$/u.test(normalizedName)) {
     return {
       surnamePinyin: '--',
@@ -274,16 +561,18 @@ const getNamePinyinParts = (name: string) => {
     };
   }
 
-  const surname = normalizedName.slice(0, 1);
-  const givenName = normalizedName.slice(1);
-
   const toPinyin = (value: string) => {
-    const tokens = Array.from(value).map((char) => NAME_PINYIN_MAP[char]).filter(Boolean);
-    return tokens.length === Array.from(value).length ? tokens.join('') : '--';
+    const tokens = Array.from(value).map((char) => NAME_PINYIN_MAP[char] || '');
+    return tokens.every(Boolean) ? tokens.join('') : '--';
   };
+  const compoundSurname = COMPOUND_CHINESE_SURNAMES.find((surname) => normalizedName.startsWith(surname));
+  const surnameLength = compoundSurname ? compoundSurname.length : 1;
+  const surname = normalizedName.slice(0, surnameLength);
+  const givenName = normalizedName.slice(surnameLength);
+  const surnamePinyin = SURNAME_PINYIN_MAP[surname] || toPinyin(surname);
 
   return {
-    surnamePinyin: toPinyin(surname),
+    surnamePinyin,
     givenNamePinyin: givenName ? toPinyin(givenName) : '--',
   };
 };
@@ -417,6 +706,9 @@ const NotaryOrderManagementPreview: React.FC = () => {
   const [previewImage, setPreviewImage] = useState<CertificateImage | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [isEditing, setIsEditing] = useState(false);
+  const [certificateImages, setCertificateImages] = useState<Record<string, string>>(
+    fetchedOrder?.notaryCertificateImages || {},
+  );
   const [exportingPowerOfAttorneyKey, setExportingPowerOfAttorneyKey] = useState<NotaryPowerOfAttorneyKey | null>(null);
   const [isExportingImagesPdf, setIsExportingImagesPdf] = useState(false);
   const [editForm, setEditForm] = useState<OrderEditForm | null>(fetchedOrder ? buildOrderEditForm(fetchedOrder) : null);
@@ -433,6 +725,7 @@ const NotaryOrderManagementPreview: React.FC = () => {
     setShowApproveModal(false);
     setSelectedNotaryOffice('');
     setPreviewImage(null);
+    setCertificateImages(fetchedOrder?.notaryCertificateImages || {});
     setRejectReason('');
     setExportingPowerOfAttorneyKey(null);
     setIsExportingImagesPdf(false);
@@ -448,9 +741,19 @@ const NotaryOrderManagementPreview: React.FC = () => {
   );
   const logisticsDisplayCompany = order?.logisticsCompany?.trim() || officeOrder?.logisticsCompany?.trim() || '';
   const logisticsDisplayTrackingNumber = order?.trackingNumber?.trim() || officeOrder?.trackingNumber?.trim() || '';
+  const isOfficeRejectedOrder = order ? isNotaryOfficeRejected(order, officeOrder) : false;
   const isAuditable = order?.status === 'pending_review' && previewMode === 'audit';
-  const isReadOnlyPreview = !isAuditable;
-  const pageTitle = previewMode === 'audit' ? (isAuditable ? '订单审核' : '查看审核') : '查看订单';
+  const canModifyOrder =
+    previewMode === 'audit' && (order?.status === 'pending_review' || order?.status === 'rejected' || isOfficeRejectedOrder);
+  const isReadOnlyPreview = !canModifyOrder;
+  const pageTitle =
+    previewMode === 'audit'
+      ? order?.status === 'rejected' || isOfficeRejectedOrder
+        ? '订单修改'
+        : isAuditable
+          ? '订单审核'
+          : '查看审核'
+      : '查看订单';
   const isViewMode = previewMode === 'view';
   const isPendingReviewOrder = order?.status === 'pending_review';
   const canSubmitLogistics = order?.status === 'pending_production';
@@ -462,6 +765,7 @@ const NotaryOrderManagementPreview: React.FC = () => {
     Boolean(logisticsDisplayCompany || logisticsDisplayTrackingNumber);
   const logisticsSubmitDisabled =
     !canSubmitLogistics || !logisticsForm.logisticsCompany.trim() || !logisticsForm.trackingNumber.trim();
+  const shouldStartInEditMode = previewMode === 'audit' && Boolean(order?.status === 'rejected' || isOfficeRejectedOrder);
   const exportPdfFileName = useMemo(
     () => buildNotaryTemplatePdfFileName(order?.licenseName || order?.customerName || order?.orderId || ''),
     [order?.customerName, order?.licenseName, order?.orderId],
@@ -470,6 +774,16 @@ const NotaryOrderManagementPreview: React.FC = () => {
     () => order?.licenseName || order?.customerName || order?.orderId || '',
     [order?.customerName, order?.licenseName, order?.orderId],
   );
+
+  useEffect(() => {
+    if (!order || !shouldStartInEditMode) {
+      return;
+    }
+
+    setEditForm(buildOrderEditForm(order));
+    setCertificateImages(order.notaryCertificateImages || {});
+    setIsEditing(true);
+  }, [order?.orderId, shouldStartInEditMode]);
 
   if (!order || !auditProfile || !editForm) {
     return (
@@ -542,10 +856,14 @@ const NotaryOrderManagementPreview: React.FC = () => {
 
   const handleExportImagesPdf = async () => {
     setIsExportingImagesPdf(true);
+    const previewImages = PREVIEW_IMAGES.map((image) => ({
+      ...image,
+      src: certificateImages[image.key] || image.src,
+    }));
 
     try {
       await exportNotaryImagesToPdf(
-        PREVIEW_IMAGES.filter((image): image is CertificateImage & { src: string } => Boolean(image.src)).map((image) => ({
+        previewImages.filter((image): image is CertificateImage & { src: string } => Boolean(image.src)).map((image) => ({
           label: image.label,
           src: image.src,
         })),
@@ -641,12 +959,41 @@ const NotaryOrderManagementPreview: React.FC = () => {
 
   const handleModify = () => {
     setEditForm(buildOrderEditForm(order));
+    setCertificateImages(order.notaryCertificateImages || {});
     setIsEditing(true);
   };
 
   const handleCancelEdit = () => {
     setEditForm(buildOrderEditForm(order));
+    setCertificateImages(order.notaryCertificateImages || {});
     setIsEditing(false);
+  };
+
+  const handleCertificateImageUpload = (key: string, file: File | null) => {
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      showToast('error', '请选择图片文件');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const imageDataUrl = typeof reader.result === 'string' ? reader.result : '';
+      if (!imageDataUrl) {
+        showToast('error', '图片读取失败，请重试');
+        return;
+      }
+
+      setCertificateImages((currentImages) => ({
+        ...currentImages,
+        [key]: imageDataUrl,
+      }));
+    };
+    reader.onerror = () => showToast('error', '图片读取失败，请重试');
+    reader.readAsDataURL(file);
   };
 
   const handleSaveEdit = () => {
@@ -676,10 +1023,13 @@ const NotaryOrderManagementPreview: React.FC = () => {
       editForm.validYears,
       editForm.validUntilDate,
     );
+    const nextPinyinParts = getNamePinyinParts(editForm.licenseName);
 
     const nextUpdates: Partial<Order> = {
       licenseNo: editForm.licenseNo.trim(),
       licenseName: editForm.licenseName.trim(),
+      idpSurnameEn: nextPinyinParts.surnamePinyin === '--' ? undefined : nextPinyinParts.surnamePinyin,
+      idpGivenNameEn: nextPinyinParts.givenNamePinyin === '--' ? undefined : nextPinyinParts.givenNamePinyin,
       licenseGender: editForm.gender.trim(),
       licenseNationality: editForm.nationality.trim(),
       licenseBirthDate: editForm.birthDate.trim(),
@@ -696,13 +1046,14 @@ const NotaryOrderManagementPreview: React.FC = () => {
       customerName: editForm.customerName.trim(),
       customerPhone: editForm.customerPhone.trim(),
       deliveryAddress: editForm.deliveryAddress.trim(),
+      notaryCertificateImages: certificateImages,
       updatedAt: getCurrentTimestamp(),
       logs: [
         ...order.logs,
         {
           time: getCurrentTimestamp(),
           operator: currentAccountId,
-          action: '修改驾照与收货信息',
+          action: '修改驾照、证件与收货信息',
         },
       ],
     };
@@ -716,8 +1067,9 @@ const NotaryOrderManagementPreview: React.FC = () => {
 
     setOrder(nextOrder);
     setEditForm(buildOrderEditForm(nextOrder));
+    setCertificateImages(nextOrder.notaryCertificateImages || {});
     setIsEditing(false);
-    showToast('success', '驾照信息和收货信息已更新');
+    showToast('success', '驾照信息、证件信息和收货信息已更新');
   };
 
   const handleSubmitLogistics = () => {
@@ -825,6 +1177,10 @@ const NotaryOrderManagementPreview: React.FC = () => {
   );
 
   const shouldShowValidUntilDate = isEditing ? editForm.validYears === '自定义' : auditProfile.validYears === '自定义';
+  const previewImages = PREVIEW_IMAGES.map((image) => ({
+    ...image,
+    src: certificateImages[image.key] || image.src,
+  }));
 
   const renderValidUntilDateValue = () =>
     isEditing
@@ -834,7 +1190,7 @@ const NotaryOrderManagementPreview: React.FC = () => {
   const orderInfoItems: AuditFieldItem[] = [
     {
       label: '订单状态',
-      value: <span className={getNotaryReviewStatusClass(order.status)}>{ORDER_STATUS_LABELS[order.status]}</span>,
+      value: <span className={getDisplayOrderStatusClass(order, officeOrder)}>{getDisplayOrderStatusLabel(order, officeOrder)}</span>,
     },
     {
       label: '下单时间',
@@ -1180,7 +1536,10 @@ const NotaryOrderManagementPreview: React.FC = () => {
                     <h2 className="order-audit-card__title">证件信息</h2>
                   </div>
                   <div className="order-audit-image-grid">
-                    {PREVIEW_IMAGES.map((item) => (
+                    {previewImages.map((item) => {
+                      const uploadInputId = `notary-certificate-image-upload-${item.key}`;
+
+                      return (
                       <div key={item.key} className={`order-audit-image-slot ${item.src ? '' : 'order-audit-image-slot--empty'}`}>
                         <div className="order-audit-image-slot__meta">
                           <span className="order-audit-image-slot__label">{item.label}</span>
@@ -1202,8 +1561,26 @@ const NotaryOrderManagementPreview: React.FC = () => {
                             </div>
                           )}
                         </div>
+                        {isEditing && (
+                          <div className="order-audit-image-slot__actions">
+                            <label htmlFor={uploadInputId} className="order-audit-image-upload-btn">
+                              替换图片
+                            </label>
+                            <input
+                              id={uploadInputId}
+                              type="file"
+                              accept="image/png,image/jpeg,image/jpg,image/webp"
+                              className="order-audit-image-upload-input"
+                              onChange={(event) => {
+                                handleCertificateImageUpload(item.key, event.target.files?.[0] || null);
+                                event.currentTarget.value = '';
+                              }}
+                            />
+                          </div>
+                        )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </section>
 
@@ -1241,7 +1618,7 @@ const NotaryOrderManagementPreview: React.FC = () => {
         </div>
       </div>
 
-      {isAuditable && (
+      {canModifyOrder && (
         <div className="order-audit-footer">
           <div className="order-audit-footer__inner">
             <div className="order-audit-footer__meta">
@@ -1250,12 +1627,16 @@ const NotaryOrderManagementPreview: React.FC = () => {
               <span>办理类型：{getProductProcessTypeLabel(order.processType, t)}</span>
             </div>
             <div className="order-audit-footer__actions">
-              <button type="button" className="btn btn--primary" onClick={handleApprove} disabled={isEditing}>
-                通过
-              </button>
-              <button type="button" className="btn btn--danger" onClick={() => setShowRejectModal(true)} disabled={isEditing}>
-                拒绝
-              </button>
+              {isAuditable && (
+                <>
+                  <button type="button" className="btn btn--primary" onClick={handleApprove} disabled={isEditing}>
+                    通过
+                  </button>
+                  <button type="button" className="btn btn--danger" onClick={() => setShowRejectModal(true)} disabled={isEditing}>
+                    拒绝
+                  </button>
+                </>
+              )}
               <button type="button" className="btn btn--warning" onClick={isEditing ? handleSaveEdit : handleModify}>
                 {isEditing ? '保存' : '修改'}
               </button>

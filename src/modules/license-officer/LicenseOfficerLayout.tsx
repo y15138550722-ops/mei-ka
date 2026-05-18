@@ -64,7 +64,7 @@ const LicenseOfficerLayout: React.FC<LicenseOfficerLayoutProps> = ({ children, c
             <strong>{currentUser.displayName}</strong>
             <span>{currentUser.role}</span>
           </div>
-          <button type="button" onClick={() => navigate('/')}>返回美卡后台</button>
+          <button type="button" onClick={() => navigate('/')}>切换管理端</button>
           <button type="button" onClick={() => navigate('/agent-system')}>切换用户端</button>
           <button type="button" className="license-officer-sidebar__logout" onClick={handleLogout}>
             退出登录

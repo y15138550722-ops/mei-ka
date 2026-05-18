@@ -92,6 +92,7 @@ export interface Order {
   licenseBarcodeNumber?: string;
   licenseIssuingAuthority?: string;
   licenseIssuingRegion?: string;
+  notaryCertificateImages?: Record<string, string>;
   idpSurnameEn?: string;
   idpGivenNameEn?: string;
   idpBirthDateEn?: string;

@@ -312,8 +312,9 @@ const getProductionOrderRecords = (order: Order) => {
 };
 
 const isAgentSubmittedOrder = (order: Order) =>
+  order.remark === '用户端提交' ||
   order.remark === '代理端提交' ||
-  order.logs.some((log) => log.operator === '代理端' || log.action.includes('代理端'));
+  order.logs.some((log) => log.operator === '用户端' || log.operator === '代理端' || log.action.includes('用户端') || log.action.includes('代理端'));
 
 const isNotaryOrder = (order: Order) => order.productCategory === 'notary';
 
@@ -893,7 +894,7 @@ const AgentSystemPage: React.FC = () => {
           deliveryAddress,
           logisticsCompany: '',
           trackingNumber: '',
-          remark: '代理端提交',
+          remark: '用户端提交',
           licenseName: domesticLicenseForm.chineseName.trim(),
           licenseNo: licenseNumber,
           licenseCategory: domesticLicenseForm.classType.trim(),
@@ -938,8 +939,8 @@ const AgentSystemPage: React.FC = () => {
           logs: [
             {
               time: currentTimestamp,
-              operator: '代理端',
-              action: `订单创建：代理端${DOMESTIC_LICENSE_PRODUCT_TITLE}确认提交`,
+              operator: '用户端',
+              action: `订单创建：用户端${DOMESTIC_LICENSE_PRODUCT_TITLE}确认提交`,
             },
           ],
         });
@@ -1001,7 +1002,7 @@ const AgentSystemPage: React.FC = () => {
       deliveryAddress,
       logisticsCompany: '',
       trackingNumber: '',
-      remark: '代理端提交',
+      remark: '用户端提交',
       licenseName: licenseName || customerName,
       licenseNo,
       licenseCategory: readFormValue(certificateData, 'licenseCategory') || 'C1',
@@ -1026,8 +1027,8 @@ const AgentSystemPage: React.FC = () => {
       logs: [
         {
           time: currentTimestamp,
-          operator: '代理端',
-          action: `订单创建：代理端${orderEntryLabel}确认提交`,
+          operator: '用户端',
+          action: `订单创建：用户端${orderEntryLabel}确认提交`,
         },
       ],
     });
@@ -1070,7 +1071,7 @@ const AgentSystemPage: React.FC = () => {
         ...order.logs,
         {
           time: currentTimestamp,
-          operator: '代理端',
+          operator: '用户端',
           action: '取消订单',
         },
       ],
@@ -1601,9 +1602,9 @@ const AgentSystemPage: React.FC = () => {
       {renderLicenseInfoModal()}
 
       <header className="agent-system-header">
-        <div className="agent-system-header__brand" aria-label="美卡认证代理平台-用户端">
+        <div className="agent-system-header__brand" aria-label="美卡认证用户端">
           <span className="agent-system-logo">MK</span>
-          <strong>美卡认证代理平台-用户端</strong>
+          <strong>美卡认证用户端</strong>
         </div>
 
         <nav className="agent-system-nav" aria-label="系统导航">

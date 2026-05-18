@@ -26,7 +26,7 @@ const PRODUCT_NEXT_ID_STORAGE_KEY = 'meika-products-next-id';
 const ORDER_STORAGE_KEY = 'meika-orders';
 const ORDER_DATA_VERSION_STORAGE_KEY = 'meika-order-data-version';
 export const ORDER_DATA_CHANGED_EVENT = 'meika-orders-changed';
-const ORDER_DATA_VERSION = 'notary-management-all-pending-review-v3';
+const ORDER_DATA_VERSION = 'notary-management-10-pending-notary-orders-v2';
 const REMOVED_ORDER_IDS = new Set(['MK2600057', 'MK2600061']);
 
 const NAMES = ['张伟', '王芳', '李明', '赵丽', '孙强', '周杰', '吴秀英', '郑敏', '陈浩', '钱亮', '刘洋', '黄磊', '何欣', '马丽', '朱俊', '林静', '徐峰', '高蕾', '谢宇', '韩雪'];
@@ -62,9 +62,34 @@ const DOMESTIC_FOREIGN_LICENSE_LOCATIONS = [
 ] as const;
 const PRODUCT_CATEGORIES: ProductCategory[] = ['translation', 'notary', 'idp', 'domestic_license'];
 const EXTRA_IDP_PENDING_ORDER_COUNT = 5;
-const NOTARY_PENDING_REVIEW_ORDER_COUNT = 20;
+const NOTARY_PENDING_REVIEW_ORDER_COUNT = 10;
 const DOMESTIC_LICENSE_PRODUCT_TITLE = '换国内驾照翻译件';
 const DOMESTIC_LICENSE_UNTRANSLATED_ORDER_IDS = ['MK2600087', 'MK2600088', 'MK2600089', 'MK2600090', 'MK2600091'];
+const FORCE_UNTRANSLATED_CHINESE_TRANSLATION_ORDER_IDS = new Set<string>(['MK2600085']);
+const PRODUCTION_OPERATOR = '生产端';
+const PRODUCTION_NODE_ACTIONS = new Set(['已翻译', '已制作', '已发货']);
+const FORCE_UNTRANSLATED_INITIALIZED_ACTION = '初始化为未翻译';
+const USER_SUBMITTED_REMARKS = new Set(['用户端提交', '代理端提交']);
+const USER_SUBMITTED_OPERATORS = new Set(['用户端', '代理端']);
+const hasUserSubmittedMarker = (order: Order) =>
+  USER_SUBMITTED_REMARKS.has(order.remark) ||
+  order.logs.some((log) => USER_SUBMITTED_OPERATORS.has(log.operator) || log.action.includes('用户端') || log.action.includes('代理端'));
+const isNotarySystemGeneratedOrder = (order: Order) =>
+  order.productCategory === 'notary' &&
+  !hasUserSubmittedMarker(order) &&
+  (/^notary\d+@example\.com$/i.test(order.customerEmail) ||
+    order.remark.includes('生成') ||
+    order.remark.includes('鐢熸垚') ||
+    order.logs.some((log) => log.operator === '系统' || log.operator === '绯荤粺'));
+const isDomesticLicenseSystemGeneratedOrder = (order: Order) =>
+  order.productName === DOMESTIC_LICENSE_PRODUCT_TITLE &&
+  !FORCE_UNTRANSLATED_CHINESE_TRANSLATION_ORDER_IDS.has(order.orderId) &&
+  !hasUserSubmittedMarker(order);
+
+const excludeDomesticLicenseSystemGeneratedOrders = (orders: Order[]) =>
+  orders.filter((order) => !isDomesticLicenseSystemGeneratedOrder(order));
+const excludeNotarySystemGeneratedOrders = (orders: Order[]) =>
+  orders.filter((order) => !isNotarySystemGeneratedOrder(order));
 const PRODUCT_SEEDS: Array<{
   title: string;
   category: ProductCategory;
@@ -130,6 +155,21 @@ const randomDate = (daysBack: number) => {
 const getCurrentTimestamp = () => formatBeijingTimestamp();
 
 const getCompactTimestamp = (timestamp = getCurrentTimestamp()) => timestamp.replace(/\D/g, '').slice(0, 14);
+
+const buildSeedOrderId = (serial: number) => `MK${String(2026).substring(2)}${String(serial).padStart(5, '0')}`;
+
+const getNextAvailableSeedOrderSerial = (orders: Order[], startSerial: number) => {
+  const existingOrderIds = new Set(orders.map((order) => order.orderId));
+  let nextSerial = startSerial;
+  let nextOrderId = buildSeedOrderId(nextSerial);
+
+  while (existingOrderIds.has(nextOrderId) || REMOVED_ORDER_IDS.has(nextOrderId)) {
+    nextSerial += 1;
+    nextOrderId = buildSeedOrderId(nextSerial);
+  }
+
+  return nextSerial;
+};
 
 const addSecondsToTimestamp = (timestamp: string, seconds: number) => {
   const normalizedTimestamp = timestamp.trim();
@@ -198,11 +238,25 @@ const cloneOrder = (order: Order): Order => ({
 const excludeRemovedOrders = (orders: Order[]) => orders.filter((order) => !REMOVED_ORDER_IDS.has(order.orderId));
 
 const isAgentSubmittedPersistedOrder = (order: Order) =>
-  order.remark === '代理端提交' ||
-  order.logs.some((log) => log.operator === '代理端' || log.action.includes('代理端'));
+  hasUserSubmittedMarker(order);
 
 const normalizeNotaryManagementOrderStatus = (order: Order): Order => {
-  if (order.productCategory !== 'notary' || (order.status !== 'cancelled' && order.status !== 'rejected')) {
+  if (order.productCategory !== 'notary') {
+    return order;
+  }
+
+  if (order.logs.some((log) => /取消订单/.test(log.action))) {
+    return order.status === 'cancelled'
+      ? order
+      : {
+          ...order,
+          status: 'cancelled',
+          rejectReason: undefined,
+          remark: '',
+        };
+  }
+
+  if (order.status !== 'rejected') {
     return order;
   }
 
@@ -543,7 +597,7 @@ const loadProducts = (): Product[] => {
 };
 
 const loadOrders = (products: Product[]): Order[] => {
-  const defaultOrders = excludeRemovedOrders(createOrders(products));
+  const defaultOrders = excludeDomesticLicenseSystemGeneratedOrders(excludeRemovedOrders(createOrders(products)));
   const defaultNotaryOrders = defaultOrders.filter((order) => order.productCategory === 'notary');
   const defaultNonNotaryOrders = defaultOrders.filter((order) => order.productCategory !== 'notary');
 
@@ -565,7 +619,9 @@ const loadOrders = (products: Product[]): Order[] => {
       return defaultOrders;
     }
 
-    const storedOrders = excludeRemovedOrders(parsedValue as Order[]);
+    const storedOrders = excludeDomesticLicenseSystemGeneratedOrders(excludeRemovedOrders(parsedValue as Order[])).map(
+      normalizeForcedUntranslatedChineseTranslationOrder,
+    );
     const storedNonNotaryOrders = storedOrders.filter((order) => order.productCategory !== 'notary');
     const storedAgentSubmittedNotaryOrders = storedOrders.filter(
       (order) => order.productCategory === 'notary' && isAgentSubmittedPersistedOrder(order),
@@ -576,9 +632,7 @@ const loadOrders = (products: Product[]): Order[] => {
       (order) => !existingNonNotaryOrderIds.has(order.orderId),
     );
     const missingDefaultNonNotaryOrderIds = new Set(missingDefaultNonNotaryOrders.map((order) => order.orderId));
-    const missingDomesticUntranslatedOrders = createDomesticLicenseUntranslatedOrders(products).filter(
-      (order) => !existingNonNotaryOrderIds.has(order.orderId) && !missingDefaultNonNotaryOrderIds.has(order.orderId),
-    );
+    const missingDomesticUntranslatedOrders: Order[] = [];
     const missingDomesticUntranslatedOrderIds = new Set(missingDomesticUntranslatedOrders.map((order) => order.orderId));
     const occupiedOrderIds = new Set([
       ...storedOrders.map((order) => order.orderId),
@@ -629,10 +683,16 @@ const loadOrders = (products: Product[]): Order[] => {
           ...missingDomesticLicenseOrders,
           ...resetDefaultNotaryOrders,
         ]
-      : [...storedOrders.map(normalizeDomesticLicenseDemoOrder), ...missingDefaultNonNotaryOrders, ...missingDomesticUntranslatedOrders, ...missingDomesticLicenseOrders];
-    window.localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(mergedOrders));
+      : [
+          ...storedOrders.map(normalizeDomesticLicenseDemoOrder),
+          ...missingDefaultNonNotaryOrders,
+          ...missingDomesticUntranslatedOrders,
+          ...missingDomesticLicenseOrders,
+        ];
+    const normalizedMergedOrders = mergedOrders.map(normalizeForcedUntranslatedChineseTranslationOrder);
+    window.localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(normalizedMergedOrders));
     window.localStorage.setItem(ORDER_DATA_VERSION_STORAGE_KEY, ORDER_DATA_VERSION);
-    return mergedOrders;
+    return normalizedMergedOrders;
   } catch {
     return defaultOrders;
   }
@@ -709,11 +769,70 @@ const normalizeDomesticLicenseDemoOrder = (order: Order): Order => {
     return order;
   }
 
+  const remark = order.remark === '系统生成未制作测试订单' ? '' : order.remark;
+  const hasInitializationMarker = order.logs.some((log) => log.action === FORCE_UNTRANSLATED_INITIALIZED_ACTION);
+  const hasProductionWorkflowLog = order.logs.some((log) => log.operator === PRODUCTION_OPERATOR);
+
+  if (hasInitializationMarker || hasProductionWorkflowLog) {
+    return remark === order.remark ? order : { ...order, remark };
+  }
+
   return {
     ...order,
     status: 'pending_production',
-    remark: order.remark === '系统生成未制作测试订单' ? '' : order.remark,
-    logs: order.logs.filter((log) => !(log.operator === '生产端' && log.action === '已翻译')),
+    remark,
+    logs: [
+      ...order.logs.filter((log) => !(log.operator === PRODUCTION_OPERATOR && PRODUCTION_NODE_ACTIONS.has(log.action))),
+      {
+        time: order.createdAt,
+        operator: '系统',
+        action: FORCE_UNTRANSLATED_INITIALIZED_ACTION,
+      },
+    ],
+  };
+};
+
+const normalizeForcedUntranslatedChineseTranslationOrder = (order: Order): Order => {
+  if (!FORCE_UNTRANSLATED_CHINESE_TRANSLATION_ORDER_IDS.has(order.orderId)) {
+    return order;
+  }
+
+  const hasInitializationMarker = order.logs.some((log) => log.action === FORCE_UNTRANSLATED_INITIALIZED_ACTION);
+  const hasProductionWorkflowLog = order.logs.some((log) => log.operator === PRODUCTION_OPERATOR);
+  const shouldPreserveCurrentState = hasInitializationMarker || (hasProductionWorkflowLog && hasUserSubmittedMarker(order));
+  const logs = order.logs.filter((log) => !(log.operator === PRODUCTION_OPERATOR && PRODUCTION_NODE_ACTIONS.has(log.action)));
+  const baseLogs = shouldPreserveCurrentState ? order.logs : logs;
+  const userSubmittedLogs = hasUserSubmittedMarker(order)
+    ? baseLogs
+    : [{ time: order.createdAt, operator: '用户端', action: '用户端提交' }, ...baseLogs];
+  const initializedLogs = hasInitializationMarker
+    ? userSubmittedLogs
+    : [
+        ...userSubmittedLogs,
+        {
+          time: order.createdAt,
+          operator: '系统',
+          action: FORCE_UNTRANSLATED_INITIALIZED_ACTION,
+        },
+      ];
+  const remark = USER_SUBMITTED_REMARKS.has(order.remark) || order.remark ? order.remark : '用户端提交';
+
+  if (shouldPreserveCurrentState) {
+    return {
+      ...order,
+      remark,
+      logs: initializedLogs,
+    };
+  }
+
+  return {
+    ...order,
+    status: 'pending_production',
+    logisticsCompany: '',
+    trackingNumber: '',
+    shippedAt: undefined,
+    remark,
+    logs: initializedLogs,
   };
 };
 
@@ -886,16 +1005,17 @@ function createOrders(products: Product[]): Order[] {
   }
 
   const notaryProduct = products.find((product) => product.category === 'notary') || products[0];
+  let nextNotaryOrderSerial = getNextAvailableSeedOrderSerial(orders, orders.length + 1);
   for (let index = 0; index < NOTARY_PENDING_REVIEW_ORDER_COUNT && notaryProduct.processTypes.length > 0; index += 1) {
     const processType = notaryProduct.processTypes[index % notaryProduct.processTypes.length] || notaryProduct.processTypes[0];
     const pushTimeliness = getPushTimeliness(processType, index + orders.length);
     const customerName = NAMES[orders.length % NAMES.length];
     const createdAt = randomDate(10);
-    const orderNum = orders.length + 1;
+    const orderNum = nextNotaryOrderSerial;
     const logs = [{ time: createdAt, operator: '系统', action: '订单批量创建' }];
 
     orders.push({
-      orderId: `MK${String(2026).substring(2)}${String(orderNum).padStart(5, '0')}`,
+      orderId: buildSeedOrderId(orderNum),
       customerName,
       customerPhone: PHONES[index % PHONES.length],
       customerPassport: PASSPORTS[index % PASSPORTS.length],
@@ -923,6 +1043,8 @@ function createOrders(products: Product[]): Order[] {
       shippedAt: undefined,
       logs,
     });
+
+    nextNotaryOrderSerial = getNextAvailableSeedOrderSerial(orders, orderNum + 1);
   }
 
   const idpProducts = products.filter((product) => product.category === 'idp' && product.processTypes.length > 0);
@@ -935,7 +1057,7 @@ function createOrders(products: Product[]): Order[] {
       continue;
     }
 
-    const orderNum = orders.length + 1;
+    const orderNum = getNextAvailableSeedOrderSerial(orders, orders.length + 1);
     const seed = orderNum - 1;
     const createdAt = randomDate(7);
     const customerName = NAMES[seed % NAMES.length];
@@ -972,15 +1094,10 @@ function createOrders(products: Product[]): Order[] {
     });
   }
 
-  const existingOrderIds = new Set(orders.map((order) => order.orderId));
-  createDomesticLicenseUntranslatedOrders(products).forEach((order) => {
-    if (!existingOrderIds.has(order.orderId)) {
-      orders.push(order);
-      existingOrderIds.add(order.orderId);
-    }
-  });
-
-  return orders;
+  return excludeDomesticLicenseSystemGeneratedOrders([
+    ...orders,
+    ...createDomesticLicenseUntranslatedOrders(products),
+  ]).map(normalizeForcedUntranslatedChineseTranslationOrder);
 }
 
 let _products = loadProducts();

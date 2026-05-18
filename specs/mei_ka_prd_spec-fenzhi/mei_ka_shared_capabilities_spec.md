@@ -1,14 +1,15 @@
 # 美卡共享能力 Specification
 
 > **模块**: 共享能力（导出、持久化、通用反馈）
-> **版本**: v1.0
-> **最后更新**: 2026-04-17
+> **版本**: v1.1
+> **最后更新**: 2026-05-13
 > **作者**: Codex
 
 ---
 
 ## 更新日志
 
+- **v1.1 (2026-05-13)**: 补充中文翻译件 DOCX 预览/PDF 导出、`meika-notary-office-orders`、订单数据版本键与生产端日志约束
 - **v1.0 (2026-04-17)**: 从主 PRD 拆分共享能力独立规格，统一导出口径与 localStorage 约束
 
 ---
@@ -48,6 +49,8 @@
 | 场景 | 格式 | 说明 |
 |---|---|---|
 | 翻译订单列表 | Excel | 基于模板导出 |
+| 中文翻译件生产端列表 | Excel | 基于订单列表模板导出 |
+| 换国内驾照翻译件导出订单 | DOCX 预览 / PDF | 基于 `docs/ETC/换证附件/副本中文-ID card May 8, 2026 (2)(1).docx` 浏览器端预览、编辑与导出 |
 | IDP 订单列表 | Excel | 基于模板导出 |
 | 公证订单管理列表 | Excel | 基于模板导出 |
 | Klook 订单列表 | CSV | UTF-8 BOM |
@@ -64,7 +67,11 @@
 | `meika-auth-session` | 登录会话 |
 | `meika-sidebar-collapsed` | 侧边栏折叠状态 |
 | `meika-products` | 产品与办理类型数据 |
+| `meika-products-next-id` | 下一个产品 ID 数字序列 |
 | `meika-orders` | 主订单数据（翻译/IDP/公证） |
+| `meika-order-data-version` | 主订单种子/迁移版本 |
+| `meika-notary-office-orders` | 公证处工作台订单数据 |
+| `meika-notary-office-orders-version` | 公证处订单种子/迁移版本 |
 | `meika-klook-orders` | Klook 订单数据 |
 | `meika-push-timeliness-config` | 推送时效配置 |
 
@@ -84,6 +91,9 @@
 | BR-SH-003 | 批量导出前至少一条记录 |
 | BR-SH-004 | 关键动作需有 Toast 反馈 |
 | BR-SH-005 | 持久化键名必须使用统一白名单 |
+| BR-SH-006 | 生产端动作日志统一写入 `logs`，中文翻译件生产端操作人固定为“生产端” |
+| BR-SH-007 | DOCX 预览加载失败时必须展示错误态与重试入口，不得空白页 |
+| BR-SH-008 | PDF 导出失败时允许退化到浏览器打印窗口，成功后仍可记录制作完成 |
 
 ---
 
@@ -129,6 +139,8 @@ flowchart TD
 | TC-SH-003 | 公证处下载模板 | 生成 ZIP 且命名正确 |
 | TC-SH-004 | 写入侧边栏状态 | 刷新后状态保持 |
 | TC-SH-005 | localStorage 异常 | 页面提示保存失败 |
+| TC-SH-006 | 中文翻译件 DOCX 预览 | 模板加载成功并填充订单字段 |
+| TC-SH-007 | 中文翻译件导出 PDF | 生成 PDF，订单写入生产端“已制作”日志 |
 
 ---
 
