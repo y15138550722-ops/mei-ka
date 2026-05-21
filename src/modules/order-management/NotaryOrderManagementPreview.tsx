@@ -14,6 +14,7 @@ import {
   downloadNotaryAsset,
   exportNotaryImagesToPdf,
 } from '../../shared/utils/notaryPreviewExport';
+import { saveNotaryCertificateImages } from '../../shared/utils/localImageStore';
 import {
   buildNotaryPowerOfAttorneyExportOptions,
   type NotaryPowerOfAttorneyExportOption,
@@ -23,6 +24,7 @@ import { getProductProcessTypeLabel } from '../../shared/utils/productProcessTyp
 import { orderPreviewAssets } from '../../shared/config/orderPreviewAssets';
 import { LICENSE_ISSUING_AUTHORITY_OPTIONS } from '../../shared/config/licenseIssuingAuthority';
 import DatePickerInput from '../../shared/components/form/DatePickerInput';
+import ResolvedImage from '../../shared/components/ResolvedImage';
 import type { Order, OrderLog, OrderStatus } from '../../shared/types';
 import './OrderDetail.css';
 
@@ -107,6 +109,21 @@ const ADDITIONAL_CERTIFICATE_IMAGES: CertificateImage[] = [
     key: 'identity-back',
     label: '身份证反面',
     src: orderPreviewAssets.identityBack,
+  },
+  {
+    key: 'passport-front',
+    label: '护照首页',
+    src: null,
+  },
+  {
+    key: 'passport-visa',
+    label: '护照签证页',
+    src: null,
+  },
+  {
+    key: 'flight-itinerary',
+    label: '行程单',
+    src: null,
   },
   {
     key: 'digital-license',
@@ -996,7 +1013,7 @@ const NotaryOrderManagementPreview: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     const requiredFields: Array<{ key: keyof OrderEditForm; label: string }> = [
       { key: 'licenseNo', label: '驾照号' },
       { key: 'licenseName', label: '姓名' },
@@ -1024,6 +1041,17 @@ const NotaryOrderManagementPreview: React.FC = () => {
       editForm.validUntilDate,
     );
     const nextPinyinParts = getNamePinyinParts(editForm.licenseName);
+    let storedCertificateImages: Record<string, string>;
+
+    try {
+      storedCertificateImages = await saveNotaryCertificateImages(
+        certificateImages,
+        `notary-certificate-${order.orderId}-${Date.now()}`,
+      );
+    } catch {
+      showToast('error', '证件图片保存失败，请稍后重试');
+      return;
+    }
 
     const nextUpdates: Partial<Order> = {
       licenseNo: editForm.licenseNo.trim(),
@@ -1046,7 +1074,7 @@ const NotaryOrderManagementPreview: React.FC = () => {
       customerName: editForm.customerName.trim(),
       customerPhone: editForm.customerPhone.trim(),
       deliveryAddress: editForm.deliveryAddress.trim(),
-      notaryCertificateImages: certificateImages,
+      notaryCertificateImages: storedCertificateImages,
       updatedAt: getCurrentTimestamp(),
       logs: [
         ...order.logs,
@@ -1552,7 +1580,7 @@ const NotaryOrderManagementPreview: React.FC = () => {
                               onClick={() => setPreviewImage(item)}
                               aria-label={`查看${item.label}大图`}
                             >
-                              <img className="order-audit-image" src={item.src} alt={`${item.label}预览`} />
+                              <ResolvedImage className="order-audit-image" src={item.src} alt={`${item.label}预览`} />
                             </button>
                           ) : (
                             <div className="order-audit-image-placeholder" aria-hidden="true">
@@ -1745,7 +1773,11 @@ const NotaryOrderManagementPreview: React.FC = () => {
               </button>
             </div>
             <div className="order-audit-image-modal__body">
-              <img className="order-audit-image-modal__image" src={previewImage.src || ''} alt={`${previewImage.label}大图预览`} />
+              <ResolvedImage
+                className="order-audit-image-modal__image"
+                src={previewImage.src || ''}
+                alt={`${previewImage.label}大图预览`}
+              />
             </div>
           </div>
         </div>

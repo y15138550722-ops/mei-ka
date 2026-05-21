@@ -1,7 +1,9 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
 import { getOrders, updateOrder } from '../../services/mockDataService';
+import ResolvedImage from '../../shared/components/ResolvedImage';
 import ListUnifiedPagination from '../../shared/components/list/ListUnifiedPagination';
 import type { Order } from '../../shared/types';
+import { getStoredAuthSession } from '../../shared/utils/auth';
 import { formatBeijingTimestamp } from '../../shared/utils/dateTime';
 import { exportTranslationOrders } from '../../shared/utils/exportTranslationOrders';
 import { getProcessTypeTone, getProductProcessTypeLabel } from '../../shared/utils/productProcessType';
@@ -14,7 +16,7 @@ import {
   getOrderListExportFileName,
   getRecipientInfo,
 } from '../order-management/orderListShared';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   CHINESE_TRANSLATION_PRODUCT_TITLE,
   PRODUCTION_OPERATOR,
@@ -31,6 +33,7 @@ type OcrCompareState = {
   rows: OcrCompareRow[];
   status: OcrCompareStatus;
 };
+type ProductionFlowInfoRow = { label: string; value: string };
 
 const PRODUCTION_STATUS_OPTIONS: Array<{ value: ProductionOrderStatus | ''; label: string }> = [
   { value: '', label: '全部' },
@@ -83,8 +86,10 @@ const requestDomesticLicenseOcrRows = async (order: Order) => {
   return IMAGE_TEXT_REFERENCE_ROWS;
 };
 
-const hasProductionAction = (order: Order, action: string) =>
-  order.logs.some((log) => log.operator === PRODUCTION_OPERATOR && log.action === action);
+const hasProductionAction = (order: Order, action: string) => order.logs.some((log) => log.action === action);
+
+const getProductionActionLog = (order: Order, action: string) =>
+  [...order.logs].reverse().find((log) => log.action === action);
 
 const normalizeProductionStatus = (order: Order): ProductionOrderStatus => {
   if (order.status === 'cancelled' || order.status === 'rejected') return 'cancelled';
@@ -162,8 +167,35 @@ const getShippingInfo = (order: Order) => [
   `发货时间：${order.shippedAt || '--'}`,
 ];
 
+const getProductionFlowInfoRows = (
+  order: Order,
+  productionStatus: ProductionOrderStatus,
+  currentOperatorName: string,
+): ProductionFlowInfoRow[] => {
+  const translatedLog = getProductionActionLog(order, TRANSLATED_ACTION);
+  const madeLog = getProductionActionLog(order, MADE_ACTION);
+  const rows: ProductionFlowInfoRow[] = [];
+
+  if (translatedLog) {
+    rows.push(
+      { label: '翻译人', value: currentOperatorName || translatedLog.operator },
+      { label: '翻译时间', value: translatedLog.time },
+    );
+  }
+
+  if ((productionStatus === 'unshipped' || productionStatus === 'shipped') && madeLog) {
+    rows.push(
+      { label: '制作人', value: madeLog.operator },
+      { label: '制作时间', value: madeLog.time },
+    );
+  }
+
+  return rows;
+};
+
 const ChineseTranslationOrders: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { t } = useTranslation();
   const [orderVersion, setOrderVersion] = useState(0);
   const allOrders = useMemo(
@@ -190,6 +222,21 @@ const ChineseTranslationOrders: React.FC = () => {
   const [shippingTrackingNumber, setShippingTrackingNumber] = useState('');
   const [isExporting, setIsExporting] = useState(false);
   const [ocrCompare, setOcrCompare] = useState<OcrCompareState | null>(null);
+  const [activeProductionFlowOrderId, setActiveProductionFlowOrderId] = useState<string | null>(null);
+  const currentOperatorName = useMemo(() => {
+    const session = getStoredAuthSession();
+    return session?.displayName?.trim() || session?.username?.trim() || PRODUCTION_OPERATOR;
+  }, []);
+
+  useEffect(() => {
+    const statusParam = searchParams.get('status') as ProductionOrderStatus | null;
+    const isValidStatus = PRODUCTION_STATUS_OPTIONS.some((item) => item.value === statusParam);
+
+    if (!statusParam || !isValidStatus) return;
+
+    setFilterStatus(statusParam);
+    setCurrentPage(1);
+  }, [searchParams]);
 
   const processTypeOptions = useMemo(
     () =>
@@ -372,7 +419,7 @@ const ChineseTranslationOrders: React.FC = () => {
       ...order.logs,
       {
         time: timestamp,
-        operator: PRODUCTION_OPERATOR,
+        operator: currentOperatorName,
         action,
       },
     ];
@@ -440,7 +487,9 @@ const ChineseTranslationOrders: React.FC = () => {
     setShippingOrder(null);
     setPreviewImage(null);
     setOcrCompare(null);
-    navigate(`/license-officer/orders/chinese-translation/docx/${encodeURIComponent(order.orderId)}`);
+    navigate(
+      `/license-officer/orders/chinese-translation/docx/${encodeURIComponent(order.orderId)}?fromStatus=${normalizeProductionStatus(order)}`,
+    );
   };
 
   const openShippingDialog = (order: Order) => {
@@ -539,8 +588,19 @@ const ChineseTranslationOrders: React.FC = () => {
     if (ocrCompare?.order.orderId === order.orderId) {
       setOcrCompare(null);
     }
+    if (activeProductionFlowOrderId === order.orderId) {
+      setActiveProductionFlowOrderId(null);
+    }
 
     showToast(`订单 ${order.orderId} 已取消`);
+  };
+
+  const toggleProductionFlowPopover = (order: Order) => {
+    setDetailOrder(null);
+    setShippingOrder(null);
+    setPreviewImage(null);
+    setOcrCompare(null);
+    setActiveProductionFlowOrderId((currentOrderId) => (currentOrderId === order.orderId ? null : order.orderId));
   };
 
   const renderActions = (order: Order) => {
@@ -640,7 +700,7 @@ const ChineseTranslationOrders: React.FC = () => {
               {photos.map((photo) => (
                 <div key={photo.label} className="license-translation-ocr-image-card">
                   <strong>{photo.label}</strong>
-                  {photo.src ? <img src={photo.src} alt={photo.label} /> : <span>暂无图片</span>}
+                  {photo.src ? <ResolvedImage src={photo.src} alt={photo.label} /> : <span>暂无图片</span>}
                 </div>
               ))}
             </section>
@@ -696,6 +756,23 @@ const ChineseTranslationOrders: React.FC = () => {
             </button>
           </footer>
         </section>
+      </div>
+    );
+  };
+
+  const renderProductionFlowPopover = (order: Order, productionStatus: ProductionOrderStatus) => {
+    const rows = getProductionFlowInfoRows(order, productionStatus, currentOperatorName);
+
+    if (rows.length === 0) return null;
+
+    return (
+      <div className="license-translation-flow-popover" role="dialog" aria-label="生产记录">
+        {rows.map((row) => (
+          <div key={row.label} className="license-translation-flow-popover__row">
+            <span>{row.label}：</span>
+            <strong>{row.value || '--'}</strong>
+          </div>
+        ))}
       </div>
     );
   };
@@ -797,7 +874,7 @@ const ChineseTranslationOrders: React.FC = () => {
                       onClick={() => setPreviewImage(item)}
                     >
                       <div className="license-translation-attachment__preview">
-                        <img src={item.src} alt={`${item.label}预览`} />
+                        <ResolvedImage src={item.src} alt={`${item.label}预览`} />
                       </div>
                       <span className="license-translation-attachment__caption">{item.label}</span>
                     </button>
@@ -845,7 +922,7 @@ const ChineseTranslationOrders: React.FC = () => {
               </button>
             </header>
             <div className="license-translation-image-modal__body">
-              <img src={previewImage.src} alt={previewImage.label} />
+              <ResolvedImage src={previewImage.src} alt={previewImage.label} />
             </div>
           </section>
         </div>
@@ -995,6 +1072,11 @@ const ChineseTranslationOrders: React.FC = () => {
                 onClick={() => {
                   setFilterStatus(item.value);
                   setCurrentPage(1);
+                  if (item.value) {
+                    setSearchParams({ status: item.value });
+                  } else {
+                    setSearchParams({});
+                  }
                 }}
               >
                 <span>{`${item.label}（${statusCounts[item.value]}）`}</span>
@@ -1085,9 +1167,27 @@ const ChineseTranslationOrders: React.FC = () => {
                       </td>
                       <td>
                         <div className="license-translation-status-cell">
-                          <span className={getProductionStatusClassName(productionStatus)}>
-                            {getProductionStatusLabel(productionStatus)}
-                          </span>
+                          <div className="license-translation-status-row">
+                            <span className={getProductionStatusClassName(productionStatus)}>
+                              {getProductionStatusLabel(productionStatus)}
+                            </span>
+                            {productionStatus !== 'untranslated' ? (
+                              <span className="license-translation-status-info-wrap">
+                                <button
+                                  type="button"
+                                  className="license-translation-status-info-button"
+                                  onClick={() => toggleProductionFlowPopover(order)}
+                                  aria-label={`查看${order.orderId}生产记录`}
+                                  title="查看生产记录"
+                                >
+                                  ?
+                                </button>
+                                {activeProductionFlowOrderId === order.orderId
+                                  ? renderProductionFlowPopover(order, productionStatus)
+                                  : null}
+                              </span>
+                            ) : null}
+                          </div>
                           {productionStatus === 'shipped' ? (
                             <div className="license-translation-info license-translation-info--shipping">
                               {getShippingInfo(order).map((item) => (

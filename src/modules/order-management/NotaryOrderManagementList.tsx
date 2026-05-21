@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import JSZip from 'jszip';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getOrders, updateOrder } from '../../services/mockDataService';
@@ -9,12 +9,15 @@ import {
   syncNotaryManagementShipment,
 } from '../../services/notaryOfficeOrderService';
 import ListUnifiedPagination from '../../shared/components/list/ListUnifiedPagination';
-import { orderPreviewAssets } from '../../shared/config/orderPreviewAssets';
+import ResolvedImage from '../../shared/components/ResolvedImage';
 import { useTranslation } from '../../shared/i18n/config';
 import type { AgentLevel, Order, OrderStatus, ProcessType } from '../../shared/types';
 import { getCurrentAuthAccountId } from '../../shared/utils/auth';
 import { formatBeijingTimestamp } from '../../shared/utils/dateTime';
+import { buildDocxPreviewHtml } from '../../shared/utils/docxPreview';
 import { exportTranslationOrders } from '../../shared/utils/exportTranslationOrders';
+import { resolveLocalImageSource } from '../../shared/utils/localImageStore';
+import { buildNotaryImagesPdfBlob } from '../../shared/utils/notaryPreviewExport';
 import { getProcessTypeTone, getProductProcessTypeLabel } from '../../shared/utils/productProcessType';
 
 type NotaryManagementStatus = 'pending_review' | 'pending_production' | 'shipped' | 'rejected' | 'cancelled';
@@ -30,7 +33,9 @@ type SubmissionMaterialFile = {
   label: string;
   name: string;
   path: string;
+  message?: string;
   type: string;
+  status?: 'loading' | 'ready' | 'error';
 };
 
 type SubmissionFilePreviewKind = 'image' | 'pdf' | 'docx' | 'spreadsheet' | 'unsupported';
@@ -53,7 +58,7 @@ type LogisticsForm = {
 };
 
 const NOTARY_ORDER_MANAGEMENT_PATH = '/order-management/notary-orders';
-const PREVIEW_ASSET_BASE_PATH = '/Notary%20Office%20Template/Preview%20file/yulan';
+const PREVIEW_ASSET_BASE_PATH = '/ETC/Notary%20Office%20Template/Preview%20file/yulan';
 const IMAGE_MATERIAL_ACCEPT = 'image/*';
 const FILE_MATERIAL_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp,image/*';
 const LOGISTICS_COMPANY_OPTIONS = ['顺丰速运', '京东物流', '邮政EMS', '圆通速递', '中通快递', '申通快递'];
@@ -63,18 +68,29 @@ const NOTARY_OFFICES = [
   { id: 'dongbo', name: '东博公证处', district: '送审公证处' },
 ];
 
-const SUBMISSION_MATERIAL_IMAGES: SubmissionMaterialImage[] = [
-  { key: 'license-front', label: '驾驶证正面', src: orderPreviewAssets.licenseFront },
-  { key: 'license-back', label: '驾驶证反面', src: orderPreviewAssets.licenseBack },
-  { key: 'extra-front', label: '副页正面', src: orderPreviewAssets.extraFront },
-  { key: 'extra-back', label: '副页反面', src: orderPreviewAssets.extraBack },
-  { key: 'identity-front', label: '身份证正面', src: orderPreviewAssets.identityFront },
-  { key: 'identity-back', label: '身份证反面', src: orderPreviewAssets.identityBack },
-  { key: 'digital-license', label: '电子驾照', src: orderPreviewAssets.digitalLicense },
-  { key: 'signature', label: '签名', src: orderPreviewAssets.signature },
+const SUBMISSION_ATTACHMENT_DISPLAY_ITEMS: Array<Pick<SubmissionMaterialImage, 'key' | 'label'>> = [
+  { key: 'license-front', label: '驾驶证正面照片' },
+  { key: 'license-back', label: '驾驶证反面照片' },
+  { key: 'extra-front', label: '驾驶证副页正面照片' },
+  { key: 'extra-back', label: '驾驶证副页反面照片' },
+  { key: 'identity-front', label: '身份证正面' },
+  { key: 'identity-back', label: '身份证反面' },
+  { key: 'passport-front', label: '护照首页' },
+  { key: 'passport-visa', label: '护照签证页' },
+  { key: 'flight-itinerary', label: '行程单' },
+  { key: 'digital-license', label: '电子驾照' },
+  { key: 'signature', label: '电子签名' },
 ];
+const SUBMISSION_ATTACHMENT_DISPLAY_ORDER = SUBMISSION_ATTACHMENT_DISPLAY_ITEMS.map((item) => item.key);
+const SUBMISSION_ATTACHMENT_LABELS = new Map(
+  SUBMISSION_ATTACHMENT_DISPLAY_ITEMS.map((item) => [item.key, item.label] as const),
+);
 
 const buildPreviewAssetPath = (fileName: string) => `${PREVIEW_ASSET_BASE_PATH}/${encodeURIComponent(fileName)}`;
+const PASSPORT_TEMPLATE_IMAGE_SOURCES = [
+  { src: buildPreviewAssetPath('passport-template-page-1.png') },
+  { src: buildPreviewAssetPath('passport-template-page-2.png') },
+];
 
 const STATUS_TABS: Array<{ label: string; value: NotaryManagementStatus | '' }> = [
   { label: '全部订单', value: '' },
@@ -157,6 +173,32 @@ const getAgentName = (order: Order) => AGENT_NAMES[order.agentLevel] || '美卡�
 const getLicenseName = (order: Order) => order.licenseName || order.customerName || '--';
 const getLicenseNo = (order: Order) => order.licenseNo || order.customerPassport || '--';
 const getLicenseCategory = (order: Order) => order.licenseCategory || '--';
+
+const getSubmissionMaterialImages = (order: Order): SubmissionMaterialImage[] => {
+  const images = order.notaryCertificateImages || {};
+  const knownImages = SUBMISSION_ATTACHMENT_DISPLAY_ORDER.flatMap((key) => {
+    const src = images[key];
+    return src
+      ? [
+          {
+            key,
+            label: SUBMISSION_ATTACHMENT_LABELS.get(key) || key,
+            src,
+          },
+        ]
+      : [];
+  });
+  const unknownImages = Object.entries(images)
+    .filter(([key, src]) => Boolean(src) && !SUBMISSION_ATTACHMENT_LABELS.has(key))
+    .map(([key, src]) => ({
+      key,
+      label: key,
+      src,
+    }));
+
+  return [...knownImages, ...unknownImages];
+};
+
 const getSubmissionMaterialFiles = (order: Order): SubmissionMaterialFile[] => {
   const baseName = getLicenseName(order) === '--' ? order.orderId : getLicenseName(order);
 
@@ -167,6 +209,24 @@ const getSubmissionMaterialFiles = (order: Order): SubmissionMaterialFile[] => {
       name: `${baseName}委托书.docx`,
       path: buildPreviewAssetPath('Power of Attorney.docx'),
       type: 'DOCX',
+    },
+    {
+      key: 'passport-pdf',
+      label: '护照',
+      name: `${baseName}护照.pdf`,
+      path: '',
+      message: '正在根据模板和录单附件生成',
+      status: 'loading',
+      type: 'PDF',
+    },
+    {
+      key: 'flight-itinerary-pdf',
+      label: '行程单',
+      name: `${baseName}的行程单.pdf`,
+      path: '',
+      message: '正在根据录单附件生成',
+      status: 'loading',
+      type: 'PDF',
     },
     {
       key: 'scanned-copy',
@@ -808,49 +868,42 @@ const fetchSubmissionFileBuffer = async (file: SubmissionMaterialFile) => {
   return response.arrayBuffer();
 };
 
-const collectDocxText = (node: Node): string => {
-  if (node.nodeType !== Node.ELEMENT_NODE) {
+const getPowerOfAttorneySignatureSource = (order?: Order | null) =>
+  order?.notaryCertificateImages?.signature?.trim() || '';
+
+const buildSignatureReplacementHtml = async (signatureSource: string) => {
+  const resolvedSignatureSource = await resolveLocalImageSource(signatureSource);
+
+  if (!resolvedSignatureSource) {
     return '';
   }
 
-  const element = node as Element;
-  const localName = getElementLocalName(element);
-
-  if (localName === 't') {
-    return element.textContent || '';
-  }
-
-  if (localName === 'tab') {
-    return '    ';
-  }
-
-  if (localName === 'br') {
-    return '\n';
-  }
-
-  return Array.from(element.childNodes).map(collectDocxText).join('');
+  return `<span style="display:inline-block;min-width:150px;vertical-align:middle;"><img src="${escapePreviewHtml(
+    resolvedSignatureSource,
+  )}" alt="电子签名" style="display:inline-block;max-width:180px;max-height:72px;object-fit:contain;vertical-align:middle;" /></span>`;
 };
 
-const buildDocxSubmissionPreviewHtml = async (file: SubmissionMaterialFile) => {
-  const buffer = await fetchSubmissionFileBuffer(file);
-  const zip = await JSZip.loadAsync(buffer);
-  const documentFile = zip.file('word/document.xml');
-
-  if (!documentFile) {
-    throw new Error('Missing DOCX document.xml');
+const replaceOmittedDocxImagesWithSignature = async (html: string, signatureSource: string) => {
+  if (!signatureSource) {
+    return html;
   }
 
-  const documentXml = await documentFile.async('string');
-  const document = new DOMParser().parseFromString(documentXml, 'application/xml');
-  const paragraphs = getElementsByLocalName(document, 'p');
-  const content = paragraphs
-    .map((paragraph) => collectDocxText(paragraph))
-    .map((text) => text.trim())
-    .filter(Boolean)
-    .map((text) => `<p class="docx-paragraph">${escapePreviewHtml(text)}</p>`)
-    .join('');
+  const signatureReplacement = await buildSignatureReplacementHtml(signatureSource);
+  if (!signatureReplacement) {
+    return html;
+  }
 
-  return buildSubmissionPreviewDocument(file.name, content || '<p class="docx-empty">未读取到可预览的文字内容。</p>');
+  return [
+    '[Embedded image omitted in generated DOCX]',
+    '[Embedded Image omitted in generated DOCX]',
+  ].reduce((nextHtml, placeholder) => nextHtml.split(placeholder).join(signatureReplacement), html);
+};
+
+const buildDocxSubmissionPreviewHtml = async (file: SubmissionMaterialFile, order?: Order | null) => {
+  const buffer = await fetchSubmissionFileBuffer(file);
+  const html = await buildDocxPreviewHtml(buffer, { title: file.name });
+
+  return replaceOmittedDocxImagesWithSignature(html, getPowerOfAttorneySignatureSource(order));
 };
 
 const getSpreadsheetColumnIndex = (cellRef: string) => {
@@ -960,18 +1013,33 @@ const NotaryOrderManagementList: React.FC = () => {
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [submissionPreviewOrder, setSubmissionPreviewOrder] = useState<Order | null>(null);
   const [selectedSubmissionOfficeId, setSelectedSubmissionOfficeId] = useState('');
-  const [submissionImages, setSubmissionImages] = useState<SubmissionMaterialImage[]>(SUBMISSION_MATERIAL_IMAGES);
+  const [submissionImages, setSubmissionImages] = useState<SubmissionMaterialImage[]>([]);
   const [submissionFiles, setSubmissionFiles] = useState<SubmissionMaterialFile[]>([]);
   const [previewSubmissionFileKey, setPreviewSubmissionFileKey] = useState<string | null>(null);
   const [submissionFilePreviewHtml, setSubmissionFilePreviewHtml] = useState('');
   const [submissionFilePreviewStatus, setSubmissionFilePreviewStatus] = useState<SubmissionFilePreviewStatus>('idle');
   const [logisticsOrder, setLogisticsOrder] = useState<Order | null>(null);
   const [logisticsForm, setLogisticsForm] = useState<LogisticsForm>({ logisticsCompany: '', trackingNumber: '' });
+  const generatedSubmissionFileUrlsRef = useRef<string[]>([]);
+  const submissionGenerationIdRef = useRef(0);
+
+  const revokeGeneratedSubmissionFileUrls = () => {
+    generatedSubmissionFileUrlsRef.current.forEach((url) => window.URL.revokeObjectURL(url));
+    generatedSubmissionFileUrlsRef.current = [];
+  };
 
   useEffect(() => {
     setActiveStatus(initialStatus);
     setCurrentPage(1);
   }, [initialStatus]);
+
+  useEffect(
+    () => () => {
+      submissionGenerationIdRef.current += 1;
+      revokeGeneratedSubmissionFileUrls();
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!toast) return;
@@ -1010,7 +1078,7 @@ const NotaryOrderManagementList: React.FC = () => {
       try {
         const html =
           previewSubmissionFileKind === 'docx'
-            ? await buildDocxSubmissionPreviewHtml(previewSubmissionFile)
+            ? await buildDocxSubmissionPreviewHtml(previewSubmissionFile, submissionPreviewOrder)
             : await buildXlsxSubmissionPreviewHtml(previewSubmissionFile);
 
         if (!cancelled) {
@@ -1031,7 +1099,7 @@ const NotaryOrderManagementList: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [previewSubmissionFile, previewSubmissionFileKind]);
+  }, [previewSubmissionFile, previewSubmissionFileKind, submissionPreviewOrder]);
 
   const filteredOrders = useMemo(() => {
     const agentKeyword = filterAgent.trim().toLowerCase();
@@ -1123,6 +1191,85 @@ const NotaryOrderManagementList: React.FC = () => {
     setToast({ type, message });
   };
 
+  const applyGeneratedSubmissionFileUpdate = (
+    generationId: number,
+    key: string,
+    update: Pick<SubmissionMaterialFile, 'path' | 'status' | 'message'>,
+  ) => {
+    const generatedPath = update.path;
+    if (generationId !== submissionGenerationIdRef.current) {
+      if (generatedPath?.startsWith('blob:')) {
+        window.URL.revokeObjectURL(generatedPath);
+      }
+      return;
+    }
+
+    if (generatedPath?.startsWith('blob:')) {
+      generatedSubmissionFileUrlsRef.current.push(generatedPath);
+    }
+
+    setSubmissionFiles((currentFiles) =>
+      currentFiles.map((file) =>
+        file.key === key
+          ? {
+              ...file,
+              ...update,
+            }
+          : file,
+      ),
+    );
+  };
+
+  const generateSubmissionPdfFiles = async (order: Order, generationId: number) => {
+    const images = order.notaryCertificateImages || {};
+    const passportFront = images['passport-front']?.trim();
+    const passportVisa = images['passport-visa']?.trim();
+    const flightItinerary = images['flight-itinerary']?.trim();
+
+    try {
+      if (!passportFront) {
+        throw new Error('Missing passport front image');
+      }
+
+      const passportSources = [
+        ...PASSPORT_TEMPLATE_IMAGE_SOURCES,
+        { src: passportFront },
+        ...(passportVisa ? [{ src: passportVisa }] : []),
+      ];
+      const passportBlob = await buildNotaryImagesPdfBlob(passportSources);
+      applyGeneratedSubmissionFileUpdate(generationId, 'passport-pdf', {
+        message: '根据护照模板和录单附件生成',
+        path: window.URL.createObjectURL(passportBlob),
+        status: 'ready',
+      });
+    } catch (error) {
+      applyGeneratedSubmissionFileUpdate(generationId, 'passport-pdf', {
+        message: '缺少护照首页，无法生成',
+        path: '',
+        status: 'error',
+      });
+    }
+
+    try {
+      if (!flightItinerary) {
+        throw new Error('Missing flight itinerary image');
+      }
+
+      const flightBlob = await buildNotaryImagesPdfBlob([{ src: flightItinerary }]);
+      applyGeneratedSubmissionFileUpdate(generationId, 'flight-itinerary-pdf', {
+        message: '根据录单上传的行程单生成',
+        path: window.URL.createObjectURL(flightBlob),
+        status: 'ready',
+      });
+    } catch (error) {
+      applyGeneratedSubmissionFileUpdate(generationId, 'flight-itinerary-pdf', {
+        message: '缺少行程单附件，无法生成',
+        path: '',
+        status: 'error',
+      });
+    }
+  };
+
   const handleStatusChange = (status: NotaryManagementStatus | '') => {
     setActiveStatus(status);
     setCurrentPage(1);
@@ -1174,6 +1321,10 @@ const NotaryOrderManagementList: React.FC = () => {
   };
 
   const handleOpenSubmissionPreview = (order: Order) => {
+    revokeGeneratedSubmissionFileUrls();
+    submissionGenerationIdRef.current += 1;
+    const generationId = submissionGenerationIdRef.current;
+
     setSubmissionPreviewOrder(order);
     setSelectedSubmissionOfficeId(
       order.pushedNotaryOfficeId ||
@@ -1181,14 +1332,17 @@ const NotaryOrderManagementList: React.FC = () => {
         order.auditSelectedNotaryOfficeId ||
         '',
     );
-    setSubmissionImages(SUBMISSION_MATERIAL_IMAGES);
+    setSubmissionImages(getSubmissionMaterialImages(order));
     setSubmissionFiles(getSubmissionMaterialFiles(order));
+    void generateSubmissionPdfFiles(order, generationId);
   };
 
   const handleCloseSubmissionPreview = () => {
+    submissionGenerationIdRef.current += 1;
+    revokeGeneratedSubmissionFileUrls();
     setSubmissionPreviewOrder(null);
     setSelectedSubmissionOfficeId('');
-    setSubmissionImages(SUBMISSION_MATERIAL_IMAGES);
+    setSubmissionImages([]);
     setSubmissionFiles([]);
     setPreviewSubmissionFileKey(null);
   };
@@ -1245,8 +1399,10 @@ const NotaryOrderManagementList: React.FC = () => {
       ...files.map((file, index) => ({
         key: buildUploadedMaterialKey('uploaded-file', file, index),
         label: file.name,
+        message: undefined,
         name: file.name,
         path: URL.createObjectURL(file),
+        status: 'ready' as const,
         type: getUploadedFileType(file.name),
       })),
     ]);
@@ -1265,8 +1421,10 @@ const NotaryOrderManagementList: React.FC = () => {
           ? {
               ...item,
               label: file.name,
+              message: undefined,
               name: file.name,
               path: URL.createObjectURL(file),
+              status: 'ready' as const,
               type: getUploadedFileType(file.name),
             }
           : item,
@@ -1876,21 +2034,23 @@ const NotaryOrderManagementList: React.FC = () => {
                   <div className="notary-review-submission-modal__file-list">
                     {submissionFiles.map((file) => {
                       const inputId = buildMaterialInputId('notary-submission-file-replace', file.key);
+                      const canPreviewFile = Boolean(file.path) && file.status !== 'loading' && file.status !== 'error';
 
                       return (
                         <div key={file.key} className="notary-review-submission-modal__file-card">
                           <span className="notary-review-submission-modal__file-type">{file.type}</span>
                           <span className="notary-review-submission-modal__file-info">
                             <strong>{file.name}</strong>
-                            <small>{file.label}</small>
+                            <small>{file.message || file.label}</small>
                           </span>
                           <span className="notary-review-submission-modal__file-actions">
                             <button
                               type="button"
                               className="notary-review-submission-modal__preview-button"
+                              disabled={!canPreviewFile}
                               onClick={() => handleOpenSubmissionFilePreview(file)}
                             >
-                              查看
+                              {file.status === 'loading' ? '生成中' : file.status === 'error' ? '不可查看' : '查看'}
                             </button>
                             <label htmlFor={inputId}>修改</label>
                             <button type="button" onClick={() => handleDeleteSubmissionFile(file.key)}>
@@ -1944,7 +2104,7 @@ const NotaryOrderManagementList: React.FC = () => {
                             target="_blank"
                             rel="noreferrer"
                           >
-                            <img src={item.src} alt={`${item.label}预览`} />
+                            <ResolvedImage src={item.src} alt={`${item.label}预览`} />
                           </a>
                           <div className="notary-review-submission-modal__material-title">{item.label}</div>
                           <div className="notary-review-submission-modal__material-actions">

@@ -1,18 +1,21 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ORDER_DATA_CHANGED_EVENT, addOrder, getOrders, getProducts, updateOrder } from '../../services/mockDataService';
-import type { Order, OrderStatus, ProductProcessType } from '../../shared/types';
+import type { DomesticLicenseInfo, Order, OrderStatus, ProductProcessType } from '../../shared/types';
 import { LICENSE_ISSUING_AUTHORITY_OPTIONS } from '../../shared/config/licenseIssuingAuthority';
 import { orderPreviewAssets } from '../../shared/config/orderPreviewAssets';
 import DatePickerInput from '../../shared/components/form/DatePickerInput';
+import ResolvedImage from '../../shared/components/ResolvedImage';
 import { formatBeijingTimestamp } from '../../shared/utils/dateTime';
 import { getLanguageOptionsForProduct } from '../../shared/utils/notaryLanguageOptions';
+import { saveDomesticLicenseImages, saveNotaryCertificateImages } from '../../shared/utils/localImageStore';
 import './AgentSystemPage.css';
 
 type ValidityPeriod = '6年' | '10年' | '60年' | '长期' | '自定义';
 type OrderEntryType = 'notary' | 'domesticLicenseTranslation';
 type AgentPageView = 'orderEntry' | 'orderList';
 type AgentOrderStatusTab = '' | 'pending_review' | 'pending_production' | 'shipped' | 'cancelled';
+type OrderInput = Omit<Order, 'orderId'> & { orderId?: string };
 
 const orderEntryOptions: Array<{ value: OrderEntryType; label: string }> = [
   { value: 'notary', label: '公证产品下单' },
@@ -111,7 +114,9 @@ const createDomesticLicenseFormState = (): DomesticLicenseFormState => ({
   passportPhotoName: '',
 });
 
-const resizeImageDataUrl = (file: File, maxSize = 1280, quality = 0.78) =>
+const MAX_ORDER_IMAGE_DATA_URL_LENGTH = 360_000;
+
+const resizeImageDataUrl = (file: File, maxSize = 960, quality = 0.68) =>
   new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
 
@@ -131,7 +136,18 @@ const resizeImageDataUrl = (file: File, maxSize = 1280, quality = 0.78) =>
         }
 
         context.drawImage(image, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/jpeg', quality));
+
+        let nextDataUrl = '';
+        const qualitySteps = [quality, 0.58, 0.48, 0.38, 0.3];
+        for (const nextQuality of qualitySteps) {
+          nextDataUrl = canvas.toDataURL('image/jpeg', nextQuality);
+          if (nextDataUrl.length <= MAX_ORDER_IMAGE_DATA_URL_LENGTH) {
+            resolve(nextDataUrl);
+            return;
+          }
+        }
+
+        reject(new Error('Image is too large after compression'));
       };
       image.onerror = () => reject(new Error('Image load failed'));
       image.src = typeof reader.result === 'string' ? reader.result : '';
@@ -140,16 +156,55 @@ const resizeImageDataUrl = (file: File, maxSize = 1280, quality = 0.78) =>
     reader.readAsDataURL(file);
   });
 
-const uploadItems = [
+type UploadItem = {
+  key: string;
+  optional?: boolean;
+  required?: boolean;
+  title: string;
+  tone: 'blue' | 'green' | 'plain';
+};
+
+const uploadItems: readonly UploadItem[] = [
   { key: 'license-front', title: '驾照正面照片', tone: 'green' },
   { key: 'license-back', title: '驾照反面照片', tone: 'green' },
-  { key: 'license-extra-front', title: '驾照副页正面照片', tone: 'green' },
-  { key: 'license-extra-back', title: '驾照副页反面照片', tone: 'green' },
-  { key: 'id-card-front', title: '身份证正面', tone: 'blue' },
-  { key: 'id-card-back', title: '身份证反面', tone: 'blue' },
+  { key: 'extra-front', title: '驾照副页正面照片', tone: 'green' },
+  { key: 'extra-back', title: '驾照副页反面照片', tone: 'green' },
+  { key: 'identity-front', title: '身份证正面', tone: 'blue' },
+  { key: 'identity-back', title: '身份证反面', tone: 'blue' },
+  { key: 'passport-front', title: '护照首页', tone: 'blue', required: true },
+  { key: 'passport-visa', title: '护照签证页', tone: 'blue', optional: true },
+  { key: 'flight-itinerary', title: '行程单', tone: 'plain' },
   { key: 'digital-license', title: '电子驾照', tone: 'blue' },
   { key: 'signature', title: '电子签名', tone: 'plain' },
-] as const;
+];
+
+const notaryAttachmentDisplayOrder = uploadItems.map((item) => item.key);
+const notaryAttachmentLabels = new Map(uploadItems.map((item) => [item.key, item.title] as const));
+
+const getNotaryAttachmentPhotoItems = (order: Order) => {
+  const images = order.notaryCertificateImages || {};
+  const knownItems = notaryAttachmentDisplayOrder.flatMap((key) => {
+    const src = images[key];
+    return src
+      ? [
+          {
+            key,
+            label: notaryAttachmentLabels.get(key) || key,
+            src,
+          },
+        ]
+      : [];
+  });
+  const unknownItems = Object.entries(images)
+    .filter(([key, src]) => Boolean(src) && !notaryAttachmentLabels.has(key))
+    .map(([key, src]) => ({
+      key,
+      label: key,
+      src,
+    }));
+
+  return [...knownItems, ...unknownItems];
+};
 
 const validityPeriods: ValidityPeriod[] = ['6年', '10年', '60年', '长期', '自定义'];
 
@@ -257,6 +312,14 @@ const formatDateValue = (date: Date) => {
 const readFormValue = (formData: FormData, key: string) => {
   const value = formData.get(key);
   return typeof value === 'string' ? value.trim() : '';
+};
+
+const isStorageQuotaError = (error: unknown) => {
+  if (!(error instanceof DOMException)) {
+    return false;
+  }
+
+  return error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED' || error.code === 22;
 };
 
 const joinAddressSegments = (segments: string[]) => segments.filter(Boolean).join(' ');
@@ -827,7 +890,7 @@ const AgentSystemPage: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleConfirmSubmitOrder = () => {
+  const handleConfirmSubmitOrder = async () => {
     if (isSubmittingOrder) {
       return;
     }
@@ -874,79 +937,96 @@ const AgentSystemPage: React.FC = () => {
       setIsSubmittingOrder(true);
       const licenseNumber = domesticLicenseForm.licenseNumber.trim() || `DL${Date.now().toString().slice(-8)}`;
       let createdOrder: Order;
-
-      try {
-        createdOrder = addOrder({
-          customerName,
-          customerPhone: readFormValue(deliveryData, 'customerPhone') || '13800138000',
-          customerPassport: licenseNumber,
-          customerEmail: `agent-${Date.now()}@example.com`,
-          productId: product.productId,
-          productName: product.title,
-          productCategory: product.category,
-          processType: processType.name,
-          processTypeId: processType.typeId,
-          pushTimeliness: 'instant',
-          channel: 'private',
-          agentLevel: 'self',
-          lockedPrice: getProcessTypePrice(processType),
-          status: 'pending_review',
-          deliveryAddress,
-          logisticsCompany: '',
-          trackingNumber: '',
-          remark: '用户端提交',
-          licenseName: domesticLicenseForm.chineseName.trim(),
-          licenseNo: licenseNumber,
-          licenseCategory: domesticLicenseForm.classType.trim(),
-          licenseGender: domesticLicenseForm.sex,
-          licenseNationality: domesticLicenseForm.foreignCountry,
-          licenseBirthDate: domesticLicenseForm.birthDate,
-          licenseAddress: joinAddressSegments([domesticLicenseForm.foreignCountry, domesticLicenseForm.foreignCity]),
-          licenseFirstIssueDate: domesticLicenseForm.issueDate,
-          licenseValidUntilDate: domesticLicenseForm.expiryDate,
-          licenseArchiveNumber: domesticLicenseForm.fileNumber.trim(),
-          licenseIssuingRegion: joinAddressSegments([domesticLicenseForm.exchangeProvince, domesticLicenseForm.exchangeCity]),
-          useCountry: domesticLicenseForm.foreignCountry,
-          domesticLicenseInfo: {
-            exchangeProvince: domesticLicenseForm.exchangeProvince,
-            exchangeCity: domesticLicenseForm.exchangeCity,
-            foreignCountry: domesticLicenseForm.foreignCountry,
-            foreignCity: domesticLicenseForm.foreignCity,
-            chineseName: domesticLicenseForm.chineseName.trim(),
-            licenseNumber,
-            expiryDate: domesticLicenseForm.expiryDate,
-            surname: domesticLicenseForm.surname.trim(),
-            givenName: domesticLicenseForm.givenName.trim(),
-            birthDate: domesticLicenseForm.birthDate,
-            rstr: domesticLicenseForm.rstr.trim(),
-            sex: domesticLicenseForm.sex,
-            hairColor: domesticLicenseForm.hairColor.trim(),
-            eyeColor: domesticLicenseForm.eyeColor.trim(),
-            height: domesticLicenseForm.height.trim(),
-            weight: domesticLicenseForm.weight.trim(),
-            issueDate: domesticLicenseForm.issueDate,
-            fileNumber: domesticLicenseForm.fileNumber.trim(),
-            classType: domesticLicenseForm.classType.trim(),
-            endorsements: domesticLicenseForm.endorsements.trim(),
-            restrictions: domesticLicenseForm.restrictions.trim(),
-            other: domesticLicenseForm.other.trim(),
-            frontPhoto: domesticLicenseForm.frontPhoto,
-            backPhoto: domesticLicenseForm.backPhoto,
-            passportPhoto: domesticLicenseForm.passportPhoto || undefined,
+      const domesticLicenseInfo: DomesticLicenseInfo = {
+        exchangeProvince: domesticLicenseForm.exchangeProvince,
+        exchangeCity: domesticLicenseForm.exchangeCity,
+        foreignCountry: domesticLicenseForm.foreignCountry,
+        foreignCity: domesticLicenseForm.foreignCity,
+        chineseName: domesticLicenseForm.chineseName.trim(),
+        licenseNumber,
+        expiryDate: domesticLicenseForm.expiryDate,
+        surname: domesticLicenseForm.surname.trim(),
+        givenName: domesticLicenseForm.givenName.trim(),
+        birthDate: domesticLicenseForm.birthDate,
+        rstr: domesticLicenseForm.rstr.trim(),
+        sex: domesticLicenseForm.sex,
+        hairColor: domesticLicenseForm.hairColor.trim(),
+        eyeColor: domesticLicenseForm.eyeColor.trim(),
+        height: domesticLicenseForm.height.trim(),
+        weight: domesticLicenseForm.weight.trim(),
+        issueDate: domesticLicenseForm.issueDate,
+        fileNumber: domesticLicenseForm.fileNumber.trim(),
+        classType: domesticLicenseForm.classType.trim(),
+        endorsements: domesticLicenseForm.endorsements.trim(),
+        restrictions: domesticLicenseForm.restrictions.trim(),
+        other: domesticLicenseForm.other.trim(),
+        frontPhoto: domesticLicenseForm.frontPhoto,
+        backPhoto: domesticLicenseForm.backPhoto,
+        passportPhoto: domesticLicenseForm.passportPhoto || undefined,
+      };
+      const storedDomesticLicenseInfo = await saveDomesticLicenseImages(
+        domesticLicenseInfo,
+        `domestic-license-${licenseNumber}-${Date.now()}`,
+      );
+      const nextOrder: OrderInput = {
+        customerName,
+        customerPhone: readFormValue(deliveryData, 'customerPhone') || '13800138000',
+        customerPassport: licenseNumber,
+        customerEmail: `agent-${Date.now()}@example.com`,
+        productId: product.productId,
+        productName: product.title,
+        productCategory: product.category,
+        processType: processType.name,
+        processTypeId: processType.typeId,
+        pushTimeliness: 'instant',
+        channel: 'private',
+        agentLevel: 'self',
+        lockedPrice: getProcessTypePrice(processType),
+        status: 'pending_review',
+        deliveryAddress,
+        logisticsCompany: '',
+        trackingNumber: '',
+        remark: '用户端提交',
+        licenseName: domesticLicenseForm.chineseName.trim(),
+        licenseNo: licenseNumber,
+        licenseCategory: domesticLicenseForm.classType.trim(),
+        licenseGender: domesticLicenseForm.sex,
+        licenseNationality: domesticLicenseForm.foreignCountry,
+        licenseBirthDate: domesticLicenseForm.birthDate,
+        licenseAddress: joinAddressSegments([domesticLicenseForm.foreignCountry, domesticLicenseForm.foreignCity]),
+        licenseFirstIssueDate: domesticLicenseForm.issueDate,
+        licenseValidUntilDate: domesticLicenseForm.expiryDate,
+        licenseArchiveNumber: domesticLicenseForm.fileNumber.trim(),
+        licenseIssuingRegion: joinAddressSegments([domesticLicenseForm.exchangeProvince, domesticLicenseForm.exchangeCity]),
+        useCountry: domesticLicenseForm.foreignCountry,
+        domesticLicenseInfo: storedDomesticLicenseInfo,
+        createdAt: currentTimestamp,
+        updatedAt: currentTimestamp,
+        logs: [
+          {
+            time: currentTimestamp,
+            operator: '用户端',
+            action: `订单创建：用户端${DOMESTIC_LICENSE_PRODUCT_TITLE}确认提交`,
           },
-          createdAt: currentTimestamp,
-          updatedAt: currentTimestamp,
-          logs: [
-            {
-              time: currentTimestamp,
-              operator: '用户端',
-              action: `订单创建：用户端${DOMESTIC_LICENSE_PRODUCT_TITLE}确认提交`,
-            },
-          ],
-        });
-      } catch {
+        ],
+      };
+      try {
+        createdOrder = addOrder(nextOrder);
+      } catch (error) {
+        if (isStorageQuotaError(error)) {
+          setIsSubmittingOrder(false);
+          showToast('本地存储空间不足，请清理浏览器缓存后再试');
+          return;
+        } else {
+          setIsSubmittingOrder(false);
+          showToast('订单提交失败，请稍后再试');
+          return;
+        }
+      }
+
+      if (!createdOrder) {
         setIsSubmittingOrder(false);
-        showToast('订单提交失败，请重新上传较小的证件图片后再试');
+        showToast('订单提交失败，请稍后再试');
         return;
       }
 
@@ -967,6 +1047,12 @@ const AgentSystemPage: React.FC = () => {
       return;
     }
 
+    const missingRequiredUpload = uploadItems.find((item) => item.required && !uploadedCertificates[item.key]?.src);
+    if (missingRequiredUpload) {
+      showToast(`请上传${missingRequiredUpload.title}`);
+      return;
+    }
+
     const certificateData = certificateFormRef.current ? new FormData(certificateFormRef.current) : new FormData();
     const deliveryData = deliveryFormRef.current ? new FormData(deliveryFormRef.current) : new FormData();
     const licenseName = readFormValue(certificateData, 'licenseName');
@@ -984,56 +1070,74 @@ const AgentSystemPage: React.FC = () => {
     const licenseIssuingRegion = joinAddressSegments([selectedProvince, selectedCity]);
     const currentTimestamp = formatBeijingTimestamp();
     const language = selectedLanguage || getLanguageOptionsForProduct(product.title)[0] || '';
-    const createdOrder = addOrder({
-      customerName,
-      customerPhone: readFormValue(deliveryData, 'customerPhone') || '13800138000',
-      customerPassport: licenseNo,
-      customerEmail: `agent-${Date.now()}@example.com`,
-      productId: product.productId,
-      productName: product.category === 'notary' ? getNotaryOrderProductName(product.title) : product.title,
-      productCategory: product.category,
-      processType: processType.name,
-      processTypeId: processType.typeId,
-      pushTimeliness: 'instant',
-      channel: 'private',
-      agentLevel: 'self',
-      lockedPrice: getProcessTypePrice(processType),
-      status: 'pending_review',
-      deliveryAddress,
-      logisticsCompany: '',
-      trackingNumber: '',
-      remark: '用户端提交',
-      licenseName: licenseName || customerName,
-      licenseNo,
-      licenseCategory: readFormValue(certificateData, 'licenseCategory') || 'C1',
-      licenseGender: readFormValue(certificateData, 'gender') || '男',
-      licenseNationality: readFormValue(certificateData, 'licenseNationality') || '中国/CHN',
-      licenseBirthDate: birthDate,
-      licenseAddress: readFormValue(certificateData, 'licenseAddress') || deliveryAddress,
-      licenseArchiveNumber: readFormValue(certificateData, 'archiveNumber'),
-      licenseBarcodeNumber: readFormValue(certificateData, 'barcodeNumber'),
-      licenseFirstIssueDate: initialIssueDate,
-      licenseValidFromDate: validStartDate,
-      licenseValidUntilDate: validityPeriod === '自定义'
-        ? customValidUntilDate
-        : addYearsToDateValue(validStartDate, validityPeriod),
-      licenseValidYears: validityPeriod,
-      licenseIssuingAuthority: readFormValue(certificateData, 'licenseIssuingAuthority'),
-      licenseIssuingRegion,
-      language,
-      useCountry: useCountry.trim(),
-      createdAt: currentTimestamp,
-      updatedAt: currentTimestamp,
-      logs: [
-        {
-          time: currentTimestamp,
-          operator: '用户端',
-          action: `订单创建：用户端${orderEntryLabel}确认提交`,
-        },
-      ],
-    });
-
     setIsSubmittingOrder(true);
+    const rawNotaryCertificateImages = Object.fromEntries(
+      Object.entries(uploadedCertificates)
+        .filter(([, item]) => Boolean(item.src))
+        .map(([key, item]) => [key, item.src]),
+    );
+    let createdOrder: Order;
+    try {
+      const notaryCertificateImages = await saveNotaryCertificateImages(
+        rawNotaryCertificateImages,
+        `notary-certificate-${licenseNo}-${Date.now()}`,
+      );
+
+      createdOrder = addOrder({
+        customerName,
+        customerPhone: readFormValue(deliveryData, 'customerPhone') || '13800138000',
+        customerPassport: licenseNo,
+        customerEmail: `agent-${Date.now()}@example.com`,
+        productId: product.productId,
+        productName: product.category === 'notary' ? getNotaryOrderProductName(product.title) : product.title,
+        productCategory: product.category,
+        processType: processType.name,
+        processTypeId: processType.typeId,
+        pushTimeliness: 'instant',
+        channel: 'private',
+        agentLevel: 'self',
+        lockedPrice: getProcessTypePrice(processType),
+        status: 'pending_review',
+        deliveryAddress,
+        logisticsCompany: '',
+        trackingNumber: '',
+        remark: '用户端提交',
+        licenseName: licenseName || customerName,
+        licenseNo,
+        licenseCategory: readFormValue(certificateData, 'licenseCategory') || 'C1',
+        licenseGender: readFormValue(certificateData, 'gender') || '男',
+        licenseNationality: readFormValue(certificateData, 'licenseNationality') || '中国/CHN',
+        licenseBirthDate: birthDate,
+        licenseAddress: readFormValue(certificateData, 'licenseAddress') || deliveryAddress,
+        licenseArchiveNumber: readFormValue(certificateData, 'archiveNumber'),
+        licenseBarcodeNumber: readFormValue(certificateData, 'barcodeNumber'),
+        licenseFirstIssueDate: initialIssueDate,
+        licenseValidFromDate: validStartDate,
+        licenseValidUntilDate: validityPeriod === '自定义'
+          ? customValidUntilDate
+          : addYearsToDateValue(validStartDate, validityPeriod),
+        licenseValidYears: validityPeriod,
+        licenseIssuingAuthority: readFormValue(certificateData, 'licenseIssuingAuthority'),
+        licenseIssuingRegion,
+        notaryCertificateImages,
+        language,
+        useCountry: useCountry.trim(),
+        createdAt: currentTimestamp,
+        updatedAt: currentTimestamp,
+        logs: [
+          {
+            time: currentTimestamp,
+            operator: '用户端',
+            action: `订单创建：用户端${orderEntryLabel}确认提交`,
+          },
+        ],
+      });
+    } catch (error) {
+      setIsSubmittingOrder(false);
+      showToast(isStorageQuotaError(error) ? '本地存储空间不足，请清理浏览器缓存后再试' : '订单提交失败，请稍后再试');
+      return;
+    }
+
     setAllAgentOrders((orders) => [createdOrder, ...orders.filter((order) => order.orderId !== createdOrder.orderId)]);
     resetOrderEntryForm();
     showToast(`订单 ${createdOrder.orderId} 提交成功`);
@@ -1234,18 +1338,14 @@ const AgentSystemPage: React.FC = () => {
 
     const order = licenseInfoModalOrder;
     const domesticInfo = order.domesticLicenseInfo;
-    const licensePhotoItems = domesticInfo
+    const domesticLicensePhotoItems = domesticInfo
       ? [
           { label: '驾照正面照片', src: domesticInfo.frontPhoto },
           { label: '驾照反面照片', src: domesticInfo.backPhoto },
           ...(domesticInfo.passportPhoto ? [{ label: '护照', src: domesticInfo.passportPhoto }] : []),
         ]
-      : [
-          { label: '驾照正面', src: orderPreviewAssets.licenseFront },
-          { label: '驾照反面', src: orderPreviewAssets.licenseBack },
-          { label: '驾照副页正面照片', src: orderPreviewAssets.extraFront },
-          { label: '驾照副页反面照片', src: orderPreviewAssets.extraBack },
-        ];
+      : [];
+    const notaryAttachmentPhotoItems = domesticInfo ? [] : getNotaryAttachmentPhotoItems(order);
     const domesticLicenseFieldItems: Array<[string, string | undefined]> = domesticInfo
       ? [
           ['中文姓名', domesticInfo.chineseName || order.licenseName || order.customerName],
@@ -1289,7 +1389,7 @@ const AgentSystemPage: React.FC = () => {
 
           <div className="agent-modal__content">
             <div className="agent-license-modal__layout">
-              <section className="agent-license-modal__panel">
+              <section className={`agent-license-modal__panel ${domesticInfo ? '' : 'agent-license-modal__panel--full'}`.trim()}>
                 <h3>驾照信息</h3>
                 <div className="agent-license-modal__fields">
                   {domesticInfo ? (
@@ -1322,21 +1422,42 @@ const AgentSystemPage: React.FC = () => {
                     </>
                   )}
                 </div>
+                {!domesticInfo && (
+                  <div className="agent-license-modal__attachments" aria-label="驾驶证证件照片">
+                    <h4>驾驶证证件照片</h4>
+                    {notaryAttachmentPhotoItems.length > 0 ? (
+                      <div className="agent-license-modal__attachment-grid">
+                        {notaryAttachmentPhotoItems.map((item) => (
+                          <figure key={item.key} className="agent-license-modal__attachment">
+                            <figcaption>{item.label}</figcaption>
+                            <div>
+                              <ResolvedImage src={item.src} alt={item.label} />
+                            </div>
+                          </figure>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="agent-license-modal__attachments-empty">暂无上传附件</div>
+                    )}
+                  </div>
+                )}
               </section>
 
+              {domesticInfo && (
               <section className="agent-license-modal__panel">
                 <h3>驾照证件照片</h3>
                 <div className="agent-license-modal__photos">
-                  {licensePhotoItems.map((item) => (
+                  {domesticLicensePhotoItems.map((item) => (
                     <figure key={item.label} className="agent-license-modal__photo">
                       <figcaption>{item.label}</figcaption>
                       <div>
-                        <img src={item.src} alt={item.label} />
+                        <ResolvedImage src={item.src} alt={item.label} />
                       </div>
                     </figure>
                   ))}
                 </div>
               </section>
+              )}
             </div>
           </div>
 
@@ -2194,7 +2315,7 @@ const AgentSystemPage: React.FC = () => {
               </form>
 
               <div className="agent-upload-board" aria-label="上传材料">
-                <div className="agent-upload-board__title">上传相关证件</div>
+                <div className="agent-upload-board__title">上传相关附件</div>
                 <div className="agent-upload-grid">
                   {uploadItems.map((item) => {
                     const uploadedItem = uploadedCertificates[item.key];
@@ -2211,7 +2332,11 @@ const AgentSystemPage: React.FC = () => {
                         ) : (
                           <span className="agent-upload-card__icon">+</span>
                         )}
-                        <span className="agent-upload-card__label">{item.title}</span>
+                        <span className="agent-upload-card__label">
+                          {item.title}
+                          {item.required && <em className="agent-required">*</em>}
+                          {item.optional && <em className="agent-optional">选填</em>}
+                        </span>
                         <small>{uploadedItem?.name || (uploadedItem ? '点击更换图片' : '点击上传图片')}</small>
                         <input
                           type="file"

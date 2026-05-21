@@ -1,16 +1,15 @@
 # 美卡平台--驾照官生产端 PRD
 
 > **模块**: 驾照官生产端 / 中文翻译件生产
-> **版本**: v1.1
+> **版本**: v1.0
 > **最后更新**: 2026-05-14
 > **作者**: Codex
-> **来源**: 从 `specs/Meika System Port/mei_ka_Admin side.md` 拆分，并根据 `specs/Requirements Management/换国内驾照翻译件.md`、`specs/Requirements Management/映射/order_status_mapping.md` 与当前项目实现更新
 
 ---
 
 ## 更新日志
 
-- **v1.0 (2026-05-14)**: 独立定义换国内驾照翻译件的生产列表、翻译确认、DOCX 预览编辑、PDF 导出、发货、取消、状态映射与验收标准。
+- **v1.0 (2026-05-14)**: 定义生产、翻译确认、DOCX 预览编辑、PDF 导出、发货、取消、状态映射与验收标准。
 
 ---
 

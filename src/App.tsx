@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import MainLayout from './shared/layouts/MainLayout';
 import { getStoredAuthSession, logoutAuthSession, type AuthSession } from './shared/utils/auth';
@@ -71,8 +71,28 @@ const ProtectedLicenseOfficerLayout: React.FC<ProtectedLicenseOfficerLayoutProps
   );
 };
 
+const LARGE_LOCAL_DATA_STORAGE_KEYS = [
+  'meika-orders',
+  'meika-order-data-version',
+  'meika-notary-office-orders',
+  'meika-notary-office-orders-version',
+  'meika-klook-orders',
+  'meika-hello-orders',
+];
+
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<AuthSession | null>(() => getStoredAuthSession());
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get('clearLocalData') !== '1') {
+      return;
+    }
+
+    LARGE_LOCAL_DATA_STORAGE_KEYS.forEach((key) => window.localStorage.removeItem(key));
+    window.history.replaceState({}, '', `${window.location.pathname}${window.location.hash}`);
+    window.location.reload();
+  }, []);
 
   const handleLogin = (session: AuthSession) => {
     setCurrentUser(session);

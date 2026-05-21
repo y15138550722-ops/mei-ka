@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { getOrderById, updateOrder } from '../../services/mockDataService';
 import type { Order } from '../../shared/types';
 import {
@@ -10,6 +10,8 @@ import {
 import { buildDocxPreviewHtmlFromUrl } from '../../shared/utils/docxPreview';
 import { exportNotaryImageBlobsToPdf } from '../../shared/utils/notaryPreviewExport';
 import { formatBeijingTimestamp } from '../../shared/utils/dateTime';
+import { getStoredAuthSession } from '../../shared/utils/auth';
+import { resolveLocalImageSource } from '../../shared/utils/localImageStore';
 import { isProductionVisibleChineseTranslationOrder } from './productionOrderVisibility';
 import './ChineseTranslationOrders.css';
 
@@ -50,6 +52,11 @@ const TEMPLATE_SIGNATURE_FALLBACK_CROP: ImageCropRect = { x: 0.06, y: 0.78, widt
 const TEMPLATE_PORTRAIT_CROP: ImageCropRect = { x: 0, y: 0, width: 1, height: 0.82 };
 
 const sanitizeFilenamePart = (value: string) => value.replace(INVALID_FILENAME_CHAR_PATTERN, '').trim();
+
+const getCurrentProductionOperatorName = () => {
+  const session = getStoredAuthSession();
+  return session?.displayName?.trim() || session?.username?.trim() || PRODUCTION_OPERATOR;
+};
 
 const serializeElementAsXhtml = (element: Element) => new XMLSerializer().serializeToString(element);
 
@@ -164,37 +171,55 @@ const buildTranslationFromOcrFields = (
   };
 };
 
+const resolveDomesticLicenseTranslationImages = async (translation: DomesticLicenseOcrTranslation) => {
+  const [frontPhoto, backPhoto] = await Promise.all([
+    resolveLocalImageSource(translation.frontPhoto),
+    resolveLocalImageSource(translation.backPhoto),
+  ]);
+
+  return {
+    ...translation,
+    frontPhoto,
+    backPhoto,
+  };
+};
+
 const recognizeDomesticLicenseTranslation = async (order: Order | undefined): Promise<DomesticLicenseOcrTranslation> => {
   const info = order?.domesticLicenseInfo;
   const fallback = buildFallbackDomesticLicenseTranslation(order);
 
   if (!info?.frontPhoto && !info?.backPhoto) {
-    return fallback;
+    return resolveDomesticLicenseTranslationImages(fallback);
   }
 
   try {
+    const [frontPhoto, backPhoto] = await Promise.all([
+      resolveLocalImageSource(info.frontPhoto),
+      resolveLocalImageSource(info.backPhoto),
+    ]);
+
     const response = await fetch('/api/ocr/domestic-license', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        backPhoto: info.backPhoto,
+        backPhoto,
         fallback: buildOcrRequestFallback(order),
-        frontPhoto: info.frontPhoto,
+        frontPhoto,
         orderId: order?.orderId,
       }),
     });
 
     if (!response.ok) {
-      return fallback;
+      return resolveDomesticLicenseTranslationImages(fallback);
     }
 
     const result = (await response.json()) as { fields?: Record<string, unknown> };
-    return buildTranslationFromOcrFields(order, result.fields || {});
+    return resolveDomesticLicenseTranslationImages(buildTranslationFromOcrFields(order, result.fields || {}));
   } catch (error) {
     console.warn('Domestic license OCR failed, using order fallback fields.', error);
-    return fallback;
+    return resolveDomesticLicenseTranslationImages(fallback);
   }
 };
 
@@ -1191,13 +1216,13 @@ const markOrderMadeAfterPdfExport = (order: Order | undefined) => {
   }
 
   const timestamp = formatBeijingTimestamp();
-  const nextLogs = order.logs.some((log) => log.operator === PRODUCTION_OPERATOR && log.action === MADE_ACTION)
+  const nextLogs = order.logs.some((log) => log.action === MADE_ACTION)
     ? order.logs
     : [
         ...order.logs,
         {
           time: timestamp,
-          operator: PRODUCTION_OPERATOR,
+          operator: getCurrentProductionOperatorName(),
           action: MADE_ACTION,
         },
       ];
@@ -1212,6 +1237,7 @@ const markOrderMadeAfterPdfExport = (order: Order | undefined) => {
 const DomesticLicenseTranslationEditor: React.FC = () => {
   const navigate = useNavigate();
   const { orderId = '' } = useParams();
+  const [searchParams] = useSearchParams();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [order] = useState(() => getOrderById(decodeURIComponent(orderId)));
   const isProductionVisibleOrder = Boolean(order && isProductionVisibleChineseTranslationOrder(order));
@@ -1223,6 +1249,11 @@ const DomesticLicenseTranslationEditor: React.FC = () => {
 
   const handleBackToList = () => {
     navigate('/license-officer/orders/chinese-translation');
+  };
+
+  const navigateBackToSourceList = () => {
+    const fromStatus = searchParams.get('fromStatus');
+    navigate(`/license-officer/orders/chinese-translation${fromStatus ? `?status=${fromStatus}` : ''}`);
   };
 
   useEffect(() => {
@@ -1244,7 +1275,9 @@ const DomesticLicenseTranslationEditor: React.FC = () => {
         title: DOMESTIC_LICENSE_TEMPLATE_SOURCE_NAME,
       });
       const frontImageSource =
-        order?.domesticLicenseInfo?.frontPhoto || DOMESTIC_LICENSE_MEDIA_TEMPLATE_IMAGE || getDocxPreviewFrontImageSource(nextHtml);
+        (await resolveLocalImageSource(order?.domesticLicenseInfo?.frontPhoto)) ||
+        DOMESTIC_LICENSE_MEDIA_TEMPLATE_IMAGE ||
+        getDocxPreviewFrontImageSource(nextHtml);
       const [translation, extractedAssets] = await Promise.all([
         recognizeDomesticLicenseTranslation(order),
         extractDomesticLicenseFrontAssets(frontImageSource, DOMESTIC_LICENSE_MEDIA_TEMPLATE_IMAGE),
@@ -1445,12 +1478,14 @@ const DomesticLicenseTranslationEditor: React.FC = () => {
 
       await exportNotaryImageBlobsToPdf([{ blob: imageBlob }], fileName);
       markOrderMadeAfterPdfExport(order);
+      navigateBackToSourceList();
     } catch (error) {
       console.error('Failed to export domestic license PDF', error);
 
       try {
         openPrintablePdfFallback(previewPage.html, `${previewPage.name}正文翻译件`);
         markOrderMadeAfterPdfExport(order);
+        navigateBackToSourceList();
       } catch (fallbackError) {
         console.error('Failed to open domestic license PDF print fallback', fallbackError);
         window.alert('PDF 导出失败，请稍后重试。');

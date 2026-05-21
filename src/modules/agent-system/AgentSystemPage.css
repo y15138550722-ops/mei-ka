@@ -1099,6 +1099,10 @@
   overflow-y: auto;
 }
 
+.agent-license-modal__panel--full {
+  grid-column: 1 / -1;
+}
+
 .agent-license-modal__panel h3 {
   margin: 0 0 34px;
   padding-bottom: 12px;
@@ -1135,6 +1139,74 @@
   font-weight: 500;
   overflow-wrap: anywhere;
   word-break: normal;
+}
+
+.agent-license-modal__attachments {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.agent-license-modal__attachments h4 {
+  margin: 0 0 14px;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.agent-license-modal__attachment-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.agent-license-modal__attachment {
+  min-width: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.agent-license-modal__attachment figcaption {
+  min-width: 0;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-license-modal__attachment div {
+  aspect-ratio: 4 / 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+}
+
+.agent-license-modal__attachment img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.agent-license-modal__attachments-empty {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #64748b;
+  font-size: 13px;
 }
 
 .agent-license-modal__photos {
@@ -1244,6 +1316,18 @@
 .agent-required {
   color: #ef4444;
   font-style: normal;
+}
+
+.agent-optional {
+  margin-left: 4px;
+  color: #64748b;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.agent-upload-card--filled .agent-optional {
+  color: rgba(255, 255, 255, 0.82);
 }
 
 .agent-field input,
@@ -1892,6 +1976,10 @@
     grid-template-columns: 1fr;
   }
 
+  .agent-license-modal__attachment-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .agent-delivery-form,
   .agent-delivery-form .agent-field,
   .agent-address-recognition .agent-field {
@@ -1928,6 +2016,10 @@
   }
 
   .agent-upload-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-license-modal__attachment-grid {
     grid-template-columns: 1fr;
   }
 

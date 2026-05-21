@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { getOrderById, updateOrder } from '../../services/mockDataService';
+import ResolvedImage from '../../shared/components/ResolvedImage';
 import { formatBeijingTimestamp } from '../../shared/utils/dateTime';
 import { orderPreviewAssets } from '../../shared/config/orderPreviewAssets';
 import type { DomesticLicenseInfo, Order, OrderLog, OrderStatus, ProductCategory } from '../../shared/types';
@@ -2178,7 +2179,7 @@ const OrderDetail: React.FC = () => {
                                   onClick={() => setPreviewImage(item)}
                                   aria-label={`\u67e5\u770b${item.label}\u5927\u56fe`}
                                 >
-                                  <img className="order-audit-image" src={item.src} alt={`${item.label}\u9884\u89c8`} />
+                                  <ResolvedImage className="order-audit-image" src={item.src} alt={`${item.label}\u9884\u89c8`} />
                                 </button>
                               ) : (
                                 <div className="order-audit-image-placeholder" aria-hidden="true">
@@ -2335,7 +2336,7 @@ const OrderDetail: React.FC = () => {
                         onClick={() => setPreviewImage(item)}
                         aria-label={`查看${item.label}大图`}
                       >
-                        <img className="order-audit-image" src={item.src} alt={`${item.label}预览`} />
+                        <ResolvedImage className="order-audit-image" src={item.src} alt={`${item.label}预览`} />
                       </button>
                     ) : (
                       <div className="order-audit-image-placeholder" aria-hidden="true">
@@ -2427,7 +2428,7 @@ const OrderDetail: React.FC = () => {
               </button>
             </div>
             <div className="order-audit-image-modal__body">
-              <img
+              <ResolvedImage
                 className="order-audit-image-modal__image"
                 src={previewImage.src || ''}
                 alt={`${previewImage.label}大图预览`}

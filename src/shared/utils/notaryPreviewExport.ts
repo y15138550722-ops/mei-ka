@@ -1,3 +1,5 @@
+import { resolveLocalImageSource } from './localImageStore';
+
 export interface NotaryExportImageSource {
   label?: string;
   src: string;
@@ -170,7 +172,8 @@ const buildPdfImagePageFromBlob = async (sourceBlob: Blob): Promise<PdfImagePage
 };
 
 const buildPdfImagePage = async ({ src }: NotaryExportImageSource): Promise<PdfImagePage> => {
-  const sourceBlob = await fetchAssetBlob(src);
+  const resolvedSrc = await resolveLocalImageSource(src);
+  const sourceBlob = await fetchAssetBlob(resolvedSrc);
 
   return buildPdfImagePageFromBlob(sourceBlob);
 };
@@ -249,6 +252,8 @@ const buildPdfDocument = (pages: PdfImagePage[]) => {
   return concatBytes(chunks);
 };
 
+const buildPdfBlobFromPages = (pages: PdfImagePage[]) => new Blob([buildPdfDocument(pages)], { type: 'application/pdf' });
+
 export const downloadNotaryAsset = async (assetPath: string, fileName: string) => {
   const blob = await fetchAssetBlob(assetPath);
   triggerBlobDownload(blob, fileName);
@@ -278,9 +283,24 @@ export const exportNotaryImagesToPdf = async (images: NotaryExportImageSource[],
     pages.push(await buildPdfImagePage(image));
   }
 
-  const pdfBytes = buildPdfDocument(pages);
-  const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+  const pdfBlob = buildPdfBlobFromPages(pages);
   triggerBlobDownload(pdfBlob, fileName);
+};
+
+export const buildNotaryImagesPdfBlob = async (images: NotaryExportImageSource[]) => {
+  const validImages = images.filter((image) => image.src.trim());
+
+  if (validImages.length === 0) {
+    throw new Error('No images available for export');
+  }
+
+  const pages: PdfImagePage[] = [];
+
+  for (const image of validImages) {
+    pages.push(await buildPdfImagePage(image));
+  }
+
+  return buildPdfBlobFromPages(pages);
 };
 
 export const exportNotaryImageBlobsToPdf = async (images: NotaryExportImageBlob[], fileName: string) => {
@@ -296,7 +316,6 @@ export const exportNotaryImageBlobsToPdf = async (images: NotaryExportImageBlob[
     pages.push(await buildPdfImagePageFromBlob(image.blob));
   }
 
-  const pdfBytes = buildPdfDocument(pages);
-  const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+  const pdfBlob = buildPdfBlobFromPages(pages);
   triggerBlobDownload(pdfBlob, fileName);
 };
