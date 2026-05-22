@@ -17,6 +17,7 @@ const HelloOrderDetail = lazy(() => import('./modules/order-management/HelloOrde
 const ProductList = lazy(() => import('./modules/product-management/ProductList'));
 const ProductForm = lazy(() => import('./modules/product-management/ProductForm'));
 const ProductProcessTypeManagement = lazy(() => import('./modules/product-management/ProductProcessTypeManagement'));
+const FilePreviewCenter = lazy(() => import('./modules/file-preview/FilePreviewCenter'));
 const NotaryOrderList = lazy(() => import('./modules/notary-office/NotaryOrderList'));
 const NotaryOrderPreview = lazy(() => import('./modules/notary-office/NotaryOrderPreview'));
 const AgentSystemPage = lazy(() => import('./modules/agent-system/AgentSystemPage'));
@@ -145,6 +146,7 @@ const App: React.FC = () => {
           <Route path="/products/new" element={<ProductForm />} />
           <Route path="/products/:id/edit" element={<ProductForm />} />
           <Route path="/products/:id/process-types" element={<ProductProcessTypeManagement />} />
+          <Route path="/file-preview" element={<FilePreviewCenter />} />
           <Route path="/notary/orders" element={<NotaryOrderList />} />
           <Route path="/notary/orders/:id/preview" element={<NotaryOrderPreview />} />
         </Route>

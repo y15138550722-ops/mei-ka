@@ -158,6 +158,8 @@ const getCurrentTimestamp = () => formatBeijingTimestamp();
 const cloneOrder = (order: Order): Order => ({
   ...order,
   logs: order.logs.map((log) => ({ ...log })),
+  notarySubmissionFiles: order.notarySubmissionFiles?.map((file) => ({ ...file })),
+  notarySubmissionImages: order.notarySubmissionImages?.map((image) => ({ ...image })),
 });
 
 const excludeRemovedOrders = (orders: Order[]) =>
@@ -538,6 +540,8 @@ export function pushNotaryOrderToOffice(
       pushedNotaryOfficeName: managementOrder.pushedNotaryOfficeName || officeName,
       productionDisplayNotaryOfficeId: officeId,
       productionDisplayNotaryOfficeName: officeName,
+      notarySubmissionFiles: managementOrder.notarySubmissionFiles?.map((file) => ({ ...file })),
+      notarySubmissionImages: managementOrder.notarySubmissionImages?.map((image) => ({ ...image })),
       updatedAt: pushedAt,
       logs: [
         ...latestOfficeOrder.logs,

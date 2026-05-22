@@ -356,7 +356,7 @@ const PRODUCTION_NODE_ACTIONS = ['已翻译', '已制作', '已发货'] as const
 
 const getProductionOrderRecords = (order: Order) => {
   const nodeRecords = PRODUCTION_NODE_ACTIONS.flatMap((action) => {
-    const log = order.logs.find((item) => item.operator === '生产端' && item.action === action);
+    const log = [...order.logs].reverse().find((item) => item.action === action);
     return log ? [`${action} ${log.time.slice(0, 16)}`] : [];
   });
 

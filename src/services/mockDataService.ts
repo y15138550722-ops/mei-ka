@@ -96,6 +96,62 @@ const excludeDomesticLicenseSystemGeneratedOrders = (orders: Order[]) =>
   orders.filter((order) => !isDomesticLicenseSystemGeneratedOrder(order));
 const excludeNotarySystemGeneratedOrders = (orders: Order[]) =>
   orders.filter((order) => !isNotarySystemGeneratedOrder(order));
+
+const sortLogsByTime = (logs: Order['logs']) =>
+  [...logs]
+    .map((log, index) => ({ log, index }))
+    .sort((a, b) => a.log.time.localeCompare(b.log.time) || a.index - b.index)
+    .map(({ log }) => log);
+
+const appendProductionLog = (logs: Order['logs'], action: string, time: string) => [
+  ...logs,
+  {
+    time,
+    operator: PRODUCTION_OPERATOR,
+    action,
+  },
+];
+
+const backfillDomesticLicenseProductionLogs = (order: Order) => {
+  if (!isDomesticLicenseOrder(order)) {
+    return order;
+  }
+
+  const existingActions = new Set(order.logs.map((log) => log.action));
+  const status = order.status;
+  const shouldBackfillTranslated = ['in_production', 'shipped', 'completed'].includes(status);
+  const shouldBackfillMade = ['in_production', 'shipped', 'completed'].includes(status);
+  const shouldBackfillShipped = ['shipped', 'completed'].includes(status);
+  let nextLogs = order.logs;
+  let hasChanges = false;
+
+  if (shouldBackfillTranslated && !existingActions.has('已翻译')) {
+    const translatedBase = order.shippedAt || order.updatedAt || order.createdAt;
+    nextLogs = appendProductionLog(nextLogs, '已翻译', addSecondsToTimestamp(translatedBase, -120));
+    hasChanges = true;
+  }
+
+  if (shouldBackfillMade && !existingActions.has('已制作')) {
+    const madeBase = order.shippedAt || order.updatedAt || order.createdAt;
+    nextLogs = appendProductionLog(nextLogs, '已制作', addSecondsToTimestamp(madeBase, -60));
+    hasChanges = true;
+  }
+
+  if (shouldBackfillShipped && !existingActions.has('已发货')) {
+    const shippedBase = order.shippedAt || order.updatedAt || order.createdAt;
+    nextLogs = appendProductionLog(nextLogs, '已发货', shippedBase);
+    hasChanges = true;
+  }
+
+  if (!hasChanges) {
+    return order;
+  }
+
+  return {
+    ...order,
+    logs: sortLogsByTime(nextLogs),
+  };
+};
 const PRODUCT_SEEDS: Array<{
   title: string;
   category: ProductCategory;
@@ -773,51 +829,58 @@ const buildDomesticLicenseInfo = (index: number, customerName: string, licenseNu
 };
 
 const normalizeDomesticLicenseAuditState = (order: Order): Order => {
+  const backfilledOrder = backfillDomesticLicenseProductionLogs(order);
+
   if (
-    DOMESTIC_LICENSE_UNMADE_ORDER_IDS.has(order.orderId) &&
-    isDomesticLicenseOrder(order) &&
-    !order.logs.some((log) => log.action === '已制作')
+    DOMESTIC_LICENSE_UNMADE_ORDER_IDS.has(backfilledOrder.orderId) &&
+    isDomesticLicenseOrder(backfilledOrder) &&
+    !backfilledOrder.logs.some((log) => log.action === '已制作')
   ) {
-    const translatedTime = order.logs.find((log) => log.action === '已翻译')?.time || order.updatedAt || order.createdAt;
-    const translatedLog = order.logs.find((log) => log.action === '已翻译') || {
+    const translatedTime =
+      backfilledOrder.logs.find((log) => log.action === '已翻译')?.time || backfilledOrder.updatedAt || backfilledOrder.createdAt;
+    const translatedLog = backfilledOrder.logs.find((log) => log.action === '已翻译') || {
       time: translatedTime,
       operator: PRODUCTION_OPERATOR,
       action: '已翻译',
     };
 
     return {
-      ...order,
+      ...backfilledOrder,
       status: 'pending_production',
-      logisticsCompany: '',
-      trackingNumber: '',
-      shippedAt: undefined,
       logs: [
-        ...order.logs.filter((log) => !PRODUCTION_NODE_ACTIONS.has(log.action)),
+        ...backfilledOrder.logs.filter((log) => !PRODUCTION_NODE_ACTIONS.has(log.action)),
         translatedLog,
       ],
     };
   }
 
-  if (!isDomesticLicenseOrder(order) || order.status !== 'pending_production') {
-    return order;
+  if (!isDomesticLicenseOrder(backfilledOrder) || backfilledOrder.status !== 'pending_production') {
+    return backfilledOrder;
   }
 
-  if (hasManualAuditApproval(order) || hasProductionWorkflowLog(order) || order.managementOrderId?.trim()) {
-    return order;
+  if (
+    hasManualAuditApproval(backfilledOrder) ||
+    hasProductionWorkflowLog(backfilledOrder) ||
+    backfilledOrder.managementOrderId?.trim()
+  ) {
+    return backfilledOrder;
   }
 
-  if (!hasUserSubmittedMarker(order) && !order.logs.some((log) => log.action === FORCE_UNTRANSLATED_INITIALIZED_ACTION)) {
-    return order;
+  if (
+    !hasUserSubmittedMarker(backfilledOrder) &&
+    !backfilledOrder.logs.some((log) => log.action === FORCE_UNTRANSLATED_INITIALIZED_ACTION)
+  ) {
+    return backfilledOrder;
   }
 
   return {
-    ...order,
+    ...backfilledOrder,
     status: 'pending_review',
     logisticsCompany: '',
     trackingNumber: '',
     shippedAt: undefined,
     managementOrderId: undefined,
-    logs: order.logs.filter((log) => log.action !== FORCE_UNTRANSLATED_INITIALIZED_ACTION),
+    logs: backfilledOrder.logs.filter((log) => log.action !== FORCE_UNTRANSLATED_INITIALIZED_ACTION),
   };
 };
 

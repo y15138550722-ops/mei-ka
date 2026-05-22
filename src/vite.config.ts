@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 const currentDir = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(currentDir, '..')
 
-const appRoutePrefixes = ['/login', '/agent-system', '/license-officer', '/orders', '/order-management', '/products', '/notary']
+const appRoutePrefixes = ['/login', '/agent-system', '/license-officer', '/orders', '/order-management', '/products', '/file-preview', '/notary']
 
 function shouldFallbackToIndex(url = '') {
   const { pathname } = new URL(url, 'http://meika.local')

@@ -75,6 +75,12 @@ export const menuConfig: MenuItem[] = [
     ],
   },
   {
+    key: 'file-preview',
+    labelKey: 'menu.filePreview',
+    icon: '📁',
+    path: '/file-preview',
+  },
+  {
     key: 'notary-office',
     labelKey: 'menu.notaryOffice',
     icon: '🏛️',

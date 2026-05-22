@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node ./dev-server.mjs",
-    "build": "tsc && vite build",
+    "build": "tsc && node ./build-vite-inline.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

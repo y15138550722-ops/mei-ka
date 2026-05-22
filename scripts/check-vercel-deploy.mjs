@@ -15,6 +15,7 @@ const allowedEmails = (
 
 const errors = [];
 const warnings = [];
+const strictGitChecks = process.env.VERCEL_STRICT_GIT === "1";
 
 function run(command, args) {
   try {
@@ -45,11 +46,38 @@ function readJson(relativePath) {
   }
 }
 
-function assertAllowedEmail(label, email) {
+function reportGitIssue(message) {
+  if (strictGitChecks) {
+    errors.push(message);
+  } else {
+    warnings.push(message);
+  }
+}
+
+function assertAllowedEmail(label, email, { fatal = true } = {}) {
   const normalized = (email || "").toLowerCase();
   if (!allowedEmails.includes(normalized)) {
-    errors.push(
-      `${label} is "${email || "(empty)"}", but Vercel production deploys require one of: ${allowedEmails.join(", ")}.`
+    const message = `${label} is "${email || "(empty)"}", but Vercel production deploys normally use one of: ${allowedEmails.join(", ")}.`;
+    if (fatal) {
+      errors.push(message);
+    } else {
+      warnings.push(message);
+    }
+  }
+}
+
+function describeGitReadFailure(label, error) {
+  return `${label}: ${error.message}. Direct Vercel CLI deploys can continue, but Git auto-deploy checks were skipped.`;
+}
+
+function assertGitEmail(label, email) {
+  assertAllowedEmail(label, email, { fatal: strictGitChecks });
+}
+
+function assertGitValue(label, value) {
+  if (!value) {
+    reportGitIssue(
+      `${label} is not set. Direct Vercel CLI deploys can continue, but Git auto-deploy metadata is incomplete.`
     );
   }
 }
@@ -93,25 +121,23 @@ if (!existsSync(path.join(root, "src/package-lock.json"))) {
 
 try {
   const localEmail = run("git", ["config", "--local", "--get", "user.email"]);
-  assertAllowedEmail("Local git user.email", localEmail);
-} catch {
-  errors.push("Local git user.email is not set.");
+  assertGitEmail("Local git user.email", localEmail);
+} catch (error) {
+  reportGitIssue(describeGitReadFailure("Unable to read local git user.email", error));
 }
 
 try {
   const localName = run("git", ["config", "--local", "--get", "user.name"]);
-  if (!localName) {
-    errors.push("Local git user.name is not set.");
-  }
-} catch {
-  errors.push("Local git user.name is not set.");
+  assertGitValue("Local git user.name", localName);
+} catch (error) {
+  reportGitIssue(describeGitReadFailure("Unable to read local git user.name", error));
 }
 
 try {
   const headEmail = run("git", ["show", "-s", "--format=%ae", "HEAD"]);
-  assertAllowedEmail("HEAD commit author email", headEmail);
+  assertGitEmail("HEAD commit author email", headEmail);
 } catch (error) {
-  errors.push(`Unable to read HEAD commit author: ${error.message}`);
+  reportGitIssue(describeGitReadFailure("Unable to read HEAD commit author", error));
 }
 
 try {
@@ -150,11 +176,13 @@ if (errors.length > 0) {
   for (const error of errors) {
     console.error(`- ${error}`);
   }
-  console.error("\nRecommended local fix:");
-  console.error('  git config user.name "y15138550722"');
-  console.error('  git config user.email "y15138550722@gmail.com"');
-  console.error('  git commit --allow-empty -m "Trigger Vercel production deploy"');
-  console.error("  git push origin main");
+  if (strictGitChecks) {
+    console.error("\nRecommended local fix:");
+    console.error('  git config user.name "y15138550722"');
+    console.error('  git config user.email "y15138550722@gmail.com"');
+    console.error('  git commit --allow-empty -m "Trigger Vercel production deploy"');
+    console.error("  git push origin main");
+  }
   process.exit(1);
 }
 

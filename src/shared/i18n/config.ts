@@ -12,6 +12,7 @@ const resources = {
     'menu.notaryOrderList': '公证订单',
     'menu.productManagement': '产品中心',
     'menu.productList': '在售产品',
+    'menu.filePreview': '文件预览',
     'menu.notaryOffice': '公证处',
 
 
@@ -173,6 +174,7 @@ const resources = {
     'menu.notaryOrderList': 'Notary Orders',
     'menu.productManagement': 'Product Center',
     'menu.productList': 'On-sale Products',
+    'menu.filePreview': 'File Preview',
     'menu.notaryOffice': 'Notary Office',
 
 

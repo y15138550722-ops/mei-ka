@@ -11,16 +11,17 @@ import {
 } from '../../services/notaryOfficeOrderService';
 import { buildNotaryPowerOfAttorneyPreviewFileDescriptors } from '../../shared/config/notaryPowerOfAttorney';
 import { formatBeijingTimestamp } from '../../shared/utils/dateTime';
-import { buildDocxPreviewHtml as buildRichDocxPreviewHtml } from '../../shared/utils/docxPreview';
 import { resolveLocalImageSource } from '../../shared/utils/localImageStore';
 import { buildNotaryImagesPdfBlob } from '../../shared/utils/notaryPreviewExport';
+import { buildSpreadsheetPreviewHtml } from '../../shared/utils/spreadsheetPreview';
+import { buildWordPreviewHtml as buildSharedWordPreviewHtml } from '../../shared/utils/wordPreview';
 import type { Order, OrderStatus } from '../../shared/types';
 import './NotaryOrderPreview.css';
 
-type PreviewFileType = 'pdf' | 'image' | 'doc';
+type PreviewFileType = 'pdf' | 'image' | 'word' | 'spreadsheet';
 type PreviewFileGroup = 'primary' | 'supporting';
 type AuditItemStatus = 'success' | 'warning';
-type WordPreviewStatus = 'idle' | 'loading' | 'ready' | 'error';
+type OfficePreviewStatus = 'idle' | 'loading' | 'ready' | 'error';
 type GeneratedPreviewStatus = 'loading' | 'ready' | 'error';
 
 interface PreviewFile {
@@ -31,6 +32,8 @@ interface PreviewFile {
   path: string;
   canInlinePreview: boolean;
   previewPath?: string;
+  zipEntryPath?: string;
+  zipPath?: string;
   status?: GeneratedPreviewStatus;
   message?: string;
 }
@@ -39,6 +42,10 @@ const NOTARY_TEMPLATE_ROOT = '/ETC/Notary%20Office%20Template';
 const buildPreviewFilePath = (...segments: string[]) =>
   `${NOTARY_TEMPLATE_ROOT}/${segments.map((segment) => encodeURIComponent(segment)).join('/')}`;
 
+const NOTARY_TEMPLATE_PACKAGE_FOLDER = '姓名+国家+语言+产品名称';
+const NOTARY_TEMPLATE_PACKAGE_ZIP_PATH = buildPreviewFilePath(`${NOTARY_TEMPLATE_PACKAGE_FOLDER}.zip`);
+const buildTemplatePackageFilePath = (fileName: string) => buildPreviewFilePath(NOTARY_TEMPLATE_PACKAGE_FOLDER, fileName);
+const buildTemplatePackageZipEntryPath = (fileName: string) => `${NOTARY_TEMPLATE_PACKAGE_FOLDER}/${fileName}`;
 const PREVIEW_FOLDER = '丁一然 意大利 意大利语 单号';
 const PREVIEW_BASE = buildPreviewFilePath(PREVIEW_FOLDER);
 const WORD_TEMPLATE_FALLBACK_IMAGE = buildPreviewFilePath(PREVIEW_FOLDER, '丁一然.files', '丁一然217.png');
@@ -76,7 +83,7 @@ const PRIMARY_FILES: PreviewFile[] = [
   {
     id: 'power-of-attorney',
     name: '委托书.docx',
-    type: 'doc',
+    type: 'word',
     group: 'primary',
     path: buildPreviewAssetFilePath('Power of Attorney.docx'),
     canInlinePreview: true,
@@ -104,7 +111,7 @@ const PREVIEW_FILES: PreviewFile[] = [
   {
     id: 'license-translation',
     name: '丁一然的驾照页翻译word版.docx',
-    type: 'doc',
+    type: 'word',
     group: 'primary',
     path: buildPreviewFilePath(PREVIEW_FOLDER, '丁一然的驾照页翻译word版.docx'),
     canInlinePreview: true,
@@ -113,7 +120,7 @@ const PREVIEW_FILES: PreviewFile[] = [
   {
     id: 'certificate-translation',
     name: '丁一然的公证词翻译word版.docx',
-    type: 'doc',
+    type: 'word',
     group: 'primary',
     path: buildPreviewFilePath(PREVIEW_FOLDER, '丁一然的公证词翻译word版.docx'),
     canInlinePreview: true,
@@ -121,17 +128,19 @@ const PREVIEW_FILES: PreviewFile[] = [
   },
   {
     id: 'beibu-gulf-power-of-attorney',
-    name: '丁一然的北部湾委托书.docx',
-    type: 'doc',
+    name: '姓名_北部湾委托书.docx',
+    type: 'word',
     group: 'primary',
-    path: buildPreviewFilePath(PREVIEW_FOLDER, '丁一然的北部湾委托书.docx'),
+    path: buildTemplatePackageFilePath('姓名_北部湾委托书.docx'),
     canInlinePreview: true,
     previewPath: WORD_TEMPLATE_FALLBACK_IMAGE,
+    zipPath: NOTARY_TEMPLATE_PACKAGE_ZIP_PATH,
+    zipEntryPath: buildTemplatePackageZipEntryPath('姓名_北部湾委托书.docx'),
   },
   {
     id: 'foreign-affairs-power-of-attorney',
     name: '丁一然的外事办委托书.docx',
-    type: 'doc',
+    type: 'word',
     group: 'primary',
     path: buildPreviewFilePath(PREVIEW_FOLDER, '丁一然的外事办委托书.docx'),
     canInlinePreview: true,
@@ -159,7 +168,7 @@ const ORDER_PREVIEW_FILES: PreviewFile[] = [
   {
     id: 'power-of-attorney',
     name: '丁一然.docx',
-    type: 'doc',
+    type: 'word',
     group: 'primary',
     path: buildPreviewFilePath(PREVIEW_FOLDER, '丁一然.docx'),
     canInlinePreview: true,
@@ -168,7 +177,7 @@ const ORDER_PREVIEW_FILES: PreviewFile[] = [
   {
     id: 'license-translation',
     name: '丁一然的驾照页翻译.docx',
-    type: 'doc',
+    type: 'word',
     group: 'primary',
     path: buildPreviewFilePath(PREVIEW_FOLDER, '丁一然的驾照页翻译.docx'),
     canInlinePreview: true,
@@ -177,7 +186,7 @@ const ORDER_PREVIEW_FILES: PreviewFile[] = [
   {
     id: 'certificate-translation',
     name: '丁一然的公证词翻译.docx',
-    type: 'doc',
+    type: 'word',
     group: 'primary',
     path: buildPreviewFilePath(PREVIEW_FOLDER, '丁一然的公证词翻译.docx'),
     canInlinePreview: true,
@@ -185,17 +194,19 @@ const ORDER_PREVIEW_FILES: PreviewFile[] = [
   },
   {
     id: 'beibu-gulf-power-of-attorney',
-    name: '丁一然的北部湾委托书.docx',
-    type: 'doc',
+    name: '姓名_北部湾委托书.docx',
+    type: 'word',
     group: 'primary',
-    path: buildPreviewFilePath(PREVIEW_FOLDER, '丁一然的北部湾委托书.docx'),
+    path: buildTemplatePackageFilePath('姓名_北部湾委托书.docx'),
     canInlinePreview: true,
     previewPath: ORDER_PREVIEW_FALLBACK_IMAGE,
+    zipPath: NOTARY_TEMPLATE_PACKAGE_ZIP_PATH,
+    zipEntryPath: buildTemplatePackageZipEntryPath('姓名_北部湾委托书.docx'),
   },
   {
     id: 'foreign-affairs-power-of-attorney',
     name: '丁一然的外事办委托书.docx',
-    type: 'doc',
+    type: 'word',
     group: 'primary',
     path: buildPreviewFilePath(PREVIEW_FOLDER, '丁一然的外事办委托书.docx'),
     canInlinePreview: true,
@@ -256,61 +267,122 @@ const buildFlightItineraryPdfSource = (order: Order) => {
   };
 };
 
+const SPREADSHEET_FILE_EXTENSIONS = new Set(['xls', 'xlsx', 'xlsm', 'xltx', 'xltm', 'csv', 'tsv']);
+const IMAGE_FILE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg']);
+
+const getFileExtension = (nameOrPath: string) =>
+  nameOrPath.split(/[?#]/)[0].split('.').pop()?.trim().toLowerCase() || '';
+
+const getSubmittedPreviewFileType = (name: string, path: string, fallbackType: string): PreviewFileType => {
+  const extension = getFileExtension(name || path);
+  const normalizedType = fallbackType.toLowerCase();
+
+  if (IMAGE_FILE_EXTENSIONS.has(extension) || normalizedType.startsWith('image/')) {
+    return 'image';
+  }
+
+  if (extension === 'pdf' || normalizedType === 'pdf') {
+    return 'pdf';
+  }
+
+  if (
+    SPREADSHEET_FILE_EXTENSIONS.has(extension) ||
+    ['xls', 'xlsx', 'xlsm', 'xltx', 'xltm', 'csv', 'tsv', 'text/csv', 'text/tab-separated-values'].includes(
+      normalizedType,
+    )
+  ) {
+    return 'spreadsheet';
+  }
+
+  return 'word';
+};
+
 const buildPrimaryFiles = (
   order: Order,
   generatedFileSources: Record<string, { message?: string; path: string; status: GeneratedPreviewStatus }>,
-): PreviewFile[] => [
-  {
-    id: 'notarized-document',
-    name: '公证书.pdf',
-    type: 'pdf',
-    group: 'primary',
-    path: buildPreviewAssetFilePath('Notarized Document.pdf'),
-    canInlinePreview: true,
-  },
-  {
-    id: 'scanned-copy',
-    name: '扫描件.pdf',
-    type: 'pdf',
-    group: 'primary',
-    path: buildPreviewAssetFilePath('Scanned copy.pdf'),
-    canInlinePreview: true,
-  },
-  {
-    id: 'passport-pdf',
-    name: `${order.licenseName || order.customerName || '护照'}护照.pdf`,
-    type: 'pdf',
-    group: 'primary',
-    path: generatedFileSources['passport-pdf']?.path || '',
-    canInlinePreview: generatedFileSources['passport-pdf']?.status === 'ready',
-    status: generatedFileSources['passport-pdf']?.status || 'loading',
-    message: generatedFileSources['passport-pdf']?.message,
-  },
-  {
-    id: 'flight-itinerary-pdf',
-    name: `${order.licenseName || order.customerName || '行程单'}的行程单.pdf`,
-    type: 'pdf',
-    group: 'primary',
-    path: generatedFileSources['flight-itinerary-pdf']?.path || '',
-    canInlinePreview: generatedFileSources['flight-itinerary-pdf']?.status === 'ready',
-    status: generatedFileSources['flight-itinerary-pdf']?.status || 'loading',
-    message: generatedFileSources['flight-itinerary-pdf']?.message,
-  },
-  {
-    id: 'power-of-attorney',
-    name: '委托书.docx',
-    type: 'doc',
-    group: 'primary',
-    path: buildPreviewAssetFilePath('Power of Attorney.docx'),
-    canInlinePreview: true,
-    previewPath: DEFAULT_WORD_PREVIEW_IMAGE,
-  },
-];
+): PreviewFile[] => {
+  if (order.notarySubmissionFiles?.length) {
+    return order.notarySubmissionFiles.map((file) => {
+      const status = file.status === 'ready' && file.path ? undefined : file.status;
+
+      return {
+        id: file.key,
+        name: file.name,
+        type: getSubmittedPreviewFileType(file.name, file.path, file.type),
+        group: 'primary',
+        path: file.path,
+        canInlinePreview: Boolean(file.path) && file.status !== 'loading' && file.status !== 'error',
+        status,
+        message: file.message || file.label,
+      };
+    });
+  }
+
+  return [
+    {
+      id: 'notarized-document',
+      name: '公证书.pdf',
+      type: 'pdf',
+      group: 'primary',
+      path: buildPreviewAssetFilePath('Notarized Document.pdf'),
+      canInlinePreview: true,
+    },
+    {
+      id: 'scanned-copy',
+      name: '扫描件.pdf',
+      type: 'pdf',
+      group: 'primary',
+      path: buildPreviewAssetFilePath('Scanned copy.pdf'),
+      canInlinePreview: true,
+    },
+    {
+      id: 'passport-pdf',
+      name: `${order.licenseName || order.customerName || '护照'}护照.pdf`,
+      type: 'pdf',
+      group: 'primary',
+      path: generatedFileSources['passport-pdf']?.path || '',
+      canInlinePreview: generatedFileSources['passport-pdf']?.status === 'ready',
+      status: generatedFileSources['passport-pdf']?.status || 'loading',
+      message: generatedFileSources['passport-pdf']?.message,
+    },
+    {
+      id: 'flight-itinerary-pdf',
+      name: `${order.licenseName || order.customerName || '行程单'}的行程单.pdf`,
+      type: 'pdf',
+      group: 'primary',
+      path: generatedFileSources['flight-itinerary-pdf']?.path || '',
+      canInlinePreview: generatedFileSources['flight-itinerary-pdf']?.status === 'ready',
+      status: generatedFileSources['flight-itinerary-pdf']?.status || 'loading',
+      message: generatedFileSources['flight-itinerary-pdf']?.message,
+    },
+    {
+      id: 'power-of-attorney',
+      name: '委托书.docx',
+      type: 'word',
+      group: 'primary',
+      path: buildPreviewAssetFilePath('Power of Attorney.docx'),
+      canInlinePreview: true,
+      previewPath: DEFAULT_WORD_PREVIEW_IMAGE,
+    },
+  ];
+};
 
 const fileTypeLabel: Record<PreviewFileType, string> = {
   pdf: 'PDF',
   image: 'IMG',
-  doc: 'DOCX',
+  word: 'WORD',
+  spreadsheet: '表格',
+};
+
+const getOfficeFileExtension = (file: Pick<PreviewFile, 'name' | 'path'>) =>
+  getFileExtension(file.name || file.path);
+
+const getPreviewFileKind = (file: PreviewFile): PreviewFileType => {
+  if (file.type === 'pdf' || file.type === 'image' || file.type === 'spreadsheet') {
+    return file.type;
+  }
+
+  return SPREADSHEET_FILE_EXTENSIONS.has(getOfficeFileExtension(file)) ? 'spreadsheet' : 'word';
 };
 
 const statusTagClass = (status: OrderStatus) => {
@@ -345,6 +417,17 @@ const SUPPORTING_IMAGE_LABELS: Record<string, string> = {
 };
 
 const buildSupportingFiles = (order: Order): PreviewFile[] => {
+  if (order.notarySubmissionImages?.length) {
+    return order.notarySubmissionImages.map((image) => ({
+      id: image.key,
+      name: image.label,
+      type: 'image',
+      group: 'supporting',
+      path: image.src,
+      canInlinePreview: true,
+    }));
+  }
+
   const images = order.notaryCertificateImages || {};
   const knownImages = Object.entries(SUPPORTING_IMAGE_LABELS)
     .map<PreviewFile | null>(([key, label]) => {
@@ -407,18 +490,29 @@ const replaceOmittedDocxImagesWithSignature = async (html: string, signatureSour
   ].reduce((nextHtml, placeholder) => nextHtml.split(placeholder).join(signatureReplacement), html);
 };
 
-const decodeWordTemplate = (buffer: ArrayBuffer) => {
-  const encodings = ['gb18030', 'gbk', 'utf-8'];
+const fetchPreviewFileBuffer = async (file: PreviewFile) => {
+  const response = await fetch(file.path);
 
-  for (const encoding of encodings) {
-    try {
-      return new TextDecoder(encoding).decode(buffer);
-    } catch {
-      continue;
-    }
+  if (response.ok) {
+    return response.arrayBuffer();
   }
 
-  return new TextDecoder().decode(buffer);
+  if (!file.zipPath || !file.zipEntryPath) {
+    throw new Error(`Failed to load template: ${response.status}`);
+  }
+
+  const zipResponse = await fetch(file.zipPath);
+  if (!zipResponse.ok) {
+    throw new Error(`Failed to load template package: ${zipResponse.status}`);
+  }
+
+  const zip = await JSZip.loadAsync(await zipResponse.arrayBuffer());
+  const entry = zip.file(file.zipEntryPath);
+  if (!entry) {
+    throw new Error(`Missing template package entry: ${file.zipEntryPath}`);
+  }
+
+  return entry.async('arraybuffer');
 };
 
 const resolveWordPreviewAssetPath = async (documentPath: string, assetPath: string) => {
@@ -985,14 +1079,14 @@ const NotaryOrderPreview: React.FC = () => {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const order = getNotaryOfficeOrderById(id || '');
+  const order = useMemo(() => getNotaryOfficeOrderById(id || ''), [id]);
 
   const [selectedFileId, setSelectedFileId] = useState(ORDER_PREVIEW_FILES[0].id);
   const [toast, setToast] = useState<{ type: string; message: string } | null>(null);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
-  const [wordPreviewStatus, setWordPreviewStatus] = useState<WordPreviewStatus>('idle');
-  const [wordPreviewHtml, setWordPreviewHtml] = useState('');
+  const [officePreviewStatus, setOfficePreviewStatus] = useState<OfficePreviewStatus>('idle');
+  const [officePreviewHtml, setOfficePreviewHtml] = useState('');
   const [resolvedImageSources, setResolvedImageSources] = useState<Record<string, string>>({});
   const [generatedFileSources, setGeneratedFileSources] = useState<
     Record<string, { message?: string; path: string; status: GeneratedPreviewStatus }>
@@ -1012,6 +1106,8 @@ const NotaryOrderPreview: React.FC = () => {
     () => allFiles.find((file) => file.id === selectedFileId) || allFiles[0] || ORDER_PREVIEW_FILES[0],
     [allFiles, selectedFileId],
   );
+  const selectedFilePreviewType = useMemo(() => getPreviewFileKind(selectedFile), [selectedFile]);
+  const powerOfAttorneySignatureSource = getPowerOfAttorneySignatureSource(order);
 
   useEffect(() => {
     setSelectedFileId('notarized-document');
@@ -1139,9 +1235,9 @@ const NotaryOrderPreview: React.FC = () => {
   }, [supportingFiles]);
 
   useEffect(() => {
-    if (selectedFile.type !== 'doc') {
-      setWordPreviewStatus('idle');
-      setWordPreviewHtml('');
+    if (selectedFilePreviewType !== 'word' && selectedFilePreviewType !== 'spreadsheet') {
+      setOfficePreviewStatus('idle');
+      setOfficePreviewHtml('');
       return;
     }
 
@@ -1149,29 +1245,29 @@ const NotaryOrderPreview: React.FC = () => {
 
     const loadWordTemplate = async () => {
       try {
-        setWordPreviewStatus('loading');
-        const response = await fetch(selectedFile.path);
-
-        if (!response.ok) {
-          throw new Error(`Failed to load template: ${response.status}`);
-        }
-
-        const buffer = await response.arrayBuffer();
-        const previewHtml = isZipWordDocument(buffer)
-          ? await buildRichDocxPreviewHtml(buffer, { title: selectedFile.name })
-          : await buildWordPreviewHtml(decodeWordTemplate(buffer), selectedFile.path);
-        const nextHtml = selectedFile.id.includes('power-of-attorney')
-          ? await replaceOmittedDocxImagesWithSignature(previewHtml, getPowerOfAttorneySignatureSource(order))
-          : previewHtml;
+        setOfficePreviewStatus('loading');
+        const buffer = await fetchPreviewFileBuffer(selectedFile);
+        const previewHtml =
+          selectedFilePreviewType === 'spreadsheet'
+            ? await buildSpreadsheetPreviewHtml(buffer, selectedFile.name)
+            : await buildSharedWordPreviewHtml(buffer, {
+                documentPath: selectedFile.path,
+                resolveAssetPath: resolveWordPreviewAssetPath,
+                title: selectedFile.name,
+              });
+        const nextHtml =
+          selectedFilePreviewType === 'word' && selectedFile.id.includes('power-of-attorney')
+            ? await replaceOmittedDocxImagesWithSignature(previewHtml, powerOfAttorneySignatureSource)
+            : previewHtml;
 
         if (!cancelled) {
-          setWordPreviewHtml(nextHtml);
-          setWordPreviewStatus('ready');
+          setOfficePreviewHtml(nextHtml);
+          setOfficePreviewStatus('ready');
         }
       } catch {
         if (!cancelled) {
-          setWordPreviewHtml('');
-          setWordPreviewStatus('error');
+          setOfficePreviewHtml('');
+          setOfficePreviewStatus('error');
         }
       }
     };
@@ -1181,7 +1277,15 @@ const NotaryOrderPreview: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [selectedFile.path, selectedFile.type]);
+  }, [
+    powerOfAttorneySignatureSource,
+    selectedFile.id,
+    selectedFile.name,
+    selectedFile.path,
+    selectedFile.zipEntryPath,
+    selectedFile.zipPath,
+    selectedFilePreviewType,
+  ]);
 
   if (!order) {
     return (
@@ -1272,7 +1376,7 @@ const NotaryOrderPreview: React.FC = () => {
       return;
     }
 
-    if (selectedFile.type === 'image') {
+    if (selectedFilePreviewType === 'image') {
       const resolvedSource = resolvedImageSources[selectedFile.id] || (await resolveLocalImageSource(selectedFile.path));
       if (resolvedSource) {
         window.open(resolvedSource, '_blank', 'noopener,noreferrer');
@@ -1377,11 +1481,11 @@ const NotaryOrderPreview: React.FC = () => {
     }
 
     return (
-      <div className="notary-preview-state">
-        <div className="notary-preview-state__icon">{fileTypeLabel[selectedFile.type]}</div>
-        <h3>{selectedFile.name}</h3>
-        <p>当前 Word 模板暂时无法加载，请下载原文件后继续复核。</p>
-        <button className="btn btn--primary" type="button" onClick={handleDownload}>
+        <div className="notary-preview-state">
+          <div className="notary-preview-state__icon">{fileTypeLabel[selectedFilePreviewType]}</div>
+          <h3>{selectedFile.name}</h3>
+          <p>当前 Word 模板暂时无法加载，请下载原文件后继续复核。</p>
+          <button className="btn btn--primary" type="button" onClick={handleDownload}>
           下载当前文件
         </button>
       </div>
@@ -1392,7 +1496,7 @@ const NotaryOrderPreview: React.FC = () => {
     if (selectedFile.status === 'loading') {
       return (
         <div className="notary-preview-state">
-          <div className="notary-preview-state__icon">{fileTypeLabel[selectedFile.type]}</div>
+          <div className="notary-preview-state__icon">{fileTypeLabel[selectedFilePreviewType]}</div>
           <h3>{selectedFile.name}</h3>
           <p>{selectedFile.message || '正在生成文件预览，请稍候。'}</p>
         </div>
@@ -1402,18 +1506,18 @@ const NotaryOrderPreview: React.FC = () => {
     if (selectedFile.status === 'error') {
       return (
         <div className="notary-preview-state">
-          <div className="notary-preview-state__icon">{fileTypeLabel[selectedFile.type]}</div>
+          <div className="notary-preview-state__icon">{fileTypeLabel[selectedFilePreviewType]}</div>
           <h3>{selectedFile.name}</h3>
           <p>{selectedFile.message || '当前文件暂时无法生成，请检查录单附件。'}</p>
         </div>
       );
     }
 
-    if (selectedFile.type === 'pdf') {
+    if (selectedFilePreviewType === 'pdf') {
       return <iframe src={selectedFile.path} title={selectedFile.name} className="notary-preview-viewer__frame" />;
     }
 
-    if (selectedFile.type === 'image') {
+    if (selectedFilePreviewType === 'image') {
       return (
         <div className="notary-preview-viewer__image-wrap">
           <ResolvedImage src={selectedFile.path} alt={selectedFile.name} className="notary-preview-viewer__image" />
@@ -1421,12 +1525,12 @@ const NotaryOrderPreview: React.FC = () => {
       );
     }
 
-    if (wordPreviewStatus === 'loading' || wordPreviewStatus === 'idle') {
+    if (officePreviewStatus === 'loading' || officePreviewStatus === 'idle') {
       return (
         <div className="notary-preview-state">
-          <div className="notary-preview-state__icon">DOCX</div>
+          <div className="notary-preview-state__icon">{fileTypeLabel[selectedFilePreviewType]}</div>
           <h3>{selectedFile.name}</h3>
-          <p>正在加载委托书模板预览，请稍候。</p>
+          <p>{selectedFilePreviewType === 'spreadsheet' ? '正在加载 Excel 预览，请稍候。' : '正在加载 Word 预览，请稍候。'}</p>
           <button className="btn btn--secondary" type="button" onClick={handleDownload}>
             下载原始文件
           </button>
@@ -1434,12 +1538,12 @@ const NotaryOrderPreview: React.FC = () => {
       );
     }
 
-    if (wordPreviewStatus === 'ready' && wordPreviewHtml) {
+    if (officePreviewStatus === 'ready' && officePreviewHtml) {
       return (
         <iframe
           title={`${selectedFile.name} 模板预览`}
           className="notary-preview-viewer__frame notary-preview-viewer__frame--docx"
-          srcDoc={wordPreviewHtml}
+          srcDoc={officePreviewHtml}
         />
       );
     }
@@ -1564,7 +1668,7 @@ const NotaryOrderPreview: React.FC = () => {
                       {selectedFile.group === 'primary' ? '主材料' : '附件图片'}
                     </span>
                     <span className="notary-preview-file-chip notary-preview-file-chip--type">
-                      {fileTypeLabel[selectedFile.type]}
+                      {fileTypeLabel[selectedFilePreviewType]}
                     </span>
                     {!selectedFile.canInlinePreview && <span className="notary-preview-file-tip">需下载后查看</span>}
                   </div>

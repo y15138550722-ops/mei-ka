@@ -1,5 +1,7 @@
 node_modules/
 .npm-cache/
+.npm-global/
+.vercel-cli-home/
 .vercel/
 dist/
 build/

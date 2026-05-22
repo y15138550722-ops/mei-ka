@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import JSZip from 'jszip';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getOrders, updateOrder } from '../../services/mockDataService';
 import {
@@ -11,34 +10,23 @@ import {
 import ListUnifiedPagination from '../../shared/components/list/ListUnifiedPagination';
 import ResolvedImage from '../../shared/components/ResolvedImage';
 import { useTranslation } from '../../shared/i18n/config';
-import type { AgentLevel, Order, OrderStatus, ProcessType } from '../../shared/types';
+import type { AgentLevel, NotarySubmissionFile, NotarySubmissionImage, Order, OrderStatus, ProcessType } from '../../shared/types';
 import { getCurrentAuthAccountId } from '../../shared/utils/auth';
 import { formatBeijingTimestamp } from '../../shared/utils/dateTime';
-import { buildDocxPreviewHtml } from '../../shared/utils/docxPreview';
 import { exportTranslationOrders } from '../../shared/utils/exportTranslationOrders';
 import { resolveLocalImageSource } from '../../shared/utils/localImageStore';
 import { buildNotaryImagesPdfBlob } from '../../shared/utils/notaryPreviewExport';
 import { getProcessTypeTone, getProductProcessTypeLabel } from '../../shared/utils/productProcessType';
+import { buildSpreadsheetPreviewHtml } from '../../shared/utils/spreadsheetPreview';
+import { buildWordPreviewHtml } from '../../shared/utils/wordPreview';
 
 type NotaryManagementStatus = 'pending_review' | 'pending_production' | 'shipped' | 'rejected' | 'cancelled';
 
-type SubmissionMaterialImage = {
-  key: string;
-  label: string;
-  src: string;
-};
+type SubmissionMaterialImage = NotarySubmissionImage;
 
-type SubmissionMaterialFile = {
-  key: string;
-  label: string;
-  name: string;
-  path: string;
-  message?: string;
-  type: string;
-  status?: 'loading' | 'ready' | 'error';
-};
+type SubmissionMaterialFile = NotarySubmissionFile;
 
-type SubmissionFilePreviewKind = 'image' | 'pdf' | 'docx' | 'spreadsheet' | 'unsupported';
+type SubmissionFilePreviewKind = 'image' | 'pdf' | 'word' | 'spreadsheet' | 'unsupported';
 type SubmissionFilePreviewStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 type NotaryOrderRecordItem = {
@@ -60,7 +48,7 @@ type LogisticsForm = {
 const NOTARY_ORDER_MANAGEMENT_PATH = '/order-management/notary-orders';
 const PREVIEW_ASSET_BASE_PATH = '/ETC/Notary%20Office%20Template/Preview%20file/yulan';
 const IMAGE_MATERIAL_ACCEPT = 'image/*';
-const FILE_MATERIAL_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp,image/*';
+const FILE_MATERIAL_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.xlsm,.xltx,.xltm,.csv,.tsv,.png,.jpg,.jpeg,.webp,image/*';
 const LOGISTICS_COMPANY_OPTIONS = ['顺丰速运', '京东物流', '邮政EMS', '圆通速递', '中通快递', '申通快递'];
 const NOTARY_OFFICES = [
   { id: 'beibu-gulf', name: '北部湾公证处', district: '送审公证处' },
@@ -175,6 +163,10 @@ const getLicenseNo = (order: Order) => order.licenseNo || order.customerPassport
 const getLicenseCategory = (order: Order) => order.licenseCategory || '--';
 
 const getSubmissionMaterialImages = (order: Order): SubmissionMaterialImage[] => {
+  if (order.notarySubmissionImages?.length) {
+    return order.notarySubmissionImages.map((image) => ({ ...image }));
+  }
+
   const images = order.notaryCertificateImages || {};
   const knownImages = SUBMISSION_ATTACHMENT_DISPLAY_ORDER.flatMap((key) => {
     const src = images[key];
@@ -200,6 +192,10 @@ const getSubmissionMaterialImages = (order: Order): SubmissionMaterialImage[] =>
 };
 
 const getSubmissionMaterialFiles = (order: Order): SubmissionMaterialFile[] => {
+  if (order.notarySubmissionFiles?.length) {
+    return order.notarySubmissionFiles.map((file) => ({ ...file }));
+  }
+
   const baseName = getLicenseName(order) === '--' ? order.orderId : getLicenseName(order);
 
   return [
@@ -723,141 +719,16 @@ const getSubmissionFilePreviewKind = (file: SubmissionMaterialFile): SubmissionF
     return 'pdf';
   }
 
-  if (extension === 'docx') {
-    return 'docx';
+  if (extension === 'doc' || extension === 'docx') {
+    return 'word';
   }
 
-  if (extension === 'xlsx') {
+  if (['xls', 'xlsx', 'xlsm', 'xltx', 'xltm', 'csv', 'tsv'].includes(extension)) {
     return 'spreadsheet';
   }
 
   return 'unsupported';
 };
-
-const escapePreviewHtml = (value: string) =>
-  value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-
-const getElementLocalName = (node: Element | Node) => {
-  if ('localName' in node && node.localName) {
-    return node.localName;
-  }
-
-  return node.nodeName.split(':').pop() || node.nodeName;
-};
-
-const getElementsByLocalName = (root: Document | Element, localName: string) =>
-  Array.from(root.getElementsByTagName('*')).filter((element) => getElementLocalName(element) === localName);
-
-const buildSubmissionPreviewDocument = (title: string, bodyContent: string) => `
-  <!doctype html>
-  <html lang="zh-CN">
-    <head>
-      <meta charset="utf-8" />
-      <style>
-        html,
-        body {
-          margin: 0;
-          min-height: 100%;
-          background: #eef2f7;
-          color: #0f172a;
-          font-family: "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
-        }
-
-        body {
-          box-sizing: border-box;
-          padding: 24px;
-        }
-
-        .preview-page {
-          width: 840px;
-          max-width: 100%;
-          min-height: calc(100vh - 48px);
-          margin: 0 auto;
-          padding: 42px 52px;
-          box-sizing: border-box;
-          background: #ffffff;
-          box-shadow: 0 24px 70px rgba(15, 23, 42, 0.14);
-        }
-
-        .preview-title {
-          margin: 0 0 24px;
-          padding-bottom: 14px;
-          border-bottom: 1px solid #e2e8f0;
-          font-size: 18px;
-          line-height: 1.5;
-        }
-
-        .docx-paragraph {
-          margin: 0 0 14px;
-          font-size: 16px;
-          line-height: 1.9;
-          white-space: pre-wrap;
-          word-break: break-word;
-        }
-
-        .docx-empty,
-        .spreadsheet-empty {
-          margin: 0;
-          color: #64748b;
-          font-size: 14px;
-          line-height: 1.8;
-        }
-
-        .spreadsheet-wrap {
-          overflow: auto;
-          border: 1px solid #e2e8f0;
-          border-radius: 8px;
-        }
-
-        .spreadsheet-table {
-          width: 100%;
-          min-width: 720px;
-          border-collapse: collapse;
-          font-size: 13px;
-        }
-
-        .spreadsheet-table th,
-        .spreadsheet-table td {
-          border: 1px solid #e2e8f0;
-          padding: 9px 10px;
-          text-align: left;
-          vertical-align: top;
-          white-space: pre-wrap;
-          word-break: break-word;
-        }
-
-        .spreadsheet-table th {
-          background: #f8fafc;
-          color: #475569;
-          font-weight: 700;
-        }
-
-        @media (max-width: 768px) {
-          body {
-            padding: 12px;
-          }
-
-          .preview-page {
-            min-height: calc(100vh - 24px);
-            padding: 24px 18px;
-            box-shadow: none;
-          }
-        }
-      </style>
-    </head>
-    <body>
-      <main class="preview-page">
-        <h1 class="preview-title">${escapePreviewHtml(title)}</h1>
-        ${bodyContent}
-      </main>
-    </body>
-  </html>
-`;
 
 const fetchSubmissionFileBuffer = async (file: SubmissionMaterialFile) => {
   const response = await fetch(file.path);
@@ -867,6 +738,14 @@ const fetchSubmissionFileBuffer = async (file: SubmissionMaterialFile) => {
 
   return response.arrayBuffer();
 };
+
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 
 const getPowerOfAttorneySignatureSource = (order?: Order | null) =>
   order?.notaryCertificateImages?.signature?.trim() || '';
@@ -878,7 +757,7 @@ const buildSignatureReplacementHtml = async (signatureSource: string) => {
     return '';
   }
 
-  return `<span style="display:inline-block;min-width:150px;vertical-align:middle;"><img src="${escapePreviewHtml(
+  return `<span style="display:inline-block;min-width:150px;vertical-align:middle;"><img src="${escapeHtml(
     resolvedSignatureSource,
   )}" alt="电子签名" style="display:inline-block;max-width:180px;max-height:72px;object-fit:contain;vertical-align:middle;" /></span>`;
 };
@@ -899,85 +778,16 @@ const replaceOmittedDocxImagesWithSignature = async (html: string, signatureSour
   ].reduce((nextHtml, placeholder) => nextHtml.split(placeholder).join(signatureReplacement), html);
 };
 
-const buildDocxSubmissionPreviewHtml = async (file: SubmissionMaterialFile, order?: Order | null) => {
+const buildWordSubmissionPreviewHtml = async (file: SubmissionMaterialFile, order?: Order | null) => {
   const buffer = await fetchSubmissionFileBuffer(file);
-  const html = await buildDocxPreviewHtml(buffer, { title: file.name });
+  const html = await buildWordPreviewHtml(buffer, { documentPath: file.path, title: file.name });
 
   return replaceOmittedDocxImagesWithSignature(html, getPowerOfAttorneySignatureSource(order));
 };
 
-const getSpreadsheetColumnIndex = (cellRef: string) => {
-  const columnName = cellRef.match(/^[A-Z]+/i)?.[0]?.toUpperCase() || '';
-  if (!columnName) {
-    return null;
-  }
-
-  return Array.from(columnName).reduce((result, char) => result * 26 + char.charCodeAt(0) - 64, 0) - 1;
-};
-
 const buildXlsxSubmissionPreviewHtml = async (file: SubmissionMaterialFile) => {
   const buffer = await fetchSubmissionFileBuffer(file);
-  const zip = await JSZip.loadAsync(buffer);
-  const sharedStringsFile = zip.file('xl/sharedStrings.xml');
-  const sharedStrings: string[] = [];
-
-  if (sharedStringsFile) {
-    const sharedStringsXml = await sharedStringsFile.async('string');
-    const sharedStringsDocument = new DOMParser().parseFromString(sharedStringsXml, 'application/xml');
-    getElementsByLocalName(sharedStringsDocument, 'si').forEach((item) => {
-      sharedStrings.push(getElementsByLocalName(item, 't').map((textNode) => textNode.textContent || '').join(''));
-    });
-  }
-
-  const worksheetFile = zip.file('xl/worksheets/sheet1.xml');
-  if (!worksheetFile) {
-    throw new Error('Missing XLSX worksheet');
-  }
-
-  const worksheetXml = await worksheetFile.async('string');
-  const worksheetDocument = new DOMParser().parseFromString(worksheetXml, 'application/xml');
-  const rowElements = getElementsByLocalName(worksheetDocument, 'row').slice(0, 30);
-  let maxColumnCount = 0;
-
-  const rows = rowElements.map((rowElement) => {
-    const rowCells = new Map<number, string>();
-
-    getElementsByLocalName(rowElement, 'c').forEach((cellElement, fallbackIndex) => {
-      const columnIndex = getSpreadsheetColumnIndex(cellElement.getAttribute('r') || '') ?? fallbackIndex;
-      const cellType = cellElement.getAttribute('t') || '';
-      let value = getElementsByLocalName(cellElement, 'v')[0]?.textContent || '';
-
-      if (cellType === 's') {
-        value = sharedStrings[Number(value)] || '';
-      } else if (cellType === 'inlineStr') {
-        value = getElementsByLocalName(cellElement, 't').map((textNode) => textNode.textContent || '').join('');
-      }
-
-      rowCells.set(columnIndex, value);
-      maxColumnCount = Math.max(maxColumnCount, columnIndex + 1);
-    });
-
-    return rowCells;
-  });
-
-  const columnCount = Math.min(Math.max(maxColumnCount, 1), 12);
-  const tableRows = rows
-    .map((rowCells, rowIndex) => {
-      const cells = Array.from({ length: columnCount }, (_, columnIndex) => {
-        const cellValue = escapePreviewHtml(rowCells.get(columnIndex) || '');
-        const tag = rowIndex === 0 ? 'th' : 'td';
-        return `<${tag}>${cellValue}</${tag}>`;
-      }).join('');
-
-      return `<tr>${cells}</tr>`;
-    })
-    .join('');
-
-  const content = tableRows
-    ? `<div class="spreadsheet-wrap"><table class="spreadsheet-table">${tableRows}</table></div>`
-    : '<p class="spreadsheet-empty">未读取到可预览的表格内容。</p>';
-
-  return buildSubmissionPreviewDocument(file.name, content);
+  return buildSpreadsheetPreviewHtml(buffer, file.name);
 };
 
 const NotaryOrderManagementList: React.FC = () => {
@@ -1064,7 +874,7 @@ const NotaryOrderManagementList: React.FC = () => {
       return;
     }
 
-    if (previewSubmissionFileKind !== 'docx' && previewSubmissionFileKind !== 'spreadsheet') {
+    if (previewSubmissionFileKind !== 'word' && previewSubmissionFileKind !== 'spreadsheet') {
       setSubmissionFilePreviewHtml('');
       setSubmissionFilePreviewStatus('ready');
       return;
@@ -1077,8 +887,8 @@ const NotaryOrderManagementList: React.FC = () => {
     const loadPreview = async () => {
       try {
         const html =
-          previewSubmissionFileKind === 'docx'
-            ? await buildDocxSubmissionPreviewHtml(previewSubmissionFile, submissionPreviewOrder)
+          previewSubmissionFileKind === 'word'
+            ? await buildWordSubmissionPreviewHtml(previewSubmissionFile, submissionPreviewOrder)
             : await buildXlsxSubmissionPreviewHtml(previewSubmissionFile);
 
         if (!cancelled) {
@@ -1347,6 +1157,16 @@ const NotaryOrderManagementList: React.FC = () => {
     setPreviewSubmissionFileKey(null);
   };
 
+  const handleCloseSubmittedPreview = () => {
+    submissionGenerationIdRef.current += 1;
+    generatedSubmissionFileUrlsRef.current = [];
+    setSubmissionPreviewOrder(null);
+    setSelectedSubmissionOfficeId('');
+    setSubmissionImages([]);
+    setSubmissionFiles([]);
+    setPreviewSubmissionFileKey(null);
+  };
+
   const handleAddSubmissionImages = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) {
@@ -1519,6 +1339,8 @@ const NotaryOrderManagementList: React.FC = () => {
       pushedNotaryOfficeName: selectedOffice.name,
       productionDisplayNotaryOfficeId: selectedOffice.id,
       productionDisplayNotaryOfficeName: selectedOffice.name,
+      notarySubmissionFiles: submissionFiles.map((file) => ({ ...file })),
+      notarySubmissionImages: submissionImages.map((image) => ({ ...image })),
       rejectReason: undefined,
       remark: '',
       updatedAt: currentTimestamp,
@@ -1538,6 +1360,8 @@ const NotaryOrderManagementList: React.FC = () => {
       pushedNotaryOfficeName: nextOrder.pushedNotaryOfficeName,
       productionDisplayNotaryOfficeId: nextOrder.productionDisplayNotaryOfficeId,
       productionDisplayNotaryOfficeName: nextOrder.productionDisplayNotaryOfficeName,
+      notarySubmissionFiles: nextOrder.notarySubmissionFiles,
+      notarySubmissionImages: nextOrder.notarySubmissionImages,
       rejectReason: nextOrder.rejectReason,
       remark: nextOrder.remark,
       updatedAt: nextOrder.updatedAt,
@@ -1549,7 +1373,7 @@ const NotaryOrderManagementList: React.FC = () => {
       targetStatus: 'pending_review',
     });
 
-    handleCloseSubmissionPreview();
+    handleCloseSubmittedPreview();
     setOrdersRevision((currentRevision) => currentRevision + 1);
     showToast('success', `已送审至${selectedOffice.name}`);
   };

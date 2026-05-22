@@ -18,6 +18,22 @@ export type AgentLevel = 'self' | 'l1' | 'l2' | 'l3';
 export type Channel = 'ctrip' | 'fliggy' | 'private' | 'offline';
 export type ProductCategory = 'translation' | 'notary' | 'idp' | 'domestic_license';
 
+export interface NotarySubmissionFile {
+  key: string;
+  label: string;
+  name: string;
+  path: string;
+  message?: string;
+  type: string;
+  status?: 'loading' | 'ready' | 'error';
+}
+
+export interface NotarySubmissionImage {
+  key: string;
+  label: string;
+  src: string;
+}
+
 export interface DomesticLicenseInfo {
   exchangeProvince: string;
   exchangeCity: string;
@@ -76,6 +92,8 @@ export interface Order {
   productionDisplayNotaryOfficeName?: string;
   managementOrderId?: string;
   notarySubmissionSequence?: number;
+  notarySubmissionFiles?: NotarySubmissionFile[];
+  notarySubmissionImages?: NotarySubmissionImage[];
   // --- Notary Specific ---
   licenseName?: string;
   licenseNo?: string;

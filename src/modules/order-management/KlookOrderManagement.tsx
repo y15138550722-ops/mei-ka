@@ -56,7 +56,6 @@ const KLOOK_STATUS_TABS: Array<{ label: string; value: KlookOrderStatus | '' }> 
 ];
 
 const KLOOK_TARGET_PRODUCT_NAME = '驾照翻译国际认证件（小白本）';
-const PRODUCTION_OPERATOR = '生产端';
 const PRODUCTION_NODE_ACTIONS = ['已翻译', '已制作', '已发货'] as const;
 
 const normalizeProductName = (value: string) =>
@@ -144,7 +143,7 @@ const matchesKeyword = (order: KlookOrder, keyword: string) => {
 
 const getProductionOrderRecords = (order: KlookOrder) =>
   PRODUCTION_NODE_ACTIONS.flatMap((action) => {
-    const log = order.logs.find((item) => item.operator === PRODUCTION_OPERATOR && item.action === action);
+    const log = [...order.logs].reverse().find((item) => item.action === action);
     return log
       ? [
           {
