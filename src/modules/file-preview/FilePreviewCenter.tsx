@@ -20,6 +20,15 @@ type PreviewItem = {
   file?: File;
 };
 
+type ProjectWordDocument = {
+  name: string;
+  relativePath: string;
+  size: number;
+  url: string;
+};
+
+type ProjectPreviewDocument = ProjectWordDocument;
+
 const FILE_ACCEPT = [
   '.pdf',
   '.doc',
@@ -123,10 +132,15 @@ const getNameFromPath = (path: string) => {
 
 const buildItemId = (name: string) => `${Date.now()}-${Math.random().toString(36).slice(2)}-${name}`;
 
+const getProjectDocumentKind = (document: ProjectPreviewDocument): PreviewKind => getPreviewKind(document.name);
+
 const FilePreviewCenter: React.FC = () => {
   const [previewItems, setPreviewItems] = useState<PreviewItem[]>([]);
   const [selectedItemId, setSelectedItemId] = useState('');
   const [docsPathInput, setDocsPathInput] = useState('');
+  const [projectPreviewDocuments, setProjectPreviewDocuments] = useState<ProjectPreviewDocument[]>([]);
+  const [projectPreviewScanStatus, setProjectPreviewScanStatus] = useState<PreviewStatus>('loading');
+  const [projectPreviewScanError, setProjectPreviewScanError] = useState('');
   const objectUrlsRef = useRef<Set<string>>(new Set());
 
   const selectedItem = useMemo(
@@ -147,6 +161,46 @@ const FilePreviewCenter: React.FC = () => {
     },
     [],
   );
+
+  useEffect(() => {
+    let disposed = false;
+
+    const loadProjectPreviewDocuments = async () => {
+      setProjectPreviewScanStatus('loading');
+      setProjectPreviewScanError('');
+
+      try {
+        const response = await fetch('/api/project-files/preview-documents');
+
+        if (!response.ok) {
+          throw new Error('项目文档列表加载失败');
+        }
+
+        const payload = (await response.json()) as { files?: ProjectPreviewDocument[] };
+
+        if (disposed) {
+          return;
+        }
+
+        setProjectPreviewDocuments(Array.isArray(payload.files) ? payload.files : []);
+        setProjectPreviewScanStatus('ready');
+      } catch (error) {
+        if (disposed) {
+          return;
+        }
+
+        setProjectPreviewDocuments([]);
+        setProjectPreviewScanStatus('error');
+        setProjectPreviewScanError(error instanceof Error ? error.message : '项目文档列表加载失败');
+      }
+    };
+
+    void loadProjectPreviewDocuments();
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
 
   const updatePreviewItem = (id: string, update: Partial<PreviewItem>) => {
     setPreviewItems((currentItems) =>
@@ -219,6 +273,73 @@ const FilePreviewCenter: React.FC = () => {
       void loadDocumentPreview(item);
     });
   };
+
+  const addProjectPreviewDocument = (document: ProjectPreviewDocument) => {
+    const existingItem = previewItems.find((item) => item.path === document.url);
+
+    if (existingItem) {
+      setSelectedItemId(existingItem.id);
+      return;
+    }
+
+    const kind = getProjectDocumentKind(document);
+
+    addPreviewItems([
+      {
+        id: buildItemId(document.relativePath),
+        name: document.name,
+        kind,
+        source: 'docs',
+        size: document.size,
+        path: document.url,
+        status: kind === 'word' || kind === 'spreadsheet' ? 'loading' : 'ready',
+      },
+    ]);
+  };
+
+  const addAllProjectPreviewDocuments = () => {
+    if (!projectPreviewDocuments.length) {
+      return;
+    }
+
+    const existingPaths = new Set(previewItems.map((item) => item.path));
+    const newItems = projectPreviewDocuments
+      .filter((document) => !existingPaths.has(document.url))
+      .map<PreviewItem>((document) => {
+        const kind = getProjectDocumentKind(document);
+
+        return {
+          id: buildItemId(document.relativePath),
+          name: document.name,
+          kind,
+          source: 'docs',
+          size: document.size,
+          path: document.url,
+          status: kind === 'word' || kind === 'spreadsheet' ? 'loading' : 'ready',
+        };
+      });
+
+    if (!newItems.length) {
+      const firstDocument = projectPreviewDocuments[0];
+      const firstExistingItem = previewItems.find((item) => item.path === firstDocument.url);
+      if (firstExistingItem) {
+        setSelectedItemId(firstExistingItem.id);
+      }
+      return;
+    }
+
+    addPreviewItems(newItems);
+  };
+
+  const projectWordDocuments = useMemo(
+    () => projectPreviewDocuments.filter((document) => getProjectDocumentKind(document) === 'word'),
+    [projectPreviewDocuments],
+  );
+
+  const projectSpreadsheetDocuments = useMemo(
+    () => projectPreviewDocuments.filter((document) => getProjectDocumentKind(document) === 'spreadsheet'),
+    [projectPreviewDocuments],
+  );
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
@@ -362,6 +483,84 @@ const FilePreviewCenter: React.FC = () => {
               添加docs路径
             </button>
           </div>
+        </section>
+
+        <section className="file-preview-project-word">
+          <div className="file-preview-project-word__summary">
+            <div>
+              <div className="app-topbar__breadcrumb">项目识别 / Word 与 Excel</div>
+              <strong>meika 项目文档识别与预览</strong>
+            </div>
+            <div className="file-preview-project-word__actions">
+              <span>
+                {projectPreviewScanStatus === 'loading'
+                  ? '扫描中...'
+                  : projectPreviewScanStatus === 'error'
+                    ? '扫描失败'
+                    : `已识别 ${projectPreviewDocuments.length} 个`}
+              </span>
+              <button
+                className="btn btn--primary"
+                type="button"
+                onClick={addAllProjectPreviewDocuments}
+                disabled={projectPreviewScanStatus !== 'ready' || projectPreviewDocuments.length === 0}
+              >
+                载入全部文档
+              </button>
+            </div>
+          </div>
+
+          {projectPreviewScanStatus === 'error' ? (
+            <div className="file-preview-project-word__state">{projectPreviewScanError || '项目文档扫描失败。'}</div>
+          ) : projectPreviewDocuments.length > 0 ? (
+            <div className="file-preview-project-groups">
+              <section className="file-preview-project-group">
+                <div className="file-preview-project-group__head">
+                  <strong>Word</strong>
+                  <span>{projectWordDocuments.length}</span>
+                </div>
+                <div className="file-preview-project-word__list">
+                  {projectWordDocuments.map((document) => (
+                    <button
+                      key={document.relativePath}
+                      type="button"
+                      className="file-preview-project-word__item"
+                      onClick={() => addProjectPreviewDocument(document)}
+                    >
+                      <strong>{document.name}</strong>
+                      <span>{document.relativePath}</span>
+                      <small>{formatFileSize(document.size)}</small>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="file-preview-project-group">
+                <div className="file-preview-project-group__head">
+                  <strong>Excel / 表格</strong>
+                  <span>{projectSpreadsheetDocuments.length}</span>
+                </div>
+                <div className="file-preview-project-word__list">
+                  {projectSpreadsheetDocuments.map((document) => (
+                    <button
+                      key={document.relativePath}
+                      type="button"
+                      className="file-preview-project-word__item"
+                      onClick={() => addProjectPreviewDocument(document)}
+                    >
+                      <strong>{document.name}</strong>
+                      <span>{document.relativePath}</span>
+                      <small>{formatFileSize(document.size)}</small>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            </div>
+          ) : (
+            <div className="file-preview-project-word__state">
+              {projectPreviewScanStatus === 'loading' ? '正在识别项目内 Word 与 Excel 文档。' : '当前项目中未识别到可预览文档。'}
+            </div>
+          )}
         </section>
 
         <section className="file-preview-workbench">

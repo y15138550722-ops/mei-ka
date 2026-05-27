@@ -10,6 +10,7 @@ const IddTemplatePreview = lazy(() => import('./modules/order-management/IddTemp
 const OrderDetail = lazy(() => import('./modules/order-management/OrderDetail'));
 const NotaryOrderManagementList = lazy(() => import('./modules/order-management/NotaryOrderManagementList'));
 const NotaryOrderManagementPreview = lazy(() => import('./modules/order-management/NotaryOrderManagementPreview'));
+const NotaryItineraryExport = lazy(() => import('./modules/order-management/NotaryItineraryExport'));
 const KlookOrderManagement = lazy(() => import('./modules/order-management/KlookOrderManagement'));
 const KlookOrderDetail = lazy(() => import('./modules/order-management/KlookOrderDetail'));
 const HelloOrderManagement = lazy(() => import('./modules/order-management/HelloOrderManagement'));
@@ -134,6 +135,7 @@ const App: React.FC = () => {
           <Route path="/order-management/idp-orders/:id/templates" element={<IddTemplatePreview />} />
           <Route path="/order-management/notary-orders" element={<NotaryOrderManagementList />} />
           <Route path="/order-management/notary-orders/:id/preview" element={<NotaryOrderManagementPreview />} />
+          <Route path="/order-management/notary-orders/:id/itinerary-export" element={<NotaryItineraryExport />} />
           <Route path="/order-management/api-orders" element={<Navigate to="/order-management/api-orders/klook" replace />} />
           <Route path="/order-management/api-orders/klook" element={<KlookOrderManagement />} />
           <Route

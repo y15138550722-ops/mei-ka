@@ -85,6 +85,15 @@
   box-shadow: 0 14px 28px rgba(14, 165, 233, 0.24);
 }
 
+.notary-order-management-preview .order-audit-topbar__action-btn--itinerary {
+  background: linear-gradient(180deg, #8b5cf6 0%, #6d28d9 100%);
+}
+
+.notary-order-management-preview .order-audit-topbar__action-btn--itinerary:hover {
+  background: linear-gradient(180deg, #a78bfa 0%, #7c3aed 100%);
+  box-shadow: 0 14px 28px rgba(109, 40, 217, 0.24);
+}
+
 .notary-order-management-preview .order-audit-topbar__action-btn--return {
   background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
 }

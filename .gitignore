@@ -1,8 +1,12 @@
 node_modules/
 .npm-cache/
 .npm-global/
+.tools/
 .vercel-cli-home/
 .vercel/
+.docx_tmp/
+.tmp-docx-preview/
+.tmp-docx-preview.zip
 dist/
 build/
 .env
@@ -12,3 +16,8 @@ dev-server*.err.log
 cloudflared-tunnel*.log
 static-server*.log
 temp/
+gh.cmd
+enable-gh-global.cmd
+fix-gh-codex-status-admin.cmd
+recovery-codes.md
+image/recovery-codes/

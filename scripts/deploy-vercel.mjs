@@ -15,8 +15,31 @@ const workspaceGlobalConfig = path.join(
 );
 const extraArgs = process.argv.slice(2);
 
+function stripDeadProxyVars(sourceEnv) {
+  const nextEnv = { ...sourceEnv };
+  const proxyKeys = [
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+    "GIT_HTTP_PROXY",
+    "GIT_HTTPS_PROXY",
+  ];
+
+  for (const key of proxyKeys) {
+    const value = nextEnv[key];
+    if (value && /127\.0\.0\.1:9\b/.test(value)) {
+      delete nextEnv[key];
+    }
+  }
+
+  return nextEnv;
+}
+
 const env = {
-  ...process.env,
+  ...stripDeadProxyVars(process.env),
   NO_UPDATE_NOTIFIER: "1",
   NPM_CONFIG_CACHE: process.env.NPM_CONFIG_CACHE || workspaceCache,
 };

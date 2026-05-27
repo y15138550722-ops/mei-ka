@@ -1,6 +1,8 @@
 .env
 .env.*
 .npm-cache
+.docx_tmp
+.tmp-docx-preview
 .ssh
 .vercel
 .vscode

@@ -27,7 +27,7 @@ const PRODUCT_NEXT_ID_STORAGE_KEY = 'meika-products-next-id';
 const ORDER_STORAGE_KEY = 'meika-orders';
 const ORDER_DATA_VERSION_STORAGE_KEY = 'meika-order-data-version';
 export const ORDER_DATA_CHANGED_EVENT = 'meika-orders-changed';
-const ORDER_DATA_VERSION = 'notary-management-10-pending-notary-orders-v2';
+const ORDER_DATA_VERSION = 'notary-management-clear-system-notary-orders-v1';
 const REMOVED_ORDER_IDS = new Set(['MK2600057', 'MK2600061']);
 
 const NAMES = ['张伟', '王芳', '李明', '赵丽', '孙强', '周杰', '吴秀英', '郑敏', '陈浩', '钱亮', '刘洋', '黄磊', '何欣', '马丽', '朱俊', '林静', '徐峰', '高蕾', '谢宇', '韩雪'];
@@ -63,13 +63,120 @@ const DOMESTIC_FOREIGN_LICENSE_LOCATIONS = [
 ] as const;
 const PRODUCT_CATEGORIES: ProductCategory[] = ['translation', 'notary', 'idp', 'domestic_license'];
 const EXTRA_IDP_PENDING_ORDER_COUNT = 5;
-const NOTARY_PENDING_REVIEW_ORDER_COUNT = 10;
+const NOTARY_PENDING_REVIEW_ORDER_COUNT = 0;
 const DOMESTIC_LICENSE_PRODUCT_TITLE = '换国内驾照翻译件';
 const DOMESTIC_LICENSE_UNTRANSLATED_ORDER_IDS = ['MK2600087', 'MK2600088', 'MK2600089', 'MK2600090', 'MK2600091'];
 const DOMESTIC_LICENSE_UNMADE_ORDER_IDS = new Set(['MK2600088']);
 const PRODUCTION_OPERATOR = '生产端';
 const PRODUCTION_NODE_ACTIONS = new Set(['已翻译', '已制作', '已发货']);
 const FORCE_UNTRANSLATED_INITIALIZED_ACTION = '初始化为未翻译';
+const CHINESE_COMPOUND_SURNAMES = ['欧阳', '太史', '端木', '上官', '司马', '东方', '独孤', '南宫', '万俟', '闻人', '夏侯', '诸葛', '尉迟', '公羊', '赫连', '澹台', '皇甫', '宗政', '濮阳', '公冶', '太叔', '申屠', '公孙', '慕容', '仲孙'] as const;
+const NAME_PINYIN_MAP: Record<string, string> = {
+  张: 'ZHANG',
+  王: 'WANG',
+  李: 'LI',
+  赵: 'ZHAO',
+  孙: 'SUN',
+  周: 'ZHOU',
+  吴: 'WU',
+  郑: 'ZHENG',
+  陈: 'CHEN',
+  钱: 'QIAN',
+  刘: 'LIU',
+  黄: 'HUANG',
+  何: 'HE',
+  马: 'MA',
+  朱: 'ZHU',
+  林: 'LIN',
+  徐: 'XU',
+  高: 'GAO',
+  谢: 'XIE',
+  韩: 'HAN',
+  艾: 'AI',
+  安: 'AN',
+  敖: 'AO',
+  白: 'BAI',
+  柏: 'BAI',
+  包: 'BAO',
+  贝: 'BEI',
+  毕: 'BI',
+  蔡: 'CAI',
+  曹: 'CAO',
+  曾: 'ZENG',
+  常: 'CHANG',
+  车: 'CHE',
+  成: 'CHENG',
+  冯: 'FENG',
+  顾: 'GU',
+  郭: 'GUO',
+  胡: 'HU',
+  华: 'HUA',
+  蒋: 'JIANG',
+  金: 'JIN',
+  梁: 'LIANG',
+  廖: 'LIAO',
+  罗: 'LUO',
+  陆: 'LU',
+  潘: 'PAN',
+  彭: 'PENG',
+  邱: 'QIU',
+  秦: 'QIN',
+  任: 'REN',
+  沈: 'SHEN',
+  宋: 'SONG',
+  苏: 'SU',
+  唐: 'TANG',
+  田: 'TIAN',
+  汪: 'WANG',
+  魏: 'WEI',
+  许: 'XU',
+  肖: 'XIAO',
+  薛: 'XUE',
+  叶: 'YE',
+  余: 'YU',
+  袁: 'YUAN',
+  钟: 'ZHONG',
+  邹: 'ZOU',
+  姚: 'YAO',
+  夏: 'XIA',
+  伟: 'WEI',
+  芳: 'FANG',
+  明: 'MING',
+  丽: 'LI',
+  强: 'QIANG',
+  杰: 'JIE',
+  秀: 'XIU',
+  英: 'YING',
+  敏: 'MIN',
+  浩: 'HAO',
+  亮: 'LIANG',
+  洋: 'YANG',
+  磊: 'LEI',
+  欣: 'XIN',
+  俊: 'JUN',
+  静: 'JING',
+  峰: 'FENG',
+  宇: 'YU',
+  雪: 'XUE',
+  知: 'ZHI',
+  书: 'SHU',
+  禾: 'HE',
+  景: 'JING',
+  川: 'CHUAN',
+  宁: 'NING',
+  若: 'RUO',
+  岚: 'LAN',
+  清: 'QING',
+  和: 'HE',
+  星: 'XING',
+  野: 'YE',
+  慕: 'MU',
+  晴: 'QING',
+  望: 'WANG',
+  舒: 'SHU',
+  砚: 'YAN',
+  秋: 'QIU',
+};
 const USER_SUBMITTED_REMARKS = new Set(['用户端提交', '代理端提交']);
 const USER_SUBMITTED_OPERATORS = new Set(['用户端', '代理端']);
 const hasUserSubmittedMarker = (order: Order) =>
@@ -96,6 +203,46 @@ const excludeDomesticLicenseSystemGeneratedOrders = (orders: Order[]) =>
   orders.filter((order) => !isDomesticLicenseSystemGeneratedOrder(order));
 const excludeNotarySystemGeneratedOrders = (orders: Order[]) =>
   orders.filter((order) => !isNotarySystemGeneratedOrder(order));
+
+const getChineseNamePinyinParts = (name: string) => {
+  const normalizedName = name.replace(/[\s·.。-]/g, '').trim();
+  if (!normalizedName || !/^[\u4e00-\u9fff]+$/u.test(normalizedName)) {
+    return { surnamePinyin: '', givenNamePinyin: '' };
+  }
+
+  const toPinyin = (value: string) => {
+    const tokens = Array.from(value).map((char) => NAME_PINYIN_MAP[char] || '');
+    return tokens.every(Boolean) ? tokens.join('') : '';
+  };
+
+  const compoundSurname = CHINESE_COMPOUND_SURNAMES.find((surname) => normalizedName.startsWith(surname));
+  const surnameLength = compoundSurname ? compoundSurname.length : 1;
+  const surname = normalizedName.slice(0, surnameLength);
+  const givenName = normalizedName.slice(surnameLength);
+
+  return {
+    surnamePinyin: toPinyin(surname),
+    givenNamePinyin: givenName ? toPinyin(givenName) : '',
+  };
+};
+
+const backfillLegacyNamePinyin = (order: Order): Order => {
+  if (order.idpSurnameEn?.trim() && order.idpGivenNameEn?.trim()) {
+    return order;
+  }
+
+  const sourceName = order.licenseName?.trim() || order.customerName?.trim() || '';
+  const { surnamePinyin, givenNamePinyin } = getChineseNamePinyinParts(sourceName);
+  if (!surnamePinyin && !givenNamePinyin) {
+    return order;
+  }
+
+  return {
+    ...order,
+    idpSurnameEn: order.idpSurnameEn?.trim() || surnamePinyin || undefined,
+    idpGivenNameEn: order.idpGivenNameEn?.trim() || givenNamePinyin || undefined,
+  };
+};
 
 const sortLogsByTime = (logs: Order['logs']) =>
   [...logs]
@@ -659,7 +806,9 @@ const loadProducts = (): Product[] => {
 };
 
 const loadOrders = (products: Product[]): Order[] => {
-  const defaultOrders = excludeDomesticLicenseSystemGeneratedOrders(excludeRemovedOrders(createOrders(products)));
+  const defaultOrders = excludeNotarySystemGeneratedOrders(
+    excludeDomesticLicenseSystemGeneratedOrders(excludeRemovedOrders(createOrders(products))),
+  );
   const defaultNotaryOrders = defaultOrders.filter((order) => order.productCategory === 'notary');
   const defaultNonNotaryOrders = defaultOrders.filter((order) => order.productCategory !== 'notary');
 
@@ -681,9 +830,9 @@ const loadOrders = (products: Product[]): Order[] => {
       return defaultOrders;
     }
 
-    const storedOrders = excludeDomesticLicenseSystemGeneratedOrders(excludeRemovedOrders(parsedValue as Order[])).map(
-      normalizeDomesticLicenseAuditState,
-    );
+    const storedOrders = excludeNotarySystemGeneratedOrders(
+      excludeDomesticLicenseSystemGeneratedOrders(excludeRemovedOrders(parsedValue as Order[])),
+    ).map((order) => backfillLegacyNamePinyin(normalizeDomesticLicenseAuditState(order)));
     const storedNonNotaryOrders = storedOrders.filter((order) => order.productCategory !== 'notary');
     const storedAgentSubmittedNotaryOrders = storedOrders.filter(
       (order) => order.productCategory === 'notary' && isAgentSubmittedPersistedOrder(order),
@@ -746,12 +895,12 @@ const loadOrders = (products: Product[]): Order[] => {
           ...resetDefaultNotaryOrders,
         ]
       : [
-          ...storedOrders.map(normalizeDomesticLicenseAuditState),
+          ...storedOrders.map((order) => backfillLegacyNamePinyin(normalizeDomesticLicenseAuditState(order))),
           ...missingDefaultNonNotaryOrders,
           ...missingDomesticUntranslatedOrders,
           ...missingDomesticLicenseOrders,
         ];
-    const normalizedMergedOrders = mergedOrders.map(normalizeDomesticLicenseAuditState);
+    const normalizedMergedOrders = mergedOrders.map((order) => backfillLegacyNamePinyin(normalizeDomesticLicenseAuditState(order)));
     window.localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(normalizedMergedOrders));
     window.localStorage.setItem(ORDER_DATA_VERSION_STORAGE_KEY, ORDER_DATA_VERSION);
     return normalizedMergedOrders;
@@ -791,7 +940,7 @@ const syncOrderWithProduct = (order: Order, productsById: Map<string, Product>):
 const syncOrdersWithProducts = () => {
   const productsById = new Map(_products.map((product) => [product.productId, product] as const));
   _orders = _orders.map((order) =>
-    normalizeDomesticLicenseAuditState(normalizeNotaryManagementOrderStatus(syncOrderWithProduct(order, productsById))),
+    backfillLegacyNamePinyin(normalizeDomesticLicenseAuditState(normalizeNotaryManagementOrderStatus(syncOrderWithProduct(order, productsById)))),
   );
 };
 
@@ -1142,10 +1291,12 @@ function createOrders(products: Product[]): Order[] {
     });
   }
 
-  return excludeDomesticLicenseSystemGeneratedOrders([
-    ...orders,
-    ...createDomesticLicenseUntranslatedOrders(products),
-  ]).map(normalizeDomesticLicenseAuditState);
+  return excludeNotarySystemGeneratedOrders(
+    excludeDomesticLicenseSystemGeneratedOrders([
+      ...orders,
+      ...createDomesticLicenseUntranslatedOrders(products),
+    ]),
+  ).map(normalizeDomesticLicenseAuditState);
 }
 
 let _products = loadProducts();
@@ -1189,25 +1340,29 @@ export function updateOrder(id: string, updates: Partial<Order>) {
 
     const isShippingTransition = order.status === 'in_production' && updates.status === 'shipped';
     if (!isShippingTransition || updates.shippedAt) {
-      return normalizeDomesticLicenseAuditState({ ...order, ...updates });
+      return backfillLegacyNamePinyin(normalizeDomesticLicenseAuditState({ ...order, ...updates }));
     }
 
     const shippedTime = getCurrentTimestamp();
-    return normalizeDomesticLicenseAuditState({
-      ...order,
-      ...updates,
-      shippedAt: shippedTime,
-      updatedAt: updates.updatedAt || shippedTime,
-    });
+    return backfillLegacyNamePinyin(
+      normalizeDomesticLicenseAuditState({
+        ...order,
+        ...updates,
+        shippedAt: shippedTime,
+        updatedAt: updates.updatedAt || shippedTime,
+      }),
+    );
   });
   persistOrders();
 }
 
 export function addOrder(order: Omit<Order, 'orderId'> & { orderId?: string }) {
-  const nextOrder: Order = normalizeDomesticLicenseAuditState({
-    ...order,
-    orderId: order.orderId || buildNextOrderId(),
-  });
+  const nextOrder: Order = backfillLegacyNamePinyin(
+    normalizeDomesticLicenseAuditState({
+      ...order,
+      orderId: order.orderId || buildNextOrderId(),
+    }),
+  );
   const previousOrders = _orders;
 
   _orders = [nextOrder, ..._orders];

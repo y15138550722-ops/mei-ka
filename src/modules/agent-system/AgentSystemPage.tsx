@@ -1056,6 +1056,8 @@ const AgentSystemPage: React.FC = () => {
     const certificateData = certificateFormRef.current ? new FormData(certificateFormRef.current) : new FormData();
     const deliveryData = deliveryFormRef.current ? new FormData(deliveryFormRef.current) : new FormData();
     const licenseName = readFormValue(certificateData, 'licenseName');
+    const idpSurnameEn = readFormValue(certificateData, 'idpSurnameEn');
+    const idpGivenNameEn = readFormValue(certificateData, 'idpGivenNameEn');
     const customerName = readFormValue(deliveryData, 'customerName') || licenseName || '代理客户';
     const licenseNo = readFormValue(certificateData, 'licenseNo') || `D${Date.now().toString().slice(-8)}`;
     const deliveryAddress =
@@ -1104,6 +1106,8 @@ const AgentSystemPage: React.FC = () => {
         remark: '用户端提交',
         licenseName: licenseName || customerName,
         licenseNo,
+        idpSurnameEn,
+        idpGivenNameEn,
         licenseCategory: readFormValue(certificateData, 'licenseCategory') || 'C1',
         licenseGender: readFormValue(certificateData, 'gender') || '男',
         licenseNationality: readFormValue(certificateData, 'licenseNationality') || '中国/CHN',

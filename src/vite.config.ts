@@ -87,6 +87,35 @@ function sendJson(res: import('node:http').ServerResponse, statusCode: number, p
   res.end(JSON.stringify(payload))
 }
 
+function sendFile(
+  res: import('node:http').ServerResponse,
+  statusCode: number,
+  filePath: string,
+  fileBuffer: Buffer,
+) {
+  const extension = path.extname(filePath).toLowerCase()
+  const contentTypeMap: Record<string, string> = {
+    '.doc': 'application/msword',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.pdf': 'application/pdf',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.svg': 'image/svg+xml',
+    '.xls': 'application/vnd.ms-excel',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.csv': 'text/csv; charset=utf-8',
+    '.tsv': 'text/tab-separated-values; charset=utf-8',
+  }
+
+  res.statusCode = statusCode
+  res.setHeader('Content-Type', contentTypeMap[extension] || 'application/octet-stream')
+  res.setHeader('Content-Length', String(fileBuffer.byteLength))
+  res.end(fileBuffer)
+}
+
 function normalizeImageInput(value: unknown) {
   if (typeof value !== 'string') return ''
   const trimmedValue = value.trim()
@@ -105,6 +134,131 @@ function parseJsonFromText(value: unknown) {
   } catch {
     const matchedJson = text.match(/\{[\s\S]*\}/)
     return matchedJson ? JSON.parse(matchedJson[0]) : {}
+  }
+}
+
+const projectPreviewDocumentExtensions = new Set([
+  '.doc',
+  '.docx',
+  '.xls',
+  '.xlsx',
+  '.xlsm',
+  '.xltx',
+  '.xltm',
+  '.csv',
+  '.tsv',
+])
+const ignoredProjectScanDirectories = new Set([
+  '.git',
+  '.vercel',
+  'node_modules',
+  '.npm-cache',
+  '.npm-global',
+  '.ssh',
+  '.tmp-docx-preview',
+  '.docx_tmp',
+  'temp',
+])
+
+function isPathInsideRoot(targetPath: string) {
+  const relativePath = path.relative(rootDir, targetPath)
+  return Boolean(relativePath) && !relativePath.startsWith('..') && !path.isAbsolute(relativePath)
+}
+
+function listProjectPreviewDocuments(scanDir: string, collector: Array<{ relativePath: string; size: number }> = []) {
+  const entries = fs.readdirSync(scanDir, { withFileTypes: true })
+
+  for (const entry of entries) {
+    if (entry.name.startsWith('.') && !entry.name.startsWith('.env')) {
+      if (!['.docx_tmp'].includes(entry.name)) {
+        continue
+      }
+    }
+
+    const absolutePath = path.join(scanDir, entry.name)
+
+    if (entry.isDirectory()) {
+      if (ignoredProjectScanDirectories.has(entry.name)) {
+        continue
+      }
+
+      listProjectPreviewDocuments(absolutePath, collector)
+      continue
+    }
+
+    if (!entry.isFile()) {
+      continue
+    }
+
+    const extension = path.extname(entry.name).toLowerCase()
+
+    if (!projectPreviewDocumentExtensions.has(extension)) {
+      continue
+    }
+
+    const fileStat = fs.statSync(absolutePath)
+    collector.push({
+      relativePath: path.relative(rootDir, absolutePath).replace(/\\/g, '/'),
+      size: fileStat.size,
+    })
+  }
+
+  return collector.sort((left, right) => left.relativePath.localeCompare(right.relativePath, 'zh-CN'))
+}
+
+function projectPreviewDocumentPlugin() {
+  return {
+    name: 'meika-project-preview-document-api',
+    configureServer(server) {
+      server.middlewares.use('/api/project-files/preview-documents', (req, res) => {
+        if (req.method !== 'GET') {
+          res.setHeader('Allow', 'GET')
+          sendJson(res, 405, { error: 'Method Not Allowed' })
+          return
+        }
+
+        try {
+          const files = listProjectPreviewDocuments(rootDir).map((file) => ({
+            ...file,
+            name: path.basename(file.relativePath),
+            url: `/api/project-files/content?path=${encodeURIComponent(file.relativePath)}`,
+          }))
+
+          sendJson(res, 200, { files })
+        } catch (error) {
+          sendJson(res, 500, { error: error instanceof Error ? error.message : '项目文档扫描失败' })
+        }
+      })
+
+      server.middlewares.use('/api/project-files/content', (req, res) => {
+        if (req.method !== 'GET') {
+          res.setHeader('Allow', 'GET')
+          sendJson(res, 405, { error: 'Method Not Allowed' })
+          return
+        }
+
+        try {
+          const requestUrl = new URL(req.url || '', 'http://meika.local')
+          const relativePath = decodeURIComponent(requestUrl.searchParams.get('path') || '').trim()
+
+          if (!relativePath) {
+            sendJson(res, 400, { error: '缺少 path 参数' })
+            return
+          }
+
+          const resolvedPath = path.resolve(rootDir, relativePath)
+
+          if (!isPathInsideRoot(resolvedPath) || !fs.existsSync(resolvedPath) || !fs.statSync(resolvedPath).isFile()) {
+            sendJson(res, 404, { error: '文件不存在' })
+            return
+          }
+
+          sendFile(res, 200, resolvedPath, fs.readFileSync(resolvedPath))
+        } catch (error) {
+          sendJson(res, 500, { error: error instanceof Error ? error.message : '文件读取失败' })
+        }
+      })
+    },
   }
 }
 
@@ -183,7 +337,7 @@ function localImageTextRecognitionPlugin() {
 }
 
 export default defineConfig({
-  plugins: [localImageTextRecognitionPlugin(), rootIndexFallbackPlugin(), react()],
+  plugins: [projectPreviewDocumentPlugin(), localImageTextRecognitionPlugin(), rootIndexFallbackPlugin(), react()],
   publicDir: '../docs',
   server: {
     host: '0.0.0.0',

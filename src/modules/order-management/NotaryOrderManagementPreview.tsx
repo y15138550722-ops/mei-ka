@@ -37,6 +37,8 @@ type CertificateImage = {
 type OrderEditForm = {
   licenseNo: string;
   licenseName: string;
+  surnamePinyin: string;
+  givenNamePinyin: string;
   gender: string;
   nationality: string;
   birthDate: string;
@@ -49,6 +51,8 @@ type OrderEditForm = {
   validUntilDate: string;
   validYears: string;
   issuingAuthority: string;
+  issuingProvince: string;
+  issuingCity: string;
   issuingRegion: string;
   customerName: string;
   customerPhone: string;
@@ -75,6 +79,42 @@ const POWER_OF_ATTORNEY_EXPORT_OPTIONS = buildNotaryPowerOfAttorneyExportOptions
 const ORDER_MANAGEMENT_PENDING_REVIEW_PATH = '/order-management/notary-orders?status=pending_review';
 const LOGISTICS_COMPANY_OPTIONS = ['顺丰速运', '京东物流', '邮政EMS', '圆通速递', '中通快递', '申通快递'];
 const LICENSE_VALIDITY_YEAR_OPTIONS = ['6年', '10年', '60年', '长期', '自定义'];
+const PROVINCE_CITY_OPTIONS: Array<{ province: string; cities: string[] }> = [
+  { province: '北京市', cities: ['北京市'] },
+  { province: '天津市', cities: ['天津市'] },
+  { province: '河北省', cities: ['石家庄市', '唐山市', '秦皇岛市', '邯郸市', '邢台市', '保定市', '张家口市', '承德市', '沧州市', '廊坊市', '衡水市'] },
+  { province: '山西省', cities: ['太原市', '大同市', '阳泉市', '长治市', '晋城市', '朔州市', '晋中市', '运城市', '忻州市', '临汾市', '吕梁市'] },
+  { province: '内蒙古自治区', cities: ['呼和浩特市', '包头市', '乌海市', '赤峰市', '通辽市', '鄂尔多斯市', '呼伦贝尔市', '巴彦淖尔市', '乌兰察布市', '兴安盟', '锡林郭勒盟', '阿拉善盟'] },
+  { province: '辽宁省', cities: ['沈阳市', '大连市', '鞍山市', '抚顺市', '本溪市', '丹东市', '锦州市', '营口市', '阜新市', '辽阳市', '盘锦市', '铁岭市', '朝阳市', '葫芦岛市'] },
+  { province: '吉林省', cities: ['长春市', '吉林市', '四平市', '辽源市', '通化市', '白山市', '松原市', '白城市', '延边朝鲜族自治州'] },
+  { province: '黑龙江省', cities: ['哈尔滨市', '齐齐哈尔市', '鸡西市', '鹤岗市', '双鸭山市', '大庆市', '伊春市', '佳木斯市', '七台河市', '牡丹江市', '黑河市', '绥化市', '大兴安岭地区'] },
+  { province: '上海市', cities: ['上海市'] },
+  { province: '江苏省', cities: ['南京市', '无锡市', '徐州市', '常州市', '苏州市', '南通市', '连云港市', '淮安市', '盐城市', '扬州市', '镇江市', '泰州市', '宿迁市'] },
+  { province: '浙江省', cities: ['杭州市', '宁波市', '温州市', '嘉兴市', '湖州市', '绍兴市', '金华市', '衢州市', '舟山市', '台州市', '丽水市'] },
+  { province: '安徽省', cities: ['合肥市', '芜湖市', '蚌埠市', '淮南市', '马鞍山市', '淮北市', '铜陵市', '安庆市', '黄山市', '滁州市', '阜阳市', '宿州市', '六安市', '亳州市', '池州市', '宣城市'] },
+  { province: '福建省', cities: ['福州市', '厦门市', '莆田市', '三明市', '泉州市', '漳州市', '南平市', '龙岩市', '宁德市'] },
+  { province: '江西省', cities: ['南昌市', '景德镇市', '萍乡市', '九江市', '新余市', '鹰潭市', '赣州市', '吉安市', '宜春市', '抚州市', '上饶市'] },
+  { province: '山东省', cities: ['济南市', '青岛市', '淄博市', '枣庄市', '东营市', '烟台市', '潍坊市', '济宁市', '泰安市', '威海市', '日照市', '临沂市', '德州市', '聊城市', '滨州市', '菏泽市'] },
+  { province: '河南省', cities: ['郑州市', '开封市', '洛阳市', '平顶山市', '安阳市', '鹤壁市', '新乡市', '焦作市', '濮阳市', '许昌市', '漯河市', '三门峡市', '南阳市', '商丘市', '信阳市', '周口市', '驻马店市', '济源市'] },
+  { province: '湖北省', cities: ['武汉市', '黄石市', '十堰市', '宜昌市', '襄阳市', '鄂州市', '荆门市', '孝感市', '荆州市', '黄冈市', '咸宁市', '随州市', '恩施土家族苗族自治州', '仙桃市', '潜江市', '天门市', '神农架林区'] },
+  { province: '湖南省', cities: ['长沙市', '株洲市', '湘潭市', '衡阳市', '邵阳市', '岳阳市', '常德市', '张家界市', '益阳市', '郴州市', '永州市', '怀化市', '娄底市', '湘西土家族苗族自治州'] },
+  { province: '广东省', cities: ['广州市', '韶关市', '深圳市', '珠海市', '汕头市', '佛山市', '江门市', '湛江市', '茂名市', '肇庆市', '惠州市', '梅州市', '汕尾市', '河源市', '阳江市', '清远市', '东莞市', '中山市', '潮州市', '揭阳市', '云浮市'] },
+  { province: '广西壮族自治区', cities: ['南宁市', '柳州市', '桂林市', '梧州市', '北海市', '防城港市', '钦州市', '贵港市', '玉林市', '百色市', '贺州市', '河池市', '来宾市', '崇左市'] },
+  { province: '海南省', cities: ['海口市', '三亚市', '三沙市', '儋州市', '五指山市', '琼海市', '文昌市', '万宁市', '东方市'] },
+  { province: '重庆市', cities: ['重庆市'] },
+  { province: '四川省', cities: ['成都市', '自贡市', '攀枝花市', '泸州市', '德阳市', '绵阳市', '广元市', '遂宁市', '内江市', '乐山市', '南充市', '眉山市', '宜宾市', '广安市', '达州市', '雅安市', '巴中市', '资阳市', '阿坝藏族羌族自治州', '甘孜藏族自治州', '凉山彝族自治州'] },
+  { province: '贵州省', cities: ['贵阳市', '六盘水市', '遵义市', '安顺市', '毕节市', '铜仁市', '黔西南布依族苗族自治州', '黔东南苗族侗族自治州', '黔南布依族苗族自治州'] },
+  { province: '云南省', cities: ['昆明市', '曲靖市', '玉溪市', '保山市', '昭通市', '丽江市', '普洱市', '临沧市', '楚雄彝族自治州', '红河哈尼族彝族自治州', '文山壮族苗族自治州', '西双版纳傣族自治州', '大理白族自治州', '德宏傣族景颇族自治州', '怒江傈僳族自治州', '迪庆藏族自治州'] },
+  { province: '西藏自治区', cities: ['拉萨市', '日喀则市', '昌都市', '林芝市', '山南市', '那曲市', '阿里地区'] },
+  { province: '陕西省', cities: ['西安市', '铜川市', '宝鸡市', '咸阳市', '渭南市', '延安市', '汉中市', '榆林市', '安康市', '商洛市'] },
+  { province: '甘肃省', cities: ['兰州市', '嘉峪关市', '金昌市', '白银市', '天水市', '武威市', '张掖市', '平凉市', '酒泉市', '庆阳市', '定西市', '陇南市', '临夏回族自治州', '甘南藏族自治州'] },
+  { province: '青海省', cities: ['西宁市', '海东市', '海北藏族自治州', '黄南藏族自治州', '海南藏族自治州', '果洛藏族自治州', '玉树藏族自治州', '海西蒙古族藏族自治州'] },
+  { province: '宁夏回族自治区', cities: ['银川市', '石嘴山市', '吴忠市', '固原市', '中卫市'] },
+  { province: '新疆维吾尔自治区', cities: ['乌鲁木齐市', '克拉玛依市', '吐鲁番市', '哈密市', '昌吉回族自治州', '博尔塔拉蒙古自治州', '巴音郭楞蒙古自治州', '阿克苏地区', '克孜勒苏柯尔克孜自治州', '喀什地区', '和田地区', '伊犁哈萨克自治州', '塔城地区', '阿勒泰地区', '石河子市', '阿拉尔市', '图木舒克市', '五家渠市', '北屯市', '铁门关市', '双河市', '可克达拉市', '昆玉市', '胡杨河市', '新星市', '白杨市'] },
+  { province: '香港特别行政区', cities: ['香港特别行政区'] },
+  { province: '澳门特别行政区', cities: ['澳门特别行政区'] },
+  { province: '台湾省', cities: ['台北市', '新北市', '桃园市', '台中市', '台南市', '高雄市', '基隆市', '新竹市', '嘉义市'] },
+] as const;
 
 const CERTIFICATE_IMAGES: CertificateImage[] = [
   {
@@ -139,6 +179,9 @@ const ADDITIONAL_CERTIFICATE_IMAGES: CertificateImage[] = [
 
 const PREVIEW_IMAGES = [...CERTIFICATE_IMAGES, ...ADDITIONAL_CERTIFICATE_IMAGES];
 
+const getMergedLocationKeys = <T extends string>(sourceOptions: readonly T[], currentValue: string) =>
+  currentValue && !sourceOptions.includes(currentValue as T) ? [currentValue, ...sourceOptions] : [...sourceOptions];
+
 const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   translating: '翻译中',
   pending_review: '待审核',
@@ -150,6 +193,7 @@ const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   rejected: '已拒绝',
 };
 
+const NOTARY_OFFICE_SUBMISSION_PATTERN = /送审至|公证处已接收/;
 const NOTARY_OFFICE_REJECTION_PATTERN = /公证处审核驳回|公证处.*驳回/;
 
 const NAME_PINYIN_MAP: Record<string, string> = {
@@ -528,15 +572,40 @@ const getNotaryReviewStatusClass = (status: OrderStatus) => `notary-review-statu
 const getLatestAuditLog = (logs: OrderLog[]) =>
   [...logs].reverse().find((log) => /审核通过|审核拒绝|审核驳回/.test(log.action));
 
-const getLatestNotaryOfficeRejectionLog = (order: Order, officeOrder: Order | null) =>
-  [...order.logs, ...(officeOrder?.logs || [])].reverse().find((log) => NOTARY_OFFICE_REJECTION_PATTERN.test(log.action));
+const findLatestOrderLog = <T extends Order['logs'][number]>(logs: T[], pattern: RegExp) =>
+  [...logs].reverse().find((log) => pattern.test(log.action));
+
+const isLogAtOrAfter = (leftTime: string | undefined, rightTime: string | undefined) => {
+  const normalizedLeftTime = leftTime?.trim() || '';
+  const normalizedRightTime = rightTime?.trim() || '';
+
+  if (!normalizedLeftTime || !normalizedRightTime) {
+    return Boolean(normalizedLeftTime);
+  }
+
+  return normalizedLeftTime >= normalizedRightTime;
+};
 
 const isNotaryOfficeRejected = (order: Order, officeOrder: Order | null) =>
-  order.status !== 'cancelled' &&
-  Boolean(
-    getLatestNotaryOfficeRejectionLog(order, officeOrder) ||
-      officeOrder?.status === 'rejected',
-  );
+  (() => {
+    if (order.status === 'cancelled') {
+      return false;
+    }
+
+    const combinedLogs = [...order.logs, ...(officeOrder?.logs || [])];
+    const submissionLog = findLatestOrderLog(combinedLogs, NOTARY_OFFICE_SUBMISSION_PATTERN);
+    const rejectionLog = findLatestOrderLog(combinedLogs, NOTARY_OFFICE_REJECTION_PATTERN);
+    const hasOfficeOrderRejection = Boolean(
+      submissionLog &&
+        officeOrder?.status === 'rejected' &&
+        isLogAtOrAfter(officeOrder.updatedAt, submissionLog.time),
+    );
+
+    return Boolean(
+      (rejectionLog && isLogAtOrAfter(rejectionLog.time, submissionLog?.time)) ||
+        hasOfficeOrderRejection,
+    );
+  })();
 
 const getDisplayOrderStatusLabel = (order: Order, officeOrder: Order | null) =>
   order.status === 'cancelled'
@@ -608,6 +677,28 @@ const extractIssuingRegion = (address: string) => {
   return [province, city].filter(Boolean).join(' ') || normalizedAddress.slice(0, 12);
 };
 
+const splitIssuingRegion = (issuingRegion: string) => {
+  const normalizedRegion = issuingRegion.trim();
+  if (!normalizedRegion) {
+    return { issuingProvince: '', issuingCity: '' };
+  }
+
+  for (const option of PROVINCE_CITY_OPTIONS) {
+    if (!normalizedRegion.includes(option.province)) {
+      continue;
+    }
+
+    const matchedCity = option.cities.find((city) => normalizedRegion.includes(city));
+    return {
+      issuingProvince: option.province,
+      issuingCity: matchedCity || '',
+    };
+  }
+
+  const [issuingProvince = '', issuingCity = ''] = normalizedRegion.split(/\s+/);
+  return { issuingProvince, issuingCity };
+};
+
 const buildArchiveNumber = (licenseNo: string, orderId: string) => {
   const licenseDigits = licenseNo.replace(/\D/g, '');
   const orderDigits = orderId.replace(/\D/g, '');
@@ -637,6 +728,8 @@ const buildLicenseAuditProfile = (order: Order) => {
   const validYearsSource = resolvePersistedValue(order.licenseValidYears, '10年');
   const issuingAuthoritySource = resolvePersistedValue(order.licenseIssuingAuthority, LICENSE_ISSUING_AUTHORITY_OPTIONS[0]);
   const issuingRegionSource = resolvePersistedValue(order.licenseIssuingRegion, extractIssuingRegion(licenseAddressSource));
+  const issuingRegion = getDisplayValue(issuingRegionSource);
+  const issuingRegionParts = splitIssuingRegion(issuingRegion === '--' ? '' : issuingRegion);
   const genderSource = resolvePersistedValue(order.licenseGender, seed % 4 === 0 ? '女' : '男');
   const nationalitySource = resolvePersistedValue(order.licenseNationality, '中国/CHN');
   const licenseName = getDisplayValue(licenseNameSource);
@@ -650,7 +743,9 @@ const buildLicenseAuditProfile = (order: Order) => {
     order.licenseBarcodeNumber,
     buildBarcodeNumber(licenseNo === '--' ? '' : licenseNo, order.orderId),
   );
-  const { surnamePinyin, givenNamePinyin } = getNamePinyinParts(licenseName === '--' ? '' : licenseName);
+  const autoPinyinParts = getNamePinyinParts(licenseName === '--' ? '' : licenseName);
+  const surnamePinyin = getDisplayValue(resolvePersistedValue(order.idpSurnameEn, autoPinyinParts.surnamePinyin));
+  const givenNamePinyin = getDisplayValue(resolvePersistedValue(order.idpGivenNameEn, autoPinyinParts.givenNamePinyin));
 
   return {
     licenseNo,
@@ -669,16 +764,21 @@ const buildLicenseAuditProfile = (order: Order) => {
     validUntilDate: getDisplayValue(validUntilDateSource),
     validYears: getDisplayValue(validYearsSource),
     issuingAuthority: getDisplayValue(issuingAuthoritySource),
-    issuingRegion: getDisplayValue(issuingRegionSource),
+    issuingProvince: getDisplayValue(issuingRegionParts.issuingProvince),
+    issuingCity: getDisplayValue(issuingRegionParts.issuingCity),
+    issuingRegion,
   };
 };
 
 const buildOrderEditForm = (order: Order): OrderEditForm => {
   const auditProfile = buildLicenseAuditProfile(order);
+  const issuingRegionParts = splitIssuingRegion(auditProfile.issuingRegion === '--' ? '' : auditProfile.issuingRegion);
 
   return {
     licenseNo: toEditableValue(order.licenseNo, auditProfile.licenseNo),
     licenseName: toEditableValue(order.licenseName, auditProfile.licenseName),
+    surnamePinyin: toEditableValue(order.idpSurnameEn, auditProfile.surnamePinyin),
+    givenNamePinyin: toEditableValue(order.idpGivenNameEn, auditProfile.givenNamePinyin),
     gender: toEditableValue(order.licenseGender, auditProfile.gender),
     nationality: toEditableValue(order.licenseNationality, auditProfile.nationality),
     birthDate: toEditableValue(order.licenseBirthDate, auditProfile.birthDate),
@@ -691,6 +791,8 @@ const buildOrderEditForm = (order: Order): OrderEditForm => {
     validUntilDate: toEditableValue(order.licenseValidUntilDate, auditProfile.validUntilDate),
     validYears: toEditableValue(order.licenseValidYears, auditProfile.validYears),
     issuingAuthority: toEditableValue(order.licenseIssuingAuthority, auditProfile.issuingAuthority),
+    issuingProvince: toEditableValue(issuingRegionParts.issuingProvince),
+    issuingCity: toEditableValue(issuingRegionParts.issuingCity),
     issuingRegion: toEditableValue(order.licenseIssuingRegion, auditProfile.issuingRegion),
     customerName: toEditableValue(order.customerName),
     customerPhone: toEditableValue(order.customerPhone),
@@ -750,7 +852,13 @@ const NotaryOrderManagementPreview: React.FC = () => {
 
   const latestAuditLog = useMemo(() => (order ? getLatestAuditLog(order.logs) : null), [order]);
   const auditProfile = useMemo(() => (order ? buildLicenseAuditProfile(order) : null), [order]);
-  const pinyinPreview = useMemo(() => getNamePinyinParts(editForm?.licenseName || ''), [editForm?.licenseName]);
+  const pinyinPreview = useMemo(
+    () => ({
+      surnamePinyin: getDisplayValue(editForm?.surnamePinyin),
+      givenNamePinyin: getDisplayValue(editForm?.givenNamePinyin),
+    }),
+    [editForm?.givenNamePinyin, editForm?.surnamePinyin],
+  );
   const currentAccountId = useMemo(() => getCurrentAuthAccountId(), []);
   const officeOrder = useMemo(
     () => (order ? getLatestNotaryOfficeOrderByManagementOrderId(order.orderId) || null : null),
@@ -829,6 +937,23 @@ const NotaryOrderManagementPreview: React.FC = () => {
 
       const nextForm = { ...currentForm, [field]: value };
 
+      if (field === 'licenseName') {
+        const currentAutoPinyin = getNamePinyinParts(currentForm.licenseName);
+        const nextAutoPinyin = getNamePinyinParts(value);
+        const shouldSyncSurname =
+          !currentForm.surnamePinyin.trim() || currentForm.surnamePinyin.trim().toUpperCase() === currentAutoPinyin.surnamePinyin;
+        const shouldSyncGivenName =
+          !currentForm.givenNamePinyin.trim() || currentForm.givenNamePinyin.trim().toUpperCase() === currentAutoPinyin.givenNamePinyin;
+
+        if (shouldSyncSurname) {
+          nextForm.surnamePinyin = nextAutoPinyin.surnamePinyin === '--' ? '' : nextAutoPinyin.surnamePinyin;
+        }
+
+        if (shouldSyncGivenName) {
+          nextForm.givenNamePinyin = nextAutoPinyin.givenNamePinyin === '--' ? '' : nextAutoPinyin.givenNamePinyin;
+        }
+      }
+
       if (field === 'validYears' || field === 'validFromDate') {
         nextForm.validUntilDate = calculateLicenseValidUntilDate(
           field === 'validFromDate' ? value : currentForm.validFromDate,
@@ -839,6 +964,32 @@ const NotaryOrderManagementPreview: React.FC = () => {
 
       return nextForm;
     });
+  };
+
+  const handleIssuingProvinceChange = (province: string) => {
+    const cityOptions = [...(PROVINCE_CITY_OPTIONS.find((item) => item.province === province)?.cities ?? [])];
+    setEditForm((currentForm) =>
+      currentForm
+        ? {
+            ...currentForm,
+            issuingProvince: province,
+            issuingCity: cityOptions.includes(currentForm.issuingCity) ? currentForm.issuingCity : '',
+            issuingRegion: '',
+          }
+        : currentForm,
+    );
+  };
+
+  const handleIssuingCityChange = (city: string) => {
+    setEditForm((currentForm) =>
+      currentForm
+        ? {
+            ...currentForm,
+            issuingCity: city,
+            issuingRegion: '',
+          }
+        : currentForm,
+    );
   };
 
   const handleLogisticsFieldChange = (field: keyof LogisticsForm, value: string) => {
@@ -893,6 +1044,12 @@ const NotaryOrderManagementPreview: React.FC = () => {
     } finally {
       setIsExportingImagesPdf(false);
     }
+  };
+
+  const handleExportItinerary = () => {
+    navigate(`/order-management/notary-orders/${encodeURIComponent(order.orderId)}/itinerary-export`, {
+      state: { from: `${location.pathname}${location.search}` },
+    });
   };
 
   const NOTARY_OFFICES = [
@@ -1040,7 +1197,6 @@ const NotaryOrderManagementPreview: React.FC = () => {
       editForm.validYears,
       editForm.validUntilDate,
     );
-    const nextPinyinParts = getNamePinyinParts(editForm.licenseName);
     let storedCertificateImages: Record<string, string>;
 
     try {
@@ -1056,8 +1212,8 @@ const NotaryOrderManagementPreview: React.FC = () => {
     const nextUpdates: Partial<Order> = {
       licenseNo: editForm.licenseNo.trim(),
       licenseName: editForm.licenseName.trim(),
-      idpSurnameEn: nextPinyinParts.surnamePinyin === '--' ? undefined : nextPinyinParts.surnamePinyin,
-      idpGivenNameEn: nextPinyinParts.givenNamePinyin === '--' ? undefined : nextPinyinParts.givenNamePinyin,
+      idpSurnameEn: editForm.surnamePinyin.trim() || undefined,
+      idpGivenNameEn: editForm.givenNamePinyin.trim() || undefined,
       licenseGender: editForm.gender.trim(),
       licenseNationality: editForm.nationality.trim(),
       licenseBirthDate: editForm.birthDate.trim(),
@@ -1070,7 +1226,7 @@ const NotaryOrderManagementPreview: React.FC = () => {
       licenseValidUntilDate: nextValidUntilDate,
       licenseValidYears: editForm.validYears.trim(),
       licenseIssuingAuthority: editForm.issuingAuthority.trim(),
-      licenseIssuingRegion: editForm.issuingRegion.trim(),
+      licenseIssuingRegion: [editForm.issuingProvince.trim(), editForm.issuingCity.trim()].filter(Boolean).join(' '),
       customerName: editForm.customerName.trim(),
       customerPhone: editForm.customerPhone.trim(),
       deliveryAddress: editForm.deliveryAddress.trim(),
@@ -1204,7 +1360,48 @@ const NotaryOrderManagementPreview: React.FC = () => {
     </select>
   );
 
+  const renderSelectEditor = (
+    field: keyof OrderEditForm,
+    options: string[],
+    placeholder: string,
+    onValueChange?: (value: string) => void,
+    disabled = false,
+  ) => (
+    <select
+      className="form-select order-audit-field__editor"
+      value={editForm[field]}
+      disabled={disabled}
+      onChange={(event) => {
+        if (disabled) {
+          return;
+        }
+
+        if (onValueChange) {
+          onValueChange(event.target.value);
+          return;
+        }
+
+        handleEditFieldChange(field, event.target.value);
+      }}
+    >
+      <option value="">{placeholder}</option>
+      {options.map((option) => (
+        <option key={option} value={option}>
+          {option}
+        </option>
+      ))}
+    </select>
+  );
+
   const shouldShowValidUntilDate = isEditing ? editForm.validYears === '自定义' : auditProfile.validYears === '自定义';
+  const issuingProvinceOptions = getMergedLocationKeys(
+    PROVINCE_CITY_OPTIONS.map((item) => item.province),
+    editForm.issuingProvince,
+  );
+  const issuingCityOptions = getMergedLocationKeys(
+    [...(PROVINCE_CITY_OPTIONS.find((item) => item.province === editForm.issuingProvince)?.cities ?? [])],
+    editForm.issuingCity,
+  );
   const previewImages = PREVIEW_IMAGES.map((image) => ({
     ...image,
     src: certificateImages[image.key] || image.src,
@@ -1253,8 +1450,14 @@ const NotaryOrderManagementPreview: React.FC = () => {
       label: '姓名',
       value: isEditing ? renderEditor('licenseName', { placeholder: '请输入姓名' }) : auditProfile.licenseName,
     },
-    { label: '姓氏拼音', value: isEditing ? pinyinPreview.surnamePinyin : auditProfile.surnamePinyin },
-    { label: '名字拼音', value: isEditing ? pinyinPreview.givenNamePinyin : auditProfile.givenNamePinyin },
+    {
+      label: '姓氏拼音',
+      value: isEditing ? renderEditor('surnamePinyin', { placeholder: '请输入姓氏拼音' }) : auditProfile.surnamePinyin,
+    },
+    {
+      label: '名字拼音',
+      value: isEditing ? renderEditor('givenNamePinyin', { placeholder: '请输入名字拼音' }) : auditProfile.givenNamePinyin,
+    },
     { label: '性别', value: isEditing ? renderEditor('gender', { placeholder: '请输入性别' }) : auditProfile.gender },
     {
       label: '国籍',
@@ -1307,7 +1510,12 @@ const NotaryOrderManagementPreview: React.FC = () => {
     },
     {
       label: '发证地区',
-      value: isEditing ? renderEditor('issuingRegion', { placeholder: '请输入发证地区' }) : auditProfile.issuingRegion,
+      value: isEditing ? (
+        <div className="order-audit-field__inline-editors">
+          {renderSelectEditor('issuingProvince', issuingProvinceOptions, '请选择省份', handleIssuingProvinceChange)}
+          {renderSelectEditor('issuingCity', issuingCityOptions, '请选择城市', handleIssuingCityChange, !editForm.issuingProvince)}
+        </div>
+      ) : auditProfile.issuingRegion,
     },
   ];
 
@@ -1443,6 +1651,13 @@ const NotaryOrderManagementPreview: React.FC = () => {
                   </button>
                 );
               })}
+              <button
+                type="button"
+                className="btn order-audit-topbar__action-btn order-audit-topbar__action-btn--itinerary"
+                onClick={handleExportItinerary}
+              >
+                导出行程单
+              </button>
               <button
                 type="button"
                 className="btn order-audit-topbar__action-btn order-audit-topbar__action-btn--images"
