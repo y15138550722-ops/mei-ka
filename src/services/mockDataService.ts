@@ -67,6 +67,7 @@ const NOTARY_PENDING_REVIEW_ORDER_COUNT = 0;
 const DOMESTIC_LICENSE_PRODUCT_TITLE = '换国内驾照翻译件';
 const DOMESTIC_LICENSE_UNTRANSLATED_ORDER_IDS = ['MK2600087', 'MK2600088', 'MK2600089', 'MK2600090', 'MK2600091'];
 const DOMESTIC_LICENSE_UNMADE_ORDER_IDS = new Set(['MK2600088']);
+const FORCE_DOMESTIC_LICENSE_UNTRANSLATED_ORDER_IDS = new Set(['MK2600076']);
 const PRODUCTION_OPERATOR = '生产端';
 const PRODUCTION_NODE_ACTIONS = new Set(['已翻译', '已制作', '已发货']);
 const FORCE_UNTRANSLATED_INITIALIZED_ACTION = '初始化为未翻译';
@@ -979,6 +980,17 @@ const buildDomesticLicenseInfo = (index: number, customerName: string, licenseNu
 
 const normalizeDomesticLicenseAuditState = (order: Order): Order => {
   const backfilledOrder = backfillDomesticLicenseProductionLogs(order);
+
+  if (FORCE_DOMESTIC_LICENSE_UNTRANSLATED_ORDER_IDS.has(backfilledOrder.orderId) && isDomesticLicenseOrder(backfilledOrder)) {
+    return {
+      ...backfilledOrder,
+      status: 'pending_production',
+      logisticsCompany: '',
+      trackingNumber: '',
+      shippedAt: undefined,
+      logs: backfilledOrder.logs.filter((log) => !PRODUCTION_NODE_ACTIONS.has(log.action)),
+    };
+  }
 
   if (
     DOMESTIC_LICENSE_UNMADE_ORDER_IDS.has(backfilledOrder.orderId) &&

@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { getOrders, updateOrder } from '../../services/mockDataService';
 import ResolvedImage from '../../shared/components/ResolvedImage';
 import ListUnifiedPagination from '../../shared/components/list/ListUnifiedPagination';

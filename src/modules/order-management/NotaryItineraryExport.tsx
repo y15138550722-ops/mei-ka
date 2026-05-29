@@ -435,11 +435,11 @@ const selectDepartureAirport = (order: Order) => {
   const issuingRegionParts = splitIssuingRegion(issuingRegion);
 
   return (
-    DEPARTURE_AIRPORTS.find((airport) => issuingRegionParts.city && airport.cities.some((city) => issuingRegionParts.city.includes(city))) ||
     DEPARTURE_AIRPORTS.find((airport) => issuingRegionParts.province && airport.provinces.some((province) => issuingRegionParts.province.includes(province))) ||
+    DEPARTURE_AIRPORTS.find((airport) => issuingRegionParts.city && airport.cities.some((city) => issuingRegionParts.city.includes(city))) ||
     DEPARTURE_AIRPORTS.find(
       (airport) =>
-        airport.cities.some((city) => issuingRegion.includes(city)) || airport.provinces.some((province) => issuingRegion.includes(province)),
+        airport.provinces.some((province) => issuingRegion.includes(province)) || airport.cities.some((city) => issuingRegion.includes(city)),
     ) ||
     DEPARTURE_AIRPORTS[0]
   );
@@ -471,31 +471,14 @@ const convertChineseNameToPassengerPinyin = (name: string) => {
 };
 
 const buildPassengerName = (order: Order) => {
-  const surnamePinyin = order.idpSurnameEn?.trim().toUpperCase();
-  const givenNamePinyin = order.idpGivenNameEn?.trim().toUpperCase();
-  if (surnamePinyin && givenNamePinyin) {
-    return `${surnamePinyin}/${givenNamePinyin}`;
-  }
-
-  const licenseName = order.licenseName?.trim() || order.customerName?.trim();
-  if (!licenseName) return '--';
-
-  const pinyinName = convertChineseNameToPassengerPinyin(licenseName);
-  if (pinyinName) {
-    return pinyinName;
-  }
-
-  const normalizedLatinName = licenseName.trim().replace(/[/-]+/g, ' ').replace(/\s+/g, ' ');
-  if (/^[a-z\s]+$/i.test(normalizedLatinName)) {
-    const [surname = '', ...givenNames] = normalizedLatinName.split(' ');
-    const givenName = givenNames.join(' ');
-    return surname && givenName ? `${surname.toUpperCase()}/${givenName.toUpperCase()}` : surname.toUpperCase();
-  }
-
-  return '--';
+  return getDisplayValue(order.domesticLicenseInfo?.chineseName || order.licenseName || order.customerName);
 };
 
-const buildIssueDate = (order: Order) => formatChineseDate(order.createdAt, '--');
+const buildIssueDate = (order: Order) => {
+  const orderDate = parseOrderDate(order.createdAt) || new Date();
+  const issueDate = addDays(orderDate, -seededInt(getSeed(order, 'issue-date'), 7, 30));
+  return formatChineseDateFromDate(issueDate);
+};
 
 const buildTicketPriceSummary = (baseFare: number, tax: number) => {
   const total = baseFare + tax;
@@ -522,7 +505,7 @@ const buildRoutePrice = (
 const buildFlightRow = (order: Order) => {
   const orderDate = parseOrderDate(order.createdAt) || new Date();
   const airline = seededItem(AIRLINES, getSeed(order, 'airline'));
-  const flightDate = addDays(orderDate, seededInt(getSeed(order, 'flight-date'), 15, 30));
+  const flightDate = addDays(orderDate, seededInt(getSeed(order, 'flight-date'), 15, 90));
   const departureAirport = selectDepartureAirport(order);
   const arrivalAirport = selectArrivalAirport(order, getSeed(order, 'arrival'));
   const routePrice = buildRoutePrice(order, departureAirport, arrivalAirport);
