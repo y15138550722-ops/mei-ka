@@ -304,6 +304,7 @@ const buildSeedNotaryOfficeOrders = (templateOrders: Order[]): Order[] =>
       licenseNo: seed.licenseNo,
       licenseCategory: seed.licenseCategory,
       language: seed.language,
+      useCountry: templateOrder?.useCountry || templateOrder?.domesticLicenseInfo?.foreignCountry || '',
       createdAt,
       updatedAt: createdAt,
       logs: [

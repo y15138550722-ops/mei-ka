@@ -459,6 +459,9 @@ const buildSupportingFiles = (order: Order): PreviewFile[] => {
   return [...knownImages, ...unknownImages];
 };
 
+const getNotaryUseCountry = (order: Order) =>
+  order.useCountry?.trim() || order.domesticLicenseInfo?.foreignCountry?.trim() || '未配置';
+
 const getPowerOfAttorneySignatureSource = (order?: Order | null) =>
   order?.notaryCertificateImages?.signature?.trim() || '';
 
@@ -1350,7 +1353,8 @@ const NotaryOrderPreview: React.FC = () => {
 
   const workbenchMeta = [
     { label: '产品', value: '公证单号' },
-    { label: '语种', value: order.language || '未配置' },
+    { label: '使用国家', value: getNotaryUseCountry(order) },
+    { label: '语言', value: order.language || '未配置' },
   ];
 
   const summaryItems = [

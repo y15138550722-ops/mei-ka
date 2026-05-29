@@ -450,6 +450,12 @@ const selectArrivalAirport = (order: Order, seed: number) => {
   return ARRIVAL_AIRPORTS.find((airport) => country.includes(airport.country)) || seededItem(ARRIVAL_AIRPORTS, seed);
 };
 
+const buildItineraryExportTitle = (order: Order) => {
+  const name = getDisplayValue(order.domesticLicenseInfo?.chineseName || order.licenseName || order.customerName, order.orderId);
+  const useCountry = getDisplayValue(order.useCountry || order.domesticLicenseInfo?.foreignCountry);
+  return `${name}${useCountry} 行程单`;
+};
+
 const convertChineseNameToPassengerPinyin = (name: string) => {
   const normalizedName = name.replace(/[\s·.。-]/g, '').trim();
   if (!normalizedName || !/^[\u4e00-\u9fff]+$/u.test(normalizedName)) {
@@ -532,7 +538,7 @@ const buildEditablePreviewHtml = (order: Order) => {
   const flightRow = buildFlightRow(order);
   const issueDate = buildIssueDate(order);
   const passengerName = buildPassengerName(order);
-  const exportTitle = `${getDisplayValue(order.customerName || order.licenseName, order.orderId)} 行程单`;
+  const exportTitle = buildItineraryExportTitle(order);
   const noticesHtml = DEFAULT_NOTICES.map((notice) => `<li>${escapeHtml(notice)}</li>`).join('');
 
   return `<!doctype html>
@@ -917,9 +923,9 @@ const NotaryItineraryExport: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
 
   const baseFileName = useMemo(() => {
-    const name = sanitizeFilenamePart(order?.licenseName || order?.customerName || order?.orderId || '未命名');
-    return `${name || '未命名'}行程单`;
-  }, [order?.customerName, order?.licenseName, order?.orderId]);
+    const exportTitle = order ? buildItineraryExportTitle(order) : '未命名 行程单';
+    return sanitizeFilenamePart(exportTitle) || '未命名 行程单';
+  }, [order]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });

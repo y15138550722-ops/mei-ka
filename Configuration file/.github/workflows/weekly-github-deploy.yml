@@ -1,0 +1,56 @@
+name: Weekly GitHub Deploy
+
+on:
+  schedule:
+    # 18:00 every Friday in Asia/Shanghai (10:00 UTC).
+    - cron: '0 10 * * 5'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: weekly-github-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and push repository
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: src/package-lock.json
+
+      - name: Install dependencies
+        working-directory: src
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Commit and push changes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if [[ -z "$(git status --porcelain)" ]]; then
+            echo "No repository changes to deploy."
+            exit 0
+          fi
+
+          git add -A
+          git commit -m "chore: weekly github deploy"
+          git pull --rebase origin main
+          git push origin main

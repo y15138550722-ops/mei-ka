@@ -48,6 +48,12 @@ const NOTARY_LANGUAGE_COUNTRY_MAP: Record<string, string> = {
   日语: '日本',
 };
 
+const getNotaryUseCountry = (order: Order) =>
+  order.useCountry?.trim() || order.domesticLicenseInfo?.foreignCountry?.trim() || '';
+
+const getNotaryDocumentType = (order: Order) =>
+  order.productName?.includes('双号') ? '双号' : '单号';
+
 const NOTARY_PRIORITY_OPTIONS: Array<{ value: ProcessType; label: string }> = [
   { value: 'urgent', label: '紧急办理' },
   { value: 'priority', label: '优先办理' },
@@ -92,6 +98,11 @@ const getInitialNotaryFilterStatus = (status: string | null): OrderStatus | '' =
 const sanitizeDownloadPart = (value: string) => value.replace(/[\\/:*?"<>|]/g, '-').trim();
 
 const getNotaryCountryLabel = (order: Order) => {
+  const useCountry = getNotaryUseCountry(order);
+  if (useCountry) {
+    return useCountry;
+  }
+
   if (order.language && NOTARY_LANGUAGE_COUNTRY_MAP[order.language]) {
     return NOTARY_LANGUAGE_COUNTRY_MAP[order.language];
   }
@@ -103,14 +114,14 @@ const getNotaryProductionFileContext = (order: Order) => {
   const name = sanitizeDownloadPart(order.licenseName || order.customerName || '姓名未设置');
   const country = sanitizeDownloadPart(getNotaryCountryLabel(order));
   const language = sanitizeDownloadPart(order.language || '语言未设置');
-  const productName = sanitizeDownloadPart(order.productName || '产品名称未设置');
-  const rootName = [name, country, language, productName].join('+');
+  const documentType = sanitizeDownloadPart(getNotaryDocumentType(order));
+  const rootName = [name, country, language, documentType].join('_');
 
   return {
     name,
     country,
     language,
-    productName,
+    documentType,
     rootName,
     zipFileName: `${rootName}.zip`,
   };
@@ -825,7 +836,9 @@ const NotaryOrderList: React.FC = () => {
                         <td>{(currentPage - 1) * pageSize + index + 1}</td>
 
                         <td>
-                          <div style={{ fontWeight: 600, color: 'var(--color-primary)' }}>{order.productName}</div>
+                          <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-primary)' }}>
+                            {order.productName}
+                          </div>
                           <div
                             style={{
                               fontSize: '12px',
@@ -833,6 +846,8 @@ const NotaryOrderList: React.FC = () => {
                               marginTop: '6px',
                               display: 'flex',
                               alignItems: 'center',
+                              gap: '6px',
+                              flexWrap: 'wrap',
                             }}
                           >
                             <button
@@ -850,6 +865,25 @@ const NotaryOrderList: React.FC = () => {
                               }}
                             >
                               {order.language || '-'}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn--sm"
+                              disabled
+                              style={{
+                                minHeight: '26px',
+                                padding: '2px 10px',
+                                border: '1px solid rgba(59, 130, 246, 0.2)',
+                                background: 'rgba(59, 130, 246, 0.1)',
+                                color: '#1d4ed8',
+                                fontSize: '12px',
+                                cursor: 'default',
+                                boxShadow: 'none',
+                                opacity: 1,
+                                pointerEvents: 'none',
+                              }}
+                            >
+                              {getNotaryCountryLabel(order)}
                             </button>
                           </div>
                         </td>
