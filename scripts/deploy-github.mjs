@@ -492,6 +492,29 @@ const createSafeCopyContext = () => {
 const shouldRetryWithSafeCopy = (error) =>
   /index\.lock|Unable to create|could not write index|Permission denied|EPERM/i.test(error.message);
 
+const switchToSafeCopyContext = () => {
+  gitContext = createSafeCopyContext();
+  githubAuthArgs = undefined;
+
+  runGit(['reset', '--mixed', 'HEAD']);
+
+  const branch = options.branch || runGit(['branch', '--show-current'], { capture: true });
+  if (!branch) {
+    return;
+  }
+
+  runGit(['fetch', options.remote, branch], { auth: true });
+  const remoteRef = `${options.remote}/${branch}`;
+  const remoteExists = runGit(['rev-parse', '--verify', remoteRef], {
+    capture: true,
+    allowFailure: true,
+  });
+
+  if (remoteExists) {
+    runGit(['reset', '--mixed', remoteRef]);
+  }
+};
+
 const deployOnce = () => {
   const isRepo = runGit(['rev-parse', '--is-inside-work-tree'], { capture: true });
   if (isRepo !== 'true') {
@@ -562,8 +585,7 @@ const deployOnce = () => {
 
 try {
   if (options.safeCopy) {
-    gitContext = createSafeCopyContext();
-    runGit(['reset', '--mixed', 'HEAD']);
+    switchToSafeCopyContext();
   }
 
   deployOnce();
@@ -572,11 +594,9 @@ try {
     console.warn(`Direct Git deployment hit a local index issue: ${error.message}`);
     console.warn('Retrying from a temporary clean Git copy...');
 
-    gitContext = createSafeCopyContext();
-    githubAuthArgs = undefined;
+    switchToSafeCopyContext();
 
     try {
-      runGit(['reset', '--mixed', 'HEAD']);
       deployOnce();
       console.log(`Temporary Git copy used: ${gitContext.tempBase}`);
     } catch (safeCopyError) {
