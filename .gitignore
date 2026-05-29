@@ -20,6 +20,7 @@ gh.cmd
 enable-gh-global.cmd
 fix-gh-codex-status-admin.cmd
 recovery-codes.md
+gcm-diagnose.log
 image/recovery-codes/
 Configuration file/
 wenjian/.env.example
