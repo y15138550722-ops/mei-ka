@@ -2,6 +2,43 @@
 
 这个项目是 `Vite + React` 静态前端，可以部署到 Vercel，也可以部署到 Linux 服务器上的 `Nginx`。
 
+## GitHub 发布
+
+在项目根目录执行：
+
+```bash
+npm run deploy:github -- -m "chore: deploy project updates"
+```
+
+这个命令会依次完成：
+
+1. 本地构建 `src`。
+2. 检查 Git 差异和暂存本次改动。
+3. 自动创建提交。
+4. 拉取 GitHub `main` 最新状态并在需要时 rebase。
+5. 推送到 `origin/main`。
+
+脚本已经内置了本机发布时遇到过的保护：
+
+- 自动优先使用本机可用的 Git。
+- 自动移除失效的 `127.0.0.1:9` 代理变量。
+- 自动复用 Git Credential Manager 中的 GitHub 凭据。
+- 自动清理陈旧的 `.git/index.lock`。
+- 如果本地 Git 索引仍然因为权限无法写入，会自动改用临时安全副本完成提交和推送。
+- `.gitignore` 会排除本地缓存、临时预览、恢复码和工具脚本。
+
+只想演练流程、不提交和推送时可以执行：
+
+```bash
+npm run deploy:github -- --dry-run --no-build
+```
+
+如需强制使用临时安全副本演练，可以执行：
+
+```bash
+npm run deploy:github -- --dry-run --no-build --safe-copy
+```
+
 ## 方案一：Vercel 生产部署
 
 项目已经绑定到 Vercel 项目 `meika-admin-demo-20260408`。在项目根目录执行：

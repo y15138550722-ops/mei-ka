@@ -21,3 +21,10 @@ enable-gh-global.cmd
 fix-gh-codex-status-admin.cmd
 recovery-codes.md
 image/recovery-codes/
+Configuration file/
+wenjian/.env.example
+wenjian/.gitignore
+wenjian/.vercelignore
+wenjian/DEPLOY.md
+wenjian/Dockerfile
+wenjian/build_itinerary_docx.py
