@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import JSZip from 'jszip';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { getOrderById } from '../../services/mockDataService';
 import { exportNotaryImageBlobsToPdf } from '../../shared/utils/notaryPreviewExport';
@@ -291,14 +292,96 @@ const DEPARTURE_AIRPORTS = [
 const ARRIVAL_AIRPORTS = [
   { airport: '金斯福德·史密斯机场', city: '悉尼', code: 'SYD', country: '澳大利亚', terminal: '1号航站楼' },
   { airport: '奥克兰机场', city: '奥克兰', code: 'AKL', country: '新西兰', terminal: '国际航站楼' },
+  { airport: '罗曼·莫图国际机场', city: '科罗尔', code: 'ROR', country: '帕劳', terminal: '主航站楼' },
   { airport: '成田国际机场', city: '东京', code: 'NRT', country: '日本', terminal: '1号航站楼' },
+  { airport: '仁川国际机场', city: '首尔', code: 'ICN', country: '韩国', aliases: ['韩国', '大韩民国', '南韩'], terminal: '2号航站楼' },
+  { airport: '樟宜机场', city: '新加坡', code: 'SIN', country: '新加坡', terminal: '3号航站楼' },
+  { airport: '素万那普机场', city: '曼谷', code: 'BKK', country: '泰国', terminal: '主航站楼' },
+  { airport: '吉隆坡国际机场', city: '吉隆坡', code: 'KUL', country: '马来西亚', terminal: '1号航站楼' },
+  { airport: '苏加诺-哈达国际机场', city: '雅加达', code: 'CGK', country: '印度尼西亚', aliases: ['印度尼西亚', '印尼'], terminal: '3号航站楼' },
+  { airport: '尼诺伊·阿基诺国际机场', city: '马尼拉', code: 'MNL', country: '菲律宾', terminal: '3号航站楼' },
+  { airport: '内排国际机场', city: '河内', code: 'HAN', country: '越南', terminal: '2号航站楼' },
+  { airport: '金边国际机场', city: '金边', code: 'PNH', country: '柬埔寨', terminal: '国际航站楼' },
+  { airport: '瓦岱国际机场', city: '万象', code: 'VTE', country: '老挝', terminal: '国际航站楼' },
+  { airport: '仰光国际机场', city: '仰光', code: 'RGN', country: '缅甸', terminal: '1号航站楼' },
+  { airport: '班达拉奈克国际机场', city: '科伦坡', code: 'CMB', country: '斯里兰卡', terminal: '主航站楼' },
+  { airport: '英迪拉·甘地国际机场', city: '新德里', code: 'DEL', country: '印度', terminal: '3号航站楼' },
+  { airport: '真纳国际机场', city: '卡拉奇', code: 'KHI', country: '巴基斯坦', terminal: '真纳航站楼' },
+  { airport: '哈兹拉特·沙阿贾拉勒国际机场', city: '达卡', code: 'DAC', country: '孟加拉国', terminal: '2号航站楼' },
+  { airport: '马累维拉纳国际机场', city: '马累', code: 'MLE', country: '马尔代夫', terminal: '国际航站楼' },
+  { airport: '特里布万国际机场', city: '加德满都', code: 'KTM', country: '尼泊尔', terminal: '国际航站楼' },
+  { airport: '香港国际机场', city: '香港', code: 'HKG', country: '中国香港', aliases: ['香港', '中国香港', '香港特别行政区'], terminal: '1号航站楼' },
+  { airport: '澳门国际机场', city: '澳门', code: 'MFM', country: '中国澳门', aliases: ['澳门', '中国澳门', '澳门特别行政区'], terminal: '客运大楼' },
+  { airport: '桃园国际机场', city: '台北', code: 'TPE', country: '中国台湾', aliases: ['台湾', '中国台湾', '台湾省'], terminal: '1号航站楼' },
   { airport: '希思罗机场', city: '伦敦', code: 'LHR', country: '英国', terminal: '2号航站楼' },
   { airport: '洛杉矶国际机场', city: '洛杉矶', code: 'LAX', country: '美国', terminal: 'B航站楼' },
   { airport: '温哥华国际机场', city: '温哥华', code: 'YVR', country: '加拿大', terminal: 'M航站楼' },
   { airport: '戴高乐机场', city: '巴黎', code: 'CDG', country: '法国', terminal: '2E航站楼' },
   { airport: '法兰克福机场', city: '法兰克福', code: 'FRA', country: '德国', terminal: '1号航站楼' },
   { airport: '马尔彭萨机场', city: '米兰', code: 'MXP', country: '意大利', terminal: '1号航站楼' },
+  { airport: '菲乌米奇诺机场', city: '罗马', code: 'FCO', country: '梵蒂冈', aliases: ['梵蒂冈', '梵蒂冈城', '教廷'], terminal: '3号航站楼' },
   { airport: '阿道弗·苏亚雷斯马德里-巴拉哈斯机场', city: '马德里', code: 'MAD', country: '西班牙', terminal: '4号航站楼' },
+  { airport: '奥斯陆加勒穆恩机场', city: '奥斯陆', code: 'OSL', country: '挪威', terminal: '航站楼' },
+  { airport: '史基浦机场', city: '阿姆斯特丹', code: 'AMS', country: '荷兰', aliases: ['荷兰', '尼德兰'], terminal: '主航站楼' },
+  { airport: '苏黎世机场', city: '苏黎世', code: 'ZRH', country: '瑞士', terminal: '航站楼' },
+  { airport: '维也纳国际机场', city: '维也纳', code: 'VIE', country: '奥地利', terminal: '3号航站楼' },
+  { airport: '布鲁塞尔机场', city: '布鲁塞尔', code: 'BRU', country: '比利时', terminal: '航站楼' },
+  { airport: '凯斯楚普机场', city: '哥本哈根', code: 'CPH', country: '丹麦', terminal: '3号航站楼' },
+  { airport: '阿兰达机场', city: '斯德哥尔摩', code: 'ARN', country: '瑞典', terminal: '5号航站楼' },
+  { airport: '赫尔辛基万塔机场', city: '赫尔辛基', code: 'HEL', country: '芬兰', terminal: '2号航站楼' },
+  { airport: '凯夫拉维克国际机场', city: '雷克雅未克', code: 'KEF', country: '冰岛', terminal: '航站楼' },
+  { airport: '里斯本机场', city: '里斯本', code: 'LIS', country: '葡萄牙', terminal: '1号航站楼' },
+  { airport: '都柏林机场', city: '都柏林', code: 'DUB', country: '爱尔兰', terminal: '2号航站楼' },
+  { airport: '瓦茨拉夫·哈维尔机场', city: '布拉格', code: 'PRG', country: '捷克', terminal: '2号航站楼' },
+  { airport: '肖邦机场', city: '华沙', code: 'WAW', country: '波兰', terminal: 'A航站楼' },
+  { airport: '李斯特·费伦茨国际机场', city: '布达佩斯', code: 'BUD', country: '匈牙利', terminal: '2号航站楼' },
+  { airport: '亨利·科安德国际机场', city: '布加勒斯特', code: 'OTP', country: '罗马尼亚', terminal: '航站楼' },
+  { airport: '索菲亚机场', city: '索菲亚', code: 'SOF', country: '保加利亚', terminal: '2号航站楼' },
+  { airport: '雅典国际机场', city: '雅典', code: 'ATH', country: '希腊', terminal: '主航站楼' },
+  { airport: '萨格勒布机场', city: '萨格勒布', code: 'ZAG', country: '克罗地亚', terminal: '航站楼' },
+  { airport: '贝尔格莱德尼古拉·特斯拉机场', city: '贝尔格莱德', code: 'BEG', country: '塞尔维亚', terminal: '2号航站楼' },
+  { airport: '伊斯坦布尔机场', city: '伊斯坦布尔', code: 'IST', country: '土耳其', terminal: '主航站楼' },
+  { airport: '瓦努科沃国际机场', city: '莫斯科', code: 'VKO', country: '俄罗斯', terminal: 'A航站楼' },
+  { airport: '鲍里斯波尔国际机场', city: '基辅', code: 'KBP', country: '乌克兰', terminal: 'D航站楼' },
+  { airport: '本·古里安国际机场', city: '特拉维夫', code: 'TLV', country: '以色列', terminal: '3号航站楼' },
+  { airport: '迪拜国际机场', city: '迪拜', code: 'DXB', country: '阿联酋', aliases: ['阿联酋', '阿拉伯联合酋长国', '迪拜'], terminal: '3号航站楼' },
+  { airport: '哈马德国际机场', city: '多哈', code: 'DOH', country: '卡塔尔', terminal: '主航站楼' },
+  { airport: '哈立德国王国际机场', city: '利雅得', code: 'RUH', country: '沙特阿拉伯', aliases: ['沙特', '沙特阿拉伯'], terminal: '3号航站楼' },
+  { airport: '科威特国际机场', city: '科威特城', code: 'KWI', country: '科威特', terminal: '1号航站楼' },
+  { airport: '巴林国际机场', city: '麦纳麦', code: 'BAH', country: '巴林', terminal: '主航站楼' },
+  { airport: '马斯喀特国际机场', city: '马斯喀特', code: 'MCT', country: '阿曼', terminal: '主航站楼' },
+  { airport: '伊玛目霍梅尼国际机场', city: '德黑兰', code: 'IKA', country: '伊朗', terminal: '主航站楼' },
+  { airport: '开罗国际机场', city: '开罗', code: 'CAI', country: '埃及', terminal: '3号航站楼' },
+  { airport: '穆罕默德五世国际机场', city: '卡萨布兰卡', code: 'CMN', country: '摩洛哥', terminal: '2号航站楼' },
+  { airport: '突尼斯-迦太基国际机场', city: '突尼斯', code: 'TUN', country: '突尼斯', terminal: '主航站楼' },
+  { airport: '阿尔及尔胡阿里·布迈丁机场', city: '阿尔及尔', code: 'ALG', country: '阿尔及利亚', terminal: '4号航站楼' },
+  { airport: '奥利弗·坦博国际机场', city: '约翰内斯堡', code: 'JNB', country: '南非', terminal: 'A航站楼' },
+  { airport: '乔莫·肯雅塔国际机场', city: '内罗毕', code: 'NBO', country: '肯尼亚', terminal: '1A航站楼' },
+  { airport: '博莱国际机场', city: '亚的斯亚贝巴', code: 'ADD', country: '埃塞俄比亚', terminal: '2号航站楼' },
+  { airport: '穆尔塔拉·穆罕默德国际机场', city: '拉各斯', code: 'LOS', country: '尼日利亚', terminal: '国际航站楼' },
+  { airport: '科托卡国际机场', city: '阿克拉', code: 'ACC', country: '加纳', terminal: '3号航站楼' },
+  { airport: '朱利叶斯·尼雷尔国际机场', city: '达累斯萨拉姆', code: 'DAR', country: '坦桑尼亚', terminal: '3号航站楼' },
+  { airport: '恩德培国际机场', city: '坎帕拉', code: 'EBB', country: '乌干达', terminal: '主航站楼' },
+  { airport: '基加利国际机场', city: '基加利', code: 'KGL', country: '卢旺达', terminal: '主航站楼' },
+  { airport: '塞舌尔国际机场', city: '维多利亚', code: 'SEZ', country: '塞舌尔', terminal: '国际航站楼' },
+  { airport: '西沃萨古尔·拉姆古兰爵士国际机场', city: '路易港', code: 'MRU', country: '毛里求斯', terminal: '主航站楼' },
+  { airport: '约翰·肯尼迪国际机场', city: '纽约', code: 'JFK', country: '美国', aliases: ['美国', '美利坚合众国'], terminal: '4号航站楼' },
+  { airport: '墨西哥城国际机场', city: '墨西哥城', code: 'MEX', country: '墨西哥', terminal: '1号航站楼' },
+  { airport: '托库门国际机场', city: '巴拿马城', code: 'PTY', country: '巴拿马', terminal: '2号航站楼' },
+  { airport: '胡安·圣玛丽亚国际机场', city: '圣何塞', code: 'SJO', country: '哥斯达黎加', terminal: '主航站楼' },
+  { airport: '何塞·马蒂国际机场', city: '哈瓦那', code: 'HAV', country: '古巴', terminal: '3号航站楼' },
+  { airport: '蓬塔卡纳国际机场', city: '蓬塔卡纳', code: 'PUJ', country: '多米尼加', terminal: 'B航站楼' },
+  { airport: '路易斯·穆尼奥斯·马林国际机场', city: '圣胡安', code: 'SJU', country: '波多黎各', terminal: 'B航站楼' },
+  { airport: '瓜鲁柳斯国际机场', city: '圣保罗', code: 'GRU', country: '巴西', terminal: '3号航站楼' },
+  { airport: '埃塞萨国际机场', city: '布宜诺斯艾利斯', code: 'EZE', country: '阿根廷', terminal: 'A航站楼' },
+  { airport: '阿图罗·梅里诺·贝尼特斯国际机场', city: '圣地亚哥', code: 'SCL', country: '智利', terminal: '2号航站楼' },
+  { airport: '埃尔多拉多国际机场', city: '波哥大', code: 'BOG', country: '哥伦比亚', terminal: '1号航站楼' },
+  { airport: '豪尔赫·查韦斯国际机场', city: '利马', code: 'LIM', country: '秘鲁', terminal: '主航站楼' },
+  { airport: '苏克雷元帅国际机场', city: '基多', code: 'UIO', country: '厄瓜多尔', terminal: '主航站楼' },
+  { airport: '西蒙·玻利瓦尔国际机场', city: '加拉加斯', code: 'CCS', country: '委内瑞拉', terminal: '国际航站楼' },
+  { airport: '卡拉斯科国际机场', city: '蒙得维的亚', code: 'MVD', country: '乌拉圭', terminal: '主航站楼' },
+  { airport: '西尔维奥·佩蒂罗西国际机场', city: '亚松森', code: 'ASU', country: '巴拉圭', terminal: '主航站楼' },
+  { airport: '埃尔阿尔托国际机场', city: '拉巴斯', code: 'LPB', country: '玻利维亚', terminal: '主航站楼' },
 ] as const;
 
 const BASE_FARE_BY_COUNTRY: Record<string, number> = {
@@ -312,6 +395,7 @@ const BASE_FARE_BY_COUNTRY: Record<string, number> = {
   德国: 4880,
   意大利: 4380,
   西班牙: 4680,
+  挪威: 5280,
 };
 
 const getDisplayValue = (value?: string | null, fallback = '--') => {
@@ -362,6 +446,19 @@ const buildSeededAlphaNumeric = (seed: number, length: number) => {
     currentSeed = nextSeed(currentSeed);
     result += chars[currentSeed % chars.length];
   }
+  return result;
+};
+
+const buildPnrCode = (order: Order) => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ123456789';
+  let currentSeed = hashText(`${order.orderId}|${order.createdAt}|${order.customerPassport}|pnr`);
+  let result = '';
+
+  for (let index = 0; index < 6; index += 1) {
+    currentSeed = nextSeed(currentSeed);
+    result += chars[currentSeed % chars.length];
+  }
+
   return result;
 };
 
@@ -447,13 +544,30 @@ const selectDepartureAirport = (order: Order) => {
 
 const selectArrivalAirport = (order: Order, seed: number) => {
   const country = order.useCountry?.trim() || order.domesticLicenseInfo?.foreignCountry?.trim() || '';
-  return ARRIVAL_AIRPORTS.find((airport) => country.includes(airport.country)) || seededItem(ARRIVAL_AIRPORTS, seed);
+  const normalizedCountry = country.replace(/\s/g, '');
+
+  return (
+    ARRIVAL_AIRPORTS.find((airport) => {
+      const names = [airport.country, ...('aliases' in airport ? airport.aliases || [] : [])];
+
+      return names.some((name) => {
+        const normalizedName = name.replace(/\s/g, '');
+        return normalizedCountry.includes(normalizedName) || normalizedName.includes(normalizedCountry);
+      });
+    }) || seededItem(ARRIVAL_AIRPORTS, seed)
+  );
 };
 
 const buildItineraryExportTitle = (order: Order) => {
   const name = getDisplayValue(order.domesticLicenseInfo?.chineseName || order.licenseName || order.customerName, order.orderId);
   const useCountry = getDisplayValue(order.useCountry || order.domesticLicenseInfo?.foreignCountry);
   return `${name}${useCountry} 行程单`;
+};
+
+const buildItineraryWordFileName = (order: Order) => {
+  const name = getDisplayValue(order.domesticLicenseInfo?.chineseName || order.licenseName || order.customerName, order.orderId);
+  const useCountry = getDisplayValue(order.useCountry || order.domesticLicenseInfo?.foreignCountry, '使用国家未设置');
+  return `${sanitizeFilenamePart(`${name}+${useCountry} 行程单`) || '未命名+使用国家未设置 行程单'}.docx`;
 };
 
 const convertChineseNameToPassengerPinyin = (name: string) => {
@@ -496,7 +610,8 @@ const buildRoutePrice = (
   departureAirport: (typeof DEPARTURE_AIRPORTS)[number],
   arrivalAirport: (typeof ARRIVAL_AIRPORTS)[number],
 ) => {
-  const countryBaseFare = BASE_FARE_BY_COUNTRY[arrivalAirport.country] || 4200;
+  const countryBaseFare =
+    BASE_FARE_BY_COUNTRY[arrivalAirport.country] || 3600 + (hashText(`${arrivalAirport.country}|base-fare`) % 36) * 80;
   const routeSeed = hashText(`${order.orderId}|${departureAirport.code}|${arrivalAirport.code}|price`);
   const baseFare = countryBaseFare + seededInt(routeSeed, 0, 8) * 60;
   const taxRate = seededInt(nextSeed(routeSeed), 18, 28) / 100;
@@ -528,7 +643,7 @@ const buildFlightRow = (order: Order) => {
     departureDetail: `${departureAirport.code}-${departureAirport.city}\n${flightDateDisplay} ${formatClock(departureTime)}\n${departureAirport.terminal}\n${departureAirport.airport}`,
     flightNo,
     paymentSummary: buildTicketPriceSummary(routePrice.baseFare, routePrice.tax),
-    pnr: `${airline.code}${buildSeededAlphaNumeric(getSeed(order, 'pnr'), 4)}`,
+    pnr: buildPnrCode(order),
     serviceClass: '经济舱',
     status: '准点',
   };
@@ -907,6 +1022,239 @@ const openPrintablePdfFallback = (html: string, title: string) => {
   }, 300);
 };
 
+const triggerBlobDownload = (blob: Blob, fileName: string) => {
+  const downloadUrl = window.URL.createObjectURL(blob);
+  const downloadLink = document.createElement('a');
+
+  downloadLink.href = downloadUrl;
+  downloadLink.download = fileName;
+  document.body.appendChild(downloadLink);
+  downloadLink.click();
+  downloadLink.remove();
+
+  window.setTimeout(() => {
+    window.URL.revokeObjectURL(downloadUrl);
+  }, 0);
+};
+
+const escapeXml = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+
+const getElementText = (element: Element | null | undefined) =>
+  ((element as HTMLElement | null)?.innerText || element?.textContent || '').replace(/\u00a0/g, ' ').trim();
+
+const wordRun = (
+  text: string,
+  options: {
+    background?: string;
+    bold?: boolean;
+    color?: string;
+    size?: number;
+  } = {},
+) => {
+  const runProperties = [
+    '<w:rFonts w:ascii="SimSun" w:eastAsia="SimSun" w:hAnsi="SimSun"/>',
+    options.background ? `<w:shd w:fill="${options.background}"/>` : '',
+    options.bold ? '<w:b/>' : '',
+    options.color ? `<w:color w:val="${options.color}"/>` : '',
+    options.size ? `<w:sz w:val="${options.size}"/>` : '',
+  ].join('');
+  const lines = text.split(/\r?\n/);
+  const content = lines
+    .map((line, index) => `${index > 0 ? '<w:br/>' : ''}<w:t xml:space="preserve">${escapeXml(line)}</w:t>`)
+    .join('');
+
+  return `<w:r><w:rPr>${runProperties}</w:rPr>${content}</w:r>`;
+};
+
+const wordParagraph = (
+  text: string,
+  options: {
+    align?: 'center' | 'left';
+    bold?: boolean;
+    color?: string;
+    size?: number;
+    spacingAfter?: number;
+  } = {},
+) => `<w:p>
+  <w:pPr>
+    ${options.align ? `<w:jc w:val="${options.align}"/>` : ''}
+    <w:spacing w:after="${options.spacingAfter ?? 120}"/>
+  </w:pPr>
+  ${wordRun(text, options)}
+</w:p>`;
+
+const wordTableCell = (
+  content: string,
+  options: {
+    align?: 'center' | 'left';
+    background?: string;
+    bold?: boolean;
+    color?: string;
+    size?: number;
+    valign?: 'center' | 'top';
+    width: number;
+  },
+) => `<w:tc>
+  <w:tcPr>
+    <w:tcW w:w="${options.width}" w:type="dxa"/>
+    ${options.background ? `<w:shd w:fill="${options.background}"/>` : ''}
+    <w:vAlign w:val="${options.valign || 'top'}"/>
+  </w:tcPr>
+  ${wordParagraph(content, {
+    align: options.align,
+    bold: options.bold,
+    color: options.color,
+    size: options.size,
+    spacingAfter: 0,
+  })}
+</w:tc>`;
+
+const wordSectionHeader = (title: string) => `<w:p>
+  <w:pPr>
+    <w:spacing w:after="240"/>
+  </w:pPr>
+  ${wordRun(`  ${title}  `, {
+    background: 'BFBFBF',
+    bold: true,
+    color: 'FFFFFF',
+    size: 32,
+  })}
+</w:p>`;
+
+const wordSpacer = (height = 320) => `<w:p><w:pPr><w:spacing w:after="${height}"/></w:pPr></w:p>`;
+
+const buildBookingDetailsXml = (leftItems: string[], rightItems: string[]) => {
+  const issueDate = rightItems.find(Boolean) || '';
+
+  return [
+    wordParagraph([leftItems[0], issueDate].filter(Boolean).join('        '), { size: 24, spacingAfter: 80 }),
+    ...leftItems.slice(1).map((item) => wordParagraph(item, { size: 24, spacingAfter: 80 })),
+  ].join('');
+};
+
+const buildFlightTableXml = (headers: string[], values: string[]) => {
+  const widths = [1960, 1040, 980, 2280, 2300, 920, 986];
+  const tableCell = (text: string, index: number, isHeader: boolean) =>
+    wordTableCell(text, {
+      align: 'center',
+      bold: false,
+      size: 24,
+      valign: 'center',
+      width: widths[index] || 1000,
+    });
+
+  return `<w:tbl>
+    <w:tblPr>
+      <w:tblW w:w="10466" w:type="dxa"/>
+      <w:tblLayout w:type="fixed"/>
+      <w:tblBorders>
+        <w:top w:val="single" w:sz="8" w:color="111111"/>
+        <w:left w:val="single" w:sz="8" w:color="111111"/>
+        <w:bottom w:val="single" w:sz="8" w:color="111111"/>
+        <w:right w:val="single" w:sz="8" w:color="111111"/>
+        <w:insideH w:val="single" w:sz="8" w:color="111111"/>
+        <w:insideV w:val="single" w:sz="8" w:color="111111"/>
+      </w:tblBorders>
+    </w:tblPr>
+    <w:tr>
+      <w:trPr><w:trHeight w:val="980" w:hRule="atLeast"/></w:trPr>
+      ${headers.map((header, index) => tableCell(header, index, true)).join('')}
+    </w:tr>
+    <w:tr>
+      <w:trPr><w:trHeight w:val="1900" w:hRule="atLeast"/></w:trPr>
+      ${values.map((value, index) => tableCell(value, index, false)).join('')}
+    </w:tr>
+  </w:tbl>`;
+};
+
+const buildDocxBlobFromPreviewDocument = async (previewDocument: Document) => {
+  const page = previewDocument.querySelector('.docx-page');
+  const sections = Array.from(previewDocument.querySelectorAll('.itinerary-section'));
+  const title = getElementText(page?.querySelector('.itinerary-title')) || '行程单';
+  const bookingLeft = Array.from(page?.querySelectorAll('.itinerary-booking__left > div') || [])
+    .map(getElementText)
+    .filter(Boolean);
+  const bookingRight = Array.from(page?.querySelectorAll('.itinerary-booking__right > div') || [])
+    .map(getElementText)
+    .filter(Boolean);
+  const flightHeaders = Array.from(page?.querySelectorAll('.itinerary-flight-table thead th') || []).map(getElementText);
+  const flightValues = Array.from(page?.querySelectorAll('.itinerary-flight-table tbody td') || []).map(getElementText);
+  const paymentText = getElementText(page?.querySelector('.itinerary-payment'));
+  const notices = Array.from(page?.querySelectorAll('.itinerary-notices li') || []).map(getElementText).filter(Boolean);
+  const sectionTitle = (index: number, fallback: string) =>
+    getElementText(sections[index]?.querySelector('.itinerary-section__label')) || fallback;
+  const documentBody = [
+    wordParagraph(title, { align: 'center', size: 52, spacingAfter: 560 }),
+    wordSectionHeader(sectionTitle(0, '预订详情')),
+    wordSpacer(260),
+    buildBookingDetailsXml(bookingLeft, bookingRight),
+    wordSpacer(720),
+    wordSectionHeader(sectionTitle(1, '飞行详情')),
+    wordSpacer(260),
+    buildFlightTableXml(flightHeaders, flightValues),
+    wordSpacer(660),
+    wordSectionHeader(sectionTitle(2, '付款详情')),
+    wordSpacer(220),
+    wordParagraph(paymentText, { size: 24, spacingAfter: 620 }),
+    wordSectionHeader(sectionTitle(3, '通知')),
+    wordSpacer(180),
+    ...notices.map((notice, index) => wordParagraph(`${index + 1}. ${notice}`, { size: 22, spacingAfter: 60 })),
+  ].join('');
+  const zip = new JSZip();
+
+  zip.file(
+    '[Content_Types].xml',
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="html" ContentType="text/html"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`,
+  );
+  zip.folder('_rels')?.file(
+    '.rels',
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`,
+  );
+  zip.folder('word')?.file(
+    'document.xml',
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    ${documentBody}
+    <w:sectPr>
+      <w:pgSz w:w="11906" w:h="16838"/>
+      <w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="0" w:footer="0" w:gutter="0"/>
+      <w:pgBorders w:offsetFrom="page">
+        <w:top w:val="single" w:sz="8" w:space="24" w:color="111111"/>
+        <w:left w:val="single" w:sz="8" w:space="24" w:color="111111"/>
+        <w:bottom w:val="single" w:sz="8" w:space="24" w:color="111111"/>
+        <w:right w:val="single" w:sz="8" w:space="24" w:color="111111"/>
+      </w:pgBorders>
+    </w:sectPr>
+  </w:body>
+</w:document>`,
+  );
+
+  return zip.generateAsync({
+    type: 'blob',
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    compression: 'DEFLATE',
+    compressionOptions: {
+      level: 6,
+    },
+  });
+};
+
 const NotaryItineraryExport: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -926,6 +1274,10 @@ const NotaryItineraryExport: React.FC = () => {
     const exportTitle = order ? buildItineraryExportTitle(order) : '未命名 行程单';
     return sanitizeFilenamePart(exportTitle) || '未命名 行程单';
   }, [order]);
+  const wordFileName = useMemo(
+    () => (order ? buildItineraryWordFileName(order) : '未命名+使用国家未设置 行程单.docx'),
+    [order],
+  );
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1110,6 +1462,27 @@ const NotaryItineraryExport: React.FC = () => {
     }
   };
 
+  const handleExportWord = async () => {
+    if (!order) {
+      window.alert('未找到订单，无法导出 Word。');
+      return;
+    }
+
+    const currentDocument = iframeRef.current?.contentDocument;
+    if (!currentDocument) {
+      window.alert('无法读取当前预览内容，请先重新加载文档。');
+      return;
+    }
+
+    try {
+      const wordBlob = await buildDocxBlobFromPreviewDocument(currentDocument);
+      triggerBlobDownload(wordBlob, wordFileName);
+    } catch (error) {
+      console.error('Failed to export notary itinerary Word', error);
+      window.alert('Word 导出失败，请稍后重试。');
+    }
+  };
+
   const renderContent = () => {
     if (previewStatus === 'loading') {
       return (
@@ -1166,6 +1539,14 @@ const NotaryItineraryExport: React.FC = () => {
             onClick={handleToggleEditing}
           >
             {isEditing ? '保存修改' : '修改信息'}
+          </button>
+          <button
+            type="button"
+            className="license-translation-button license-translation-button--primary"
+            disabled={previewStatus !== 'ready'}
+            onClick={() => void handleExportWord()}
+          >
+            导出Word
           </button>
           <button
             type="button"

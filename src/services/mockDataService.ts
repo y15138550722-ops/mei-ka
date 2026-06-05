@@ -29,6 +29,7 @@ const ORDER_DATA_VERSION_STORAGE_KEY = 'meika-order-data-version';
 export const ORDER_DATA_CHANGED_EVENT = 'meika-orders-changed';
 const ORDER_DATA_VERSION = 'notary-management-clear-system-notary-orders-v1';
 const REMOVED_ORDER_IDS = new Set(['MK2600057', 'MK2600061']);
+const FORCE_VATICAN_USE_COUNTRY_ORDER_ID = 'MK2600082';
 
 const NAMES = ['张伟', '王芳', '李明', '赵丽', '孙强', '周杰', '吴秀英', '郑敏', '陈浩', '钱亮', '刘洋', '黄磊', '何欣', '马丽', '朱俊', '林静', '徐峰', '高蕾', '谢宇', '韩雪'];
 const PASSPORTS = ['E12345678', 'G98765432', 'E55667788', 'G11223344', 'E99887766', 'G44556677', 'E33221100', 'G77889900', 'E66554433', 'G22113344'];
@@ -938,10 +939,30 @@ const syncOrderWithProduct = (order: Order, productsById: Map<string, Product>):
   };
 };
 
+const normalizeForcedUseCountryOrder = (order: Order): Order => {
+  if (order.orderId !== FORCE_VATICAN_USE_COUNTRY_ORDER_ID) {
+    return order;
+  }
+
+  return {
+    ...order,
+    useCountry: '梵蒂冈',
+    domesticLicenseInfo: order.domesticLicenseInfo
+      ? {
+          ...order.domesticLicenseInfo,
+          foreignCountry: '梵蒂冈',
+          foreignCity: '梵蒂冈城',
+        }
+      : order.domesticLicenseInfo,
+  };
+};
+
 const syncOrdersWithProducts = () => {
   const productsById = new Map(_products.map((product) => [product.productId, product] as const));
   _orders = _orders.map((order) =>
-    backfillLegacyNamePinyin(normalizeDomesticLicenseAuditState(normalizeNotaryManagementOrderStatus(syncOrderWithProduct(order, productsById)))),
+    normalizeForcedUseCountryOrder(
+      backfillLegacyNamePinyin(normalizeDomesticLicenseAuditState(normalizeNotaryManagementOrderStatus(syncOrderWithProduct(order, productsById)))),
+    ),
   );
 };
 
