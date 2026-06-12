@@ -23,6 +23,8 @@ recovery-codes.md
 gcm-diagnose.log
 image/recovery-codes/
 Configuration file/
+.vscode/
+codex-dev-server.log
 wenjian/.env.example
 wenjian/.gitignore
 wenjian/.vercelignore

@@ -24,7 +24,14 @@ const NotaryOrderPreview = lazy(() => import('./modules/notary-office/NotaryOrde
 const AgentSystemPage = lazy(() => import('./modules/agent-system/AgentSystemPage'));
 const LicenseOfficerLayout = lazy(() => import('./modules/license-officer/LicenseOfficerLayout'));
 const ChineseTranslationOrders = lazy(() => import('./modules/license-officer/ChineseTranslationOrders'));
+const CtripStandardTranslationPage = lazy(() => import('./modules/license-officer/CtripStandardTranslationPage'));
+const CtripStandardPlaceholderPage = lazy(() => import('./modules/license-officer/CtripStandardPlaceholderPage'));
 const DomesticLicenseTranslationEditor = lazy(() => import('./modules/license-officer/DomesticLicenseTranslationEditor'));
+const UserListPage = lazy(() => import('./modules/license-officer/UserListPage'));
+const ReportListPage = lazy(() => import('./modules/license-officer/ReportListPage'));
+const ProductionHomePage = lazy(() => import('./modules/license-officer/ProductionPortalPages').then((module) => ({ default: module.ProductionHomePage })));
+const ProductionLoginPreviewPage = lazy(() => import('./modules/license-officer/ProductionPortalPages').then((module) => ({ default: module.ProductionLoginPreviewPage })));
+const ProductionQueryPage = lazy(() => import('./modules/license-officer/ProductionPortalPages').then((module) => ({ default: module.ProductionQueryPage })));
 const LoginPage = lazy(() => import('./modules/auth/LoginPage'));
 
 interface ProtectedLayoutProps {
@@ -124,6 +131,23 @@ const App: React.FC = () => {
           />
           <Route path="/license-officer/orders/chinese-translation" element={<ChineseTranslationOrders />} />
           <Route path="/license-officer/orders/chinese-translation/docx/:orderId" element={<DomesticLicenseTranslationEditor />} />
+          <Route
+            path="/license-officer/ctrip-standard/api-standard-translation"
+            element={<CtripStandardTranslationPage />}
+          />
+          <Route
+            path="/license-officer/ctrip-standard/standard-translation-excel-import"
+            element={<CtripStandardPlaceholderPage title="标准翻译件excl导入" />}
+          />
+          <Route
+            path="/license-officer/ctrip-standard/vip-standard-translation"
+            element={<CtripStandardPlaceholderPage title="大客户标准翻译件" />}
+          />
+          <Route path="/license-officer/pages/login" element={<ProductionLoginPreviewPage />} />
+          <Route path="/license-officer/pages/home" element={<ProductionHomePage />} />
+          <Route path="/license-officer/reports/list" element={<ReportListPage />} />
+          <Route path="/license-officer/users/list" element={<UserListPage />} />
+          <Route path="/license-officer/channel-standard/query" element={<ProductionQueryPage />} />
         </Route>
 
         <Route element={<ProtectedLayout currentUser={currentUser} onLogout={handleLogout} />}>

@@ -13,6 +13,7 @@
   border-right: 1px solid #e5e7eb;
   background: #ffffff;
   z-index: 100;
+  transition: width 180ms ease;
 }
 
 .license-officer-brand {
@@ -22,6 +23,23 @@
   gap: 12px;
   padding: 0 18px;
   border-bottom: 1px solid #eef2f7;
+}
+
+.license-officer-sidebar-toggle {
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  border-radius: 6px;
+  background: #f3f6fb;
+  color: #334155;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.license-officer-sidebar-toggle:hover {
+  background: #eaf2ff;
+  color: #1d4ed8;
 }
 
 .license-officer-brand__logo {
@@ -143,4 +161,31 @@
   flex: 1;
   min-width: 0;
   margin-left: 232px;
+  transition: margin-left 180ms ease;
+}
+
+.license-officer-layout--collapsed .license-officer-sidebar {
+  width: 64px;
+}
+
+.license-officer-layout--collapsed .license-officer-content {
+  margin-left: 64px;
+}
+
+.license-officer-layout--collapsed .license-officer-brand {
+  justify-content: center;
+  padding: 0 10px;
+}
+
+.license-officer-layout--collapsed .license-officer-brand > div:not(.license-officer-brand__logo),
+.license-officer-layout--collapsed .license-officer-menu,
+.license-officer-layout--collapsed .license-officer-sidebar__footer {
+  display: none;
+}
+
+.license-officer-layout--collapsed .license-officer-sidebar-toggle {
+  position: absolute;
+  top: 88px;
+  left: 18px;
+  margin-left: 0;
 }
