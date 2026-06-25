@@ -106,6 +106,33 @@
   align-self: end;
 }
 
+.ctrip-standard-shipping-choice {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
+}
+
+.ctrip-standard-shipping-choice__title {
+  flex: 0 0 auto;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.ctrip-standard-shipping-choice__actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .user-list-filter {
   grid-template-columns: repeat(2, minmax(220px, 320px)) auto;
 }
@@ -725,6 +752,11 @@
   font-weight: 700;
 }
 
+.ctrip-standard-table .license-translation-order-number strong,
+.ctrip-standard-table .license-translation-order-number span {
+  color: #111827;
+}
+
 .license-translation-order-info-table {
   width: 100%;
   display: grid;
@@ -779,6 +811,18 @@
 .ctrip-standard-content-table dt {
   border-right: 0;
   padding-left: 0;
+}
+
+.ctrip-standard-content-table dt,
+.ctrip-standard-content-table dd {
+  color: #111827;
+}
+
+.ctrip-standard-payment-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
 }
 
 .license-translation-info {

@@ -127,7 +127,7 @@ const App: React.FC = () => {
         <Route element={<ProtectedLicenseOfficerLayout currentUser={currentUser} onLogout={handleLogout} />}>
           <Route
             path="/license-officer"
-            element={<Navigate to="/license-officer/orders/chinese-translation" replace />}
+            element={<Navigate to="/license-officer/pages/login" replace />}
           />
           <Route path="/license-officer/orders/chinese-translation" element={<ChineseTranslationOrders />} />
           <Route path="/license-officer/orders/chinese-translation/docx/:orderId" element={<DomesticLicenseTranslationEditor />} />

@@ -9,21 +9,16 @@ const PRODUCTION_VISIBLE_STATUSES = new Set<Order['status']>([
   'shipped',
   'completed',
 ]);
-const USER_SUBMITTED_REMARKS = new Set(['\u7528\u6237\u7aef\u63d0\u4ea4', '\u4ee3\u7406\u7aef\u63d0\u4ea4']);
-const USER_SUBMITTED_OPERATORS = new Set(['\u7528\u6237\u7aef', '\u4ee3\u7406\u7aef']);
-
 const hasProductionLog = (order: Order) => order.logs.some((log) => log.operator === PRODUCTION_OPERATOR);
-const hasUserSubmittedMarker = (order: Order) =>
-  USER_SUBMITTED_REMARKS.has(order.remark) ||
-  order.logs.some((log) => USER_SUBMITTED_OPERATORS.has(log.operator) || log.action.includes('\u7528\u6237\u7aef') || log.action.includes('\u4ee3\u7406\u7aef'));
 
 export const isChineseTranslationOrder = (order: Order) =>
-  order.productName.trim() === CHINESE_TRANSLATION_PRODUCT_TITLE;
+  order.productName.trim() === CHINESE_TRANSLATION_PRODUCT_TITLE ||
+  order.productCategory === 'domestic_license' ||
+  Boolean(order.domesticLicenseInfo);
 
 export const isProductionVisibleChineseTranslationOrder = (order: Order) => {
   if (
     !isChineseTranslationOrder(order) ||
-    !hasUserSubmittedMarker(order) ||
     order.status === 'pending_review' ||
     order.status === 'rejected'
   ) {

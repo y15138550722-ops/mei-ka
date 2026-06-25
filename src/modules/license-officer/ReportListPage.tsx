@@ -309,7 +309,7 @@ const ReportListPage: React.FC = () => {
   const tabClass = (tab: ReportTab) =>
     `report-list-toolbar__tab ${activeTab === tab ? 'report-list-toolbar__tab--active' : ''}`;
 
-  const renderReportValue = (value: number) => (value > 0 ? value : '--');
+  const renderReportValue = (value: number) => (value > 0 ? value : '-');
 
   const renderTranslationProductionTable = () => (
     <div className="license-translation-table-wrap report-statistics-table-wrap">
@@ -356,9 +356,9 @@ const ReportListPage: React.FC = () => {
           {orderCountRows.map((row, idx) => (
             <tr key={idx}>
               <td>{row.channelLabel}</td>
-              <td>{row.nonStandardCount > 0 ? row.nonStandardCount : ''}</td>
-              <td>{row.notaryCount > 0 ? row.notaryCount : ''}</td>
-              <td>{row.standardCount}</td>
+              <td>{renderReportValue(row.nonStandardCount)}</td>
+              <td>{renderReportValue(row.notaryCount)}</td>
+              <td>{renderReportValue(row.standardCount)}</td>
             </tr>
           ))}
         </tbody>
@@ -379,7 +379,7 @@ const ReportListPage: React.FC = () => {
           {ctripOrderRows.map((row, idx) => (
             <tr key={idx}>
               <td>{row.rowLabel}</td>
-              <td>{row.count}</td>
+              <td>{renderReportValue(row.count)}</td>
             </tr>
           ))}
         </tbody>
