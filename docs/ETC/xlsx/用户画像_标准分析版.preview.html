@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>用户画像_标准分析版.xlsx</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #eef3f8;
+        --panel: #ffffff;
+        --panel-strong: #f7fafc;
+        --border: #d8e1ea;
+        --text: #17212b;
+        --muted: #5c6b79;
+        --accent: #1d7a6f;
+        --accent-soft: #ddf3ef;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background:
+          linear-gradient(180deg, rgba(29, 122, 111, 0.07), transparent 240px),
+          var(--bg);
+        color: var(--text);
+        font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      }
+
+      body {
+        padding: 24px;
+      }
+
+      .preview-shell {
+        width: min(1280px, 100%);
+        margin: 0 auto;
+        background: var(--panel);
+        border: 1px solid rgba(216, 225, 234, 0.9);
+        border-radius: 18px;
+        box-shadow: 0 28px 80px rgba(23, 33, 43, 0.12);
+        overflow: hidden;
+      }
+
+      .preview-head {
+        padding: 28px 32px 20px;
+        border-bottom: 1px solid var(--border);
+        background:
+          linear-gradient(135deg, rgba(29, 122, 111, 0.08), rgba(255, 255, 255, 0.92)),
+          var(--panel);
+      }
+
+      .preview-head h1 {
+        margin: 0;
+        font-size: 22px;
+        line-height: 1.3;
+      }
+
+      .preview-head p {
+        margin: 10px 0 0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.7;
+      }
+
+      .sheet-tabs {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        padding: 18px 24px 0;
+        background: var(--panel);
+      }
+
+      .sheet-tab {
+        appearance: none;
+        border: 1px solid var(--border);
+        background: var(--panel-strong);
+        color: var(--muted);
+        border-radius: 999px;
+        padding: 8px 14px;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, transform 160ms ease;
+      }
+
+      .sheet-tab:hover {
+        transform: translateY(-1px);
+      }
+
+      .sheet-tab.is-active {
+        background: var(--accent-soft);
+        border-color: rgba(29, 122, 111, 0.28);
+        color: var(--accent);
+      }
+
+      .sheet-panels {
+        padding: 20px 24px 24px;
+      }
+
+      .sheet-panel {
+        display: none;
+      }
+
+      .sheet-panel.is-active {
+        display: block;
+      }
+
+      .sheet-panel__meta {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 14px;
+      }
+
+      .sheet-panel__meta h2 {
+        margin: 0;
+        font-size: 17px;
+      }
+
+      .sheet-panel__meta span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .sheet-table-wrap {
+        overflow: auto;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: #fcfdfe;
+      }
+
+      .sheet-table {
+        width: 100%;
+        min-width: 720px;
+        border-collapse: collapse;
+        table-layout: auto;
+      }
+
+      .sheet-table th,
+      .sheet-table td {
+        border: 1px solid var(--border);
+        padding: 9px 10px;
+        text-align: left;
+        vertical-align: top;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .sheet-table th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: #edf4f3;
+        color: #173e3a;
+        font-weight: 700;
+      }
+
+      .sheet-empty {
+        margin: 0;
+        padding: 18px;
+        border: 1px dashed var(--border);
+        border-radius: 12px;
+        color: var(--muted);
+        background: #fbfcfd;
+      }
+
+      @media (max-width: 768px) {
+        body {
+          padding: 12px;
+        }
+
+        .preview-shell {
+          border-radius: 14px;
+        }
+
+        .preview-head,
+        .sheet-panels {
+          padding-left: 16px;
+          padding-right: 16px;
+        }
+
+        .sheet-tabs {
+          padding: 14px 16px 0;
+        }
+
+        .sheet-panel__meta {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="preview-shell">
+      <header class="preview-head">
+        <h1>用户画像_标准分析版.xlsx</h1>
+        <p>Static workbook preview generated from the source spreadsheet for direct viewing in this workspace.</p>
+      </header>
+      <nav class="sheet-tabs" aria-label="Workbook sheets"><button class="sheet-tab is-active" type="button" data-target="sheet-0">清单</button><button class="sheet-tab" type="button" data-target="sheet-1">01_画像总览</button><button class="sheet-tab" type="button" data-target="sheet-2">02_指标体系</button><button class="sheet-tab" type="button" data-target="sheet-3">03_分群标签</button><button class="sheet-tab" type="button" data-target="sheet-4">04_看板模板</button><button class="sheet-tab" type="button" data-target="sheet-5">05_数据口径</button></nav>
+      <div class="sheet-panels">
+        <section class="sheet-panel is-active" id="sheet-0">
+          <div class="sheet-panel__meta">
+            <h2>清单</h2>
+            <span>17 rows x 9 columns</span>
+          </div>
+          <div class="sheet-table-wrap"><table class="sheet-table"><tr><th>字段名称</th><th>说明</th><th>用途</th><th></th><th></th><th></th><th></th><th></th><th></th></tr><tr><td>年龄</td><td>根据出生日期计算</td><td>年龄分布、年龄段占比</td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>年龄段</td><td>如18-24、25-34、35-44</td><td>用户分层分析</td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>性别</td><td>男/女</td><td>性别占比</td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>国籍</td><td>中国/其他</td><td>国籍分布</td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>驾照签发省份/城市</td><td>江苏省/苏州市</td><td>驾照来源地图</td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>收货省份/城市</td><td>江苏省/苏州市</td><td>收货热力图、履约区域分析</td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>驾照类型</td><td>A、B、C等</td><td>驾照类型分布</td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>初次领证年份</td><td>如2017</td><td>驾龄分布</td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>驾龄</td><td>当前年份 - 初领年份</td><td>驾龄画像</td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>有限期限</td><td>6年/10年</td><td>证件生命周期分析</td><td></td><td></td><td></td><td></td><td></td><td> </td></tr><tr><td>订单渠道</td><td>携程等</td><td>渠道贡献分析</td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>订单类型</td><td>小白本、公证等</td><td>产品类型占比</td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>是否加急订单</td><td>是/否</td><td>加急订单占比</td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>下单时间</td><td>订单发起时间</td><td>下单时段趋势</td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>是否翻译</td><td>是/否</td><td>处理进度看板</td><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>是否发货</td><td>是/否</td><td>发货转化率</td><td></td><td></td><td></td><td></td><td></td><td></td></tr></table></div>
+        </section>
+      
+        <section class="sheet-panel" id="sheet-1">
+          <div class="sheet-panel__meta">
+            <h2>01_画像总览</h2>
+            <span>21 rows x 6 columns</span>
+          </div>
+          <div class="sheet-table-wrap"><table class="sheet-table"><tr><th colspan="6">用户画像分析总览</th></tr><tr><td colspan="6">核心指标</td></tr><tr><td>指标</td><td>结果</td><td>说明</td><td>后续动作</td><td></td><td></td></tr><tr><td>画像字段数</td><td>16</td><td>覆盖基础属性、证件、订单、履约</td><td>字段口径标准化</td><td></td><td></td></tr><tr><td>分析模块数</td><td>4</td><td>形成完整用户画像链路</td><td>接入明细数据</td><td></td><td></td></tr><tr><td>高优先级字段</td><td>11</td><td>建议优先接入</td><td>先做订单行为与履约看板</td><td></td><td></td></tr><tr><td>建议看板指标</td><td>9</td><td>含结构、地域、渠道、履约</td><td>按日报/周报/月报分层输出</td><td></td><td></td></tr><tr><td colspan="6">标准画像分析路径</td></tr><tr><td>步骤</td><td>工作内容</td><td>产出</td><td></td><td></td><td></td></tr><tr><td>1. 数据接入</td><td>订单明细、用户资料、驾照信息、物流状态统一进入明细表</td><td>可分析数据底表</td><td></td><td></td><td></td></tr><tr><td>2. 字段标准化</td><td>清洗年龄、省市、渠道、订单类型、是否类状态</td><td>统一口径指标字典</td><td></td><td></td><td></td></tr><tr><td>3. 标签生成</td><td>生成年龄段、驾龄段、异地办理、加急偏好等标签</td><td>用户标签体系</td><td></td><td></td><td></td></tr><tr><td>4. 分群识别</td><td>形成新手办理、成熟自驾、加急高敏、跨区域履约等用户群</td><td>可运营用户群</td><td></td><td></td><td></td></tr><tr><td>5. 看板监控</td><td>输出渠道贡献、产品结构、履约转化、区域热力和时段趋势</td><td>日常运营看板</td><td></td><td></td><td></td></tr><tr><td>6. 运营动作</td><td>匹配投放、客服、排班、履约和复购策略</td><td>业务动作清单</td><td></td><td></td><td></td></tr><tr><td colspan="6">模块成熟度与使用场景</td></tr><tr><td>模块</td><td>字段范围</td><td>画像目的</td><td>推荐图表</td><td>运营决策</td><td>更新频率</td></tr><tr><td>用户基础属性</td><td>年龄、年龄段、性别、国籍</td><td>识别核心人群结构，作为所有分群与交叉分析的基础。</td><td>年龄段柱状图、性别占比、国籍分布</td><td>明确主力年龄层与潜在服务语言/材料需求。</td><td>月度</td></tr><tr><td>证件属性</td><td>驾照签发省份/城市、驾照类型、初次领证年份、驾龄、有限期限</td><td>理解驾照来源、类型和生命周期，识别高价值办理场景。</td><td>签发地地图、驾照类型分布、驾龄分布</td><td>优化材料审核策略、续期提醒和区域资源投放。</td><td>月度/季度</td></tr><tr><td>订单行为</td><td>订单渠道、订单类型、是否加急订单、下单时间</td><td>衡量获客来源、产品偏好、服务紧急程度与下单节奏。</td><td>渠道贡献、产品结构、加急率、下单时段热力</td><td>优化渠道预算、排班计划和产品组合。</td><td>日/周/月</td></tr><tr><td>履约属性</td><td>收货省份/城市、是否翻译、是否发货</td><td>追踪履约区域、生产节点和最终交付转化。</td><td>收货地热力图、翻译完成率、发货转化率</td><td>发现履约瓶颈、区域时效差异和异常订单。</td><td>日/周</td></tr></table></div>
+        </section>
+      
+        <section class="sheet-panel" id="sheet-2">
+          <div class="sheet-panel__meta">
+            <h2>02_指标体系</h2>
+            <span>18 rows x 8 columns</span>
+          </div>
+          <div class="sheet-table-wrap"><table class="sheet-table"><tr><th colspan="8">用户画像指标体系</th></tr><tr><td>字段名称</td><td>模块</td><td>指标类型</td><td>字段说明</td><td>主要分析用途</td><td>建议数据来源</td><td>优先级</td><td>数据治理建议</td></tr><tr><td>年龄</td><td>用户基础属性</td><td>人口统计</td><td>根据出生日期计算</td><td>年龄分布、年龄段占比</td><td>出生日期、下单时间或当前日期</td><td>高</td><td>用真实出生日期计算，避免手填年龄失真</td></tr><tr><td>年龄段</td><td>用户基础属性</td><td>分层标签</td><td>按年龄区间生成</td><td>用户分层分析</td><td>年龄</td><td>高</td><td>建议统一分箱规则，便于跨周期对比</td></tr><tr><td>性别</td><td>用户基础属性</td><td>人口统计</td><td>男/女/未知</td><td>性别占比</td><td>用户注册资料或证件信息</td><td>中</td><td>保留未知值，避免强制归类</td></tr><tr><td>国籍</td><td>用户基础属性</td><td>人口统计</td><td>中国/其他国家或地区</td><td>国籍分布</td><td>证件资料或订单填写信息</td><td>中</td><td>用于识别跨境/外籍用户服务需求</td></tr><tr><td>驾照签发省份/城市</td><td>证件属性</td><td>地理来源</td><td>驾照签发地</td><td>驾照来源地图</td><td>驾照信息</td><td>高</td><td>建议省市拆分为两个字段，便于地图分析</td></tr><tr><td>收货省份/城市</td><td>履约属性</td><td>地理需求</td><td>订单收货地址</td><td>收货热力图、履约区域分析</td><td>物流地址</td><td>高</td><td>建议与驾照签发地做交叉，识别异地办理</td></tr><tr><td>驾照类型</td><td>证件属性</td><td>产品资格</td><td>A、B、C 等类型</td><td>驾照类型分布</td><td>驾照信息</td><td>高</td><td>可与订单类型交叉，识别主要服务客群</td></tr><tr><td>初次领证年份</td><td>证件属性</td><td>生命周期</td><td>例如 2017</td><td>驾龄分布</td><td>驾照信息</td><td>中</td><td>需校验年份范围，避免未来年份或异常早期年份</td></tr><tr><td>驾龄</td><td>证件属性</td><td>生命周期</td><td>当前年份 - 初次领证年份</td><td>驾龄画像</td><td>初次领证年份</td><td>中</td><td>建议用公式派生，不作为人工录入字段</td></tr><tr><td>有限期限</td><td>证件属性</td><td>生命周期</td><td>6 年、10 年等</td><td>证件生命周期分析</td><td>驾照信息</td><td>中</td><td>可辅助提醒续期、到期风险和服务窗口</td></tr><tr><td>订单渠道</td><td>订单行为</td><td>获客来源</td><td>携程等渠道</td><td>渠道贡献分析</td><td>订单来源</td><td>高</td><td>要保留渠道编码与渠道名称映射表</td></tr><tr><td>订单类型</td><td>订单行为</td><td>产品偏好</td><td>小白本、公证等</td><td>产品类型占比</td><td>订单明细</td><td>高</td><td>用于观察产品结构、交叉销售机会</td></tr><tr><td>是否加急订单</td><td>订单行为</td><td>服务偏好</td><td>是/否</td><td>加急订单占比</td><td>订单明细</td><td>高</td><td>可和渠道/城市交叉，判断履约压力</td></tr><tr><td>下单时间</td><td>订单行为</td><td>时间行为</td><td>订单发起时间</td><td>下单时段趋势</td><td>订单明细</td><td>高</td><td>建议保留标准时间戳，同时派生小时段和星期</td></tr><tr><td>是否翻译</td><td>履约进度</td><td>流程状态</td><td>是/否</td><td>处理进度看板</td><td>生产流程记录</td><td>高</td><td>用于监控生产节点转化</td></tr><tr><td>是否发货</td><td>履约进度</td><td>流程状态</td><td>是/否</td><td>发货转化率</td><td>物流/发货记录</td><td>高</td><td>建议与下单时间计算履约时效</td></tr></table></div>
+        </section>
+      
+        <section class="sheet-panel" id="sheet-3">
+          <div class="sheet-panel__meta">
+            <h2>03_分群标签</h2>
+            <span>15 rows x 6 columns</span>
+          </div>
+          <div class="sheet-table-wrap"><table class="sheet-table"><tr><th colspan="6">用户分群与标签规则</th></tr><tr><td>用户群</td><td>识别规则</td><td>画像特征</td><td>运营策略</td><td>建议监控指标</td><td></td></tr><tr><td>新手出境办理型</td><td>年龄 18-34，驾龄 0-5 年，订单类型为小白本/翻译</td><td>年轻、首次办理概率高、需要清晰指引</td><td>突出材料清单、进度提醒、在线客服</td><td>转化率、咨询率、资料补交率</td><td></td></tr><tr><td>成熟自驾需求型</td><td>年龄 35-54，驾龄 6 年以上，驾照类型 C 或以上</td><td>决策效率高，重视稳定和履约时效</td><td>强调标准流程、预计完成时间和可靠交付</td><td>复购率、准时发货率、客单价</td><td></td></tr><tr><td>跨区域履约型</td><td>驾照签发地与收货地不同省/市</td><td>异地办理需求明显，物流路径更复杂</td><td>优化地址校验、物流时效提示和异常预警</td><td>异地占比、物流时长、异常率</td><td></td></tr><tr><td>加急高敏型</td><td>是否加急订单 = 是</td><td>时间敏感，对进度透明度要求高</td><td>提供加急 SLA、主动通知和优先处理队列</td><td>加急率、加急准时率、投诉率</td><td></td></tr><tr><td>渠道导流型</td><td>来自特定渠道且订单量集中</td><td>对平台规则和页面信息依赖高</td><td>按渠道定制落地页、话术和售后说明</td><td>渠道订单量、渠道转化率、退款率</td><td></td></tr><tr><td>流程待推进型</td><td>已下单但未翻译或未发货</td><td>处于履约节点等待状态</td><td>建立节点看板、超时提醒和任务分派</td><td>翻译完成率、发货转化率、超时订单数</td><td></td></tr><tr><td colspan="6">标签生产规则示例</td></tr><tr><td>标签名称</td><td>规则口径</td><td>标签值</td><td>用途</td><td>刷新频率</td><td>风险提示</td></tr><tr><td>年龄段</td><td>按年龄分箱，年龄来自出生日期与当前日期</td><td>18-24/25-34/35-44/45+</td><td>人群结构与产品偏好</td><td>月度</td><td>出生日期缺失会导致未知值</td></tr><tr><td>驾龄段</td><td>当前年份 - 初次领证年份</td><td>0-2/3-5/6-10/10+</td><td>识别新手与成熟驾驶用户</td><td>年度</td><td>初次领证年份异常会放大误差</td></tr><tr><td>异地办理</td><td>驾照签发省市与收货省市不一致</td><td>是/否</td><td>识别跨区域履约需求</td><td>每日</td><td>省市口径需标准化</td></tr><tr><td>加急偏好</td><td>历史或当前订单存在加急</td><td>是/否</td><td>识别时间敏感用户</td><td>每日</td><td>加急字段需统一是/否</td></tr><tr><td>流程状态</td><td>是否翻译、是否发货组合</td><td>待翻译/待发货/已发货</td><td>生产履约看板</td><td>每日</td><td>缺少节点时间时无法算时效</td></tr></table></div>
+        </section>
+      
+        <section class="sheet-panel" id="sheet-4">
+          <div class="sheet-panel__meta">
+            <h2>04_看板模板</h2>
+            <span>22 rows x 6 columns</span>
+          </div>
+          <div class="sheet-table-wrap"><table class="sheet-table"><tr><th colspan="6">画像看板模板</th></tr><tr><td>看板区域</td><td>指标名称</td><td>口径说明</td><td>推荐呈现</td><td>依赖字段</td><td>业务用途</td></tr><tr><td>核心人群</td><td>年龄段分布</td><td>按年龄段统计订单用户数与占比</td><td>柱状图 + 占比标签</td><td>年龄/年龄段</td><td>识别主力用户层</td></tr><tr><td>地域来源</td><td>驾照签发地 Top 10</td><td>按省/市统计驾照来源</td><td>地图或横向条形图</td><td>驾照签发省份/城市</td><td>指导区域运营与材料审核</td></tr><tr><td>履约区域</td><td>收货地 Top 10</td><td>按省/市统计收货订单</td><td>热力图或条形图</td><td>收货省份/城市</td><td>判断物流与履约压力</td></tr><tr><td>产品结构</td><td>订单类型占比</td><td>不同产品类型订单占比</td><td>环形图或堆叠条形图</td><td>订单类型</td><td>观察产品组合</td></tr><tr><td>渠道贡献</td><td>订单渠道贡献</td><td>不同渠道订单数、占比、加急率</td><td>柱状图 + 表格</td><td>订单渠道、是否加急订单</td><td>优化渠道投放</td></tr><tr><td>时段节奏</td><td>下单时间热力</td><td>按小时/星期统计下单密度</td><td>热力矩阵</td><td>下单时间</td><td>排班与客服响应</td></tr><tr><td>服务偏好</td><td>加急订单占比</td><td>加急订单数 / 总订单数</td><td>KPI 卡 + 趋势线</td><td>是否加急订单</td><td>评估加急服务需求</td></tr><tr><td>履约转化</td><td>翻译完成率</td><td>已翻译订单数 / 总订单数</td><td>漏斗或进度条</td><td>是否翻译</td><td>监控生产节点</td></tr><tr><td>交付转化</td><td>发货转化率</td><td>已发货订单数 / 总订单数</td><td>漏斗或进度条</td><td>是否发货</td><td>监控最终交付</td></tr><tr><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td colspan="3">推荐首屏布局</td><td></td><td></td><td></td></tr><tr><td>位置</td><td>模块</td><td>内容</td><td></td><td></td><td></td></tr><tr><td>左上</td><td>KPI 卡</td><td>总订单数、加急率、翻译完成率、发货转化率</td><td></td><td></td><td></td></tr><tr><td>右上</td><td>渠道/产品结构</td><td>渠道贡献与订单类型占比</td><td></td><td></td><td></td></tr><tr><td>中部</td><td>人群与地域</td><td>年龄段、性别、国籍、驾龄段、签发地与收货地 Top 区域</td><td></td><td></td><td></td></tr><tr><td>底部</td><td>履约与时间</td><td>下单 -&gt; 翻译 -&gt; 发货漏斗，以及按日/周/月查看订单节奏</td><td></td><td></td><td></td></tr><tr><td>筛选器</td><td>通用筛选</td><td>时间范围、渠道、订单类型、省市、是否加急</td><td></td><td></td><td></td></tr><tr><td>预警规则</td><td>异常监控</td><td>加急订单超时、已翻译未发货、渠道异常波动、重点城市履约积压</td><td></td><td></td><td></td></tr></table></div>
+        </section>
+      
+        <section class="sheet-panel" id="sheet-5">
+          <div class="sheet-panel__meta">
+            <h2>05_数据口径</h2>
+            <span>22 rows x 6 columns</span>
+          </div>
+          <div class="sheet-table-wrap"><table class="sheet-table"><tr><th colspan="6">数据口径与质量检查</th></tr><tr><td></td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>检查对象</td><td>常见问题</td><td>分析影响</td><td>风险等级</td><td>建议处理方式</td><td></td></tr><tr><td>出生日期/年龄</td><td>缺失、未来日期、年龄小于 18 或大于 80</td><td>影响年龄段分布和人群判断</td><td>高</td><td>用出生日期派生年龄；异常值进入待核查清单</td><td></td></tr><tr><td>省市字段</td><td>省市混填、简称不统一、空格/错别字</td><td>影响地图和区域排行</td><td>高</td><td>拆分省/市并维护标准行政区映射</td><td></td></tr><tr><td>订单渠道</td><td>渠道名不统一、同一渠道多个写法</td><td>影响渠道贡献分析</td><td>高</td><td>建立渠道字典，保留渠道编码</td><td></td></tr><tr><td>订单类型</td><td>类型边界不清，小白本/公证/翻译混用</td><td>影响产品结构分析</td><td>中</td><td>建立产品分类表，订单记录只存标准枚举</td><td></td></tr><tr><td>是否类字段</td><td>是/否、Y/N、1/0 混用</td><td>影响转化率口径</td><td>高</td><td>统一为是/否，并保留原始值字段备查</td><td></td></tr><tr><td>下单时间</td><td>时区不一致、日期文本无法识别</td><td>影响趋势、时段和 SLA 分析</td><td>高</td><td>统一北京时间时间戳，派生日期/星期/小时</td><td></td></tr><tr><td>初次领证年份</td><td>未来年份、早于合理范围、文本格式</td><td>影响驾龄计算</td><td>中</td><td>限制为整数年份，并做范围校验</td><td></td></tr><tr><td>履约状态</td><td>翻译、发货状态缺少节点时间</td><td>难以定位流程瓶颈</td><td>中</td><td>补充翻译完成时间、发货时间、物流单号</td><td></td></tr><tr><td colspan="6">建议明细数据表字段</td></tr><tr><td>字段</td><td>类型</td><td>是否必填</td><td>示例</td><td>说明</td><td>派生字段</td></tr><tr><td>order_id</td><td>文本</td><td>是</td><td>ORD202605210001</td><td>订单唯一标识</td><td>否</td></tr><tr><td>user_id</td><td>文本</td><td>建议</td><td>U10001</td><td>用户唯一标识</td><td>否</td></tr><tr><td>birth_date</td><td>日期</td><td>建议</td><td>1992-08-15</td><td>出生日期</td><td>年龄、年龄段</td></tr><tr><td>license_issue_city</td><td>文本</td><td>建议</td><td>江苏省苏州市</td><td>驾照签发地</td><td>签发省、签发市</td></tr><tr><td>delivery_city</td><td>文本</td><td>是</td><td>上海市浦东新区</td><td>收货地</td><td>收货省、收货市</td></tr><tr><td>order_channel</td><td>枚举</td><td>是</td><td>携程</td><td>获客渠道</td><td>渠道分组</td></tr><tr><td>order_type</td><td>枚举</td><td>是</td><td>小白本</td><td>产品类型</td><td>产品大类</td></tr><tr><td>is_urgent</td><td>布尔/枚举</td><td>是</td><td>是</td><td>是否加急</td><td>加急偏好</td></tr><tr><td>order_time</td><td>时间戳</td><td>是</td><td>2026-05-21 13:36</td><td>下单时间</td><td>日期、星期、小时</td></tr></table></div>
+        </section>
+      </div>
+    </main>
+    <script>
+      const tabs = Array.from(document.querySelectorAll('.sheet-tab'));
+      const panels = Array.from(document.querySelectorAll('.sheet-panel'));
+      tabs.forEach((tab) => {
+        tab.addEventListener('click', () => {
+          const targetId = tab.getAttribute('data-target');
+          tabs.forEach((item) => item.classList.toggle('is-active', item === tab));
+          panels.forEach((panel) => panel.classList.toggle('is-active', panel.id === targetId));
+        });
+      });
+    </script>
+  </body>
+</html>

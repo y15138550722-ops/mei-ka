@@ -1,0 +1,191 @@
+.license-officer-layout {
+  min-height: 100vh;
+  display: flex;
+  background: #f5f7fb;
+}
+
+.license-officer-sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: 232px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #e5e7eb;
+  background: #ffffff;
+  z-index: 100;
+  transition: width 180ms ease;
+}
+
+.license-officer-brand {
+  height: 72px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 18px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.license-officer-sidebar-toggle {
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  border-radius: 6px;
+  background: #f3f6fb;
+  color: #334155;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.license-officer-sidebar-toggle:hover {
+  background: #eaf2ff;
+  color: #1d4ed8;
+}
+
+.license-officer-brand__logo {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.license-officer-brand strong,
+.license-officer-user strong {
+  display: block;
+  color: #111827;
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.license-officer-brand span,
+.license-officer-user span {
+  display: block;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.license-officer-menu {
+  flex: 1;
+  min-height: 0;
+  padding: 14px 10px;
+  overflow-y: auto;
+}
+
+.license-officer-menu__item {
+  width: 100%;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 14px;
+  border-radius: 6px;
+  background: transparent;
+  color: #4b5563;
+  font-size: 14px;
+  text-align: left;
+}
+
+.license-officer-menu__item:hover {
+  background: #f3f6fb;
+  color: #1d4ed8;
+}
+
+.license-officer-menu__item--parent {
+  font-weight: 700;
+}
+
+.license-officer-menu__item--parent > span:last-child {
+  transition: transform 160ms ease;
+}
+
+.license-officer-menu__item--open > span:last-child {
+  transform: rotate(90deg);
+}
+
+.license-officer-submenu {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0 8px;
+}
+
+.license-officer-menu__item--child {
+  justify-content: flex-start;
+  padding-left: 32px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.license-officer-menu__item--active {
+  background: #eaf2ff;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.license-officer-sidebar__footer {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-top: 1px solid #eef2f7;
+}
+
+.license-officer-user {
+  padding: 10px 8px 12px;
+}
+
+.license-officer-sidebar__footer button {
+  height: 34px;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.license-officer-sidebar__footer button:hover {
+  background: #eef2ff;
+  color: #1d4ed8;
+}
+
+.license-officer-sidebar__footer .license-officer-sidebar__logout {
+  color: #dc2626;
+}
+
+.license-officer-content {
+  flex: 1;
+  min-width: 0;
+  margin-left: 232px;
+  transition: margin-left 180ms ease;
+}
+
+.license-officer-layout--collapsed .license-officer-sidebar {
+  width: 64px;
+}
+
+.license-officer-layout--collapsed .license-officer-content {
+  margin-left: 64px;
+}
+
+.license-officer-layout--collapsed .license-officer-brand {
+  justify-content: center;
+  padding: 0 10px;
+}
+
+.license-officer-layout--collapsed .license-officer-brand > div:not(.license-officer-brand__logo),
+.license-officer-layout--collapsed .license-officer-menu,
+.license-officer-layout--collapsed .license-officer-sidebar__footer {
+  display: none;
+}
+
+.license-officer-layout--collapsed .license-officer-sidebar-toggle {
+  position: absolute;
+  top: 88px;
+  left: 18px;
+  margin-left: 0;
+}

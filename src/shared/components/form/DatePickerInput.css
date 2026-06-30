@@ -1,0 +1,177 @@
+.agent-date-field {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  line-height: normal;
+}
+
+.agent-date-trigger {
+  width: 100%;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 11px 0 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 13px;
+  text-align: left;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.agent-date-trigger:hover {
+  border-color: #38bdf8;
+}
+
+.agent-date-trigger--open {
+  border-color: #38a7f3;
+  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.14);
+}
+
+.agent-date-trigger--empty {
+  color: #94a3b8;
+}
+
+.agent-date-trigger__value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-date-trigger__icon {
+  position: relative;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid #94a3b8;
+  border-radius: 3px;
+}
+
+.agent-date-trigger__icon::before {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 0;
+  width: 100%;
+  height: 1.5px;
+  background: #94a3b8;
+}
+
+.agent-date-trigger__icon::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: 3px;
+  width: 6px;
+  height: 4px;
+  border-left: 1.5px solid #94a3b8;
+  border-right: 1.5px solid #94a3b8;
+}
+
+.agent-date-picker {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 120;
+  width: min(292px, calc(100vw - 32px));
+  padding: 10px;
+  border: 1px solid #dbe5f0;
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+}
+
+.agent-date-picker__header {
+  display: grid;
+  grid-template-columns: 66px minmax(0, 1fr) 66px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.agent-date-picker__header strong {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.agent-date-picker__nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.agent-date-picker__nav button {
+  width: 28px;
+  height: 26px;
+  border-radius: 4px;
+  background: transparent;
+  color: #64748b;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.agent-date-picker__nav button:hover {
+  background: #eff6ff;
+  color: #0284c7;
+}
+
+.agent-date-picker__week,
+.agent-date-picker__days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.agent-date-picker__week {
+  margin-bottom: 4px;
+  color: #64748b;
+  font-size: 13px;
+  text-align: center;
+}
+
+.agent-date-picker__week span {
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.agent-date-picker__days {
+  gap: 2px 0;
+}
+
+.agent-date-picker__day {
+  height: 30px;
+  border-radius: 4px;
+  background: transparent;
+  color: #334155;
+  font-size: 13px;
+}
+
+.agent-date-picker__day:hover {
+  background: #e0f2fe;
+  color: #0284c7;
+}
+
+.agent-date-picker__day--muted {
+  color: #cbd5e1;
+}
+
+.agent-date-picker__day--today {
+  color: #0ea5e9;
+  font-weight: 700;
+}
+
+.agent-date-picker__day--selected,
+.agent-date-picker__day--selected:hover {
+  background: #0ea5e9;
+  color: #ffffff;
+  font-weight: 700;
+}
