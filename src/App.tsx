@@ -81,6 +81,8 @@ const ProtectedLicenseOfficerLayout: React.FC<ProtectedLicenseOfficerLayoutProps
 };
 
 const LARGE_LOCAL_DATA_STORAGE_KEYS = [
+  'meika-products',
+  'meika-products-next-id',
   'meika-orders',
   'meika-order-data-version',
   'meika-notary-office-orders',
