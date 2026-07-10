@@ -14,6 +14,9 @@ const workspaceGlobalConfig = path.join(
   "Data"
 );
 const extraArgs = process.argv.slice(2);
+const skipLocalPrep =
+  process.env.VERCEL_SKIP_LOCAL_PREP === "1" ||
+  process.env.npm_lifecycle_event === "deploy:vercel";
 
 function stripDeadProxyVars(sourceEnv) {
   const nextEnv = { ...sourceEnv };
@@ -109,11 +112,15 @@ function buildVercelArgs() {
   return [...args, ...extraArgs];
 }
 
-console.log("Running Vercel deployment checks...");
-run(process.execPath, [path.join(root, "scripts", "check-vercel-deploy.mjs")]);
+if (skipLocalPrep) {
+  console.log("Using npm predeploy:vercel checks and build.");
+} else {
+  console.log("Running Vercel deployment checks...");
+  run(process.execPath, [path.join(root, "scripts", "check-vercel-deploy.mjs")]);
 
-console.log("Building production bundle...");
-runNpm(["run", "build"], { cwd: srcDir });
+  console.log("Building production bundle...");
+  runNpm(["run", "build"], { cwd: srcDir });
+}
 
 console.log("Deploying to Vercel production...");
 const vercelCli = findVercelCli();

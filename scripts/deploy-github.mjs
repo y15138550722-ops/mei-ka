@@ -34,6 +34,7 @@ const options = {
   trackedOnly: false,
   dryRun: false,
   safeCopy: false,
+  syncDefaultBranch: true,
 };
 
 for (let index = 0; index < args.length; index += 1) {
@@ -74,6 +75,11 @@ for (let index = 0; index < args.length; index += 1) {
 
   if (arg === '--safe-copy') {
     options.safeCopy = true;
+    continue;
+  }
+
+  if (arg === '--no-sync-default-branch') {
+    options.syncDefaultBranch = false;
     continue;
   }
 
@@ -156,6 +162,24 @@ const resolveGitCommand = () => {
 
 const gitCommand = resolveGitCommand();
 let githubAuthArgs;
+let githubRepoInfo;
+
+const resolveGhCommand = () => {
+  const candidates = [
+    process.env.GH_EXE,
+    'gh',
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (commandWorks(candidate, ['--version'])) {
+      return candidate;
+    }
+  }
+
+  return '';
+};
+
+const ghCommand = resolveGhCommand();
 
 const spawnWithFileCapture = (command, commandArgs, { cwd = root, env = process.env, input = '' } = {}) => {
   const captureDir = path.join(root, 'temp', '.deploy-captures');
@@ -218,7 +242,7 @@ const spawnWithFileCapture = (command, commandArgs, { cwd = root, env = process.
 const runCommand = (
   command,
   commandArgs,
-  { capture = false, allowFailure = false, cwd = root, env = process.env } = {},
+  { capture = false, allowFailure = false, cwd = root, env = process.env, input = '' } = {},
 ) => {
   const renderedCommand = renderCommand(command, commandArgs);
   console.log(`$ ${renderedCommand}`);
@@ -227,7 +251,7 @@ const runCommand = (
     return '';
   }
 
-  const result = spawnWithFileCapture(command, commandArgs, { cwd, env });
+  const result = spawnWithFileCapture(command, commandArgs, { cwd, env, input });
 
   if (!capture) {
     if (result.stdout) {
@@ -249,6 +273,20 @@ const runCommand = (
   }
 
   return capture ? result.stdout.trim() : '';
+};
+
+const runGh = (commandArgs, { capture = false, allowFailure = false, input = '' } = {}) => {
+  if (!ghCommand) {
+    throw new Error('GitHub CLI was not found. Install gh or set GH_EXE.');
+  }
+
+  return runCommand(ghCommand, commandArgs, {
+    capture,
+    allowFailure,
+    cwd: gitContext.workTree,
+    env: stripDeadProxyVars(process.env),
+    input,
+  });
 };
 
 const runNpm = (commandArgs) => {
@@ -351,6 +389,130 @@ const getGitHubAuthArgs = () => {
   const basic = Buffer.from(`${username}:${password}`, 'utf8').toString('base64');
   githubAuthArgs = ['-c', `http.extraHeader=Authorization: Basic ${basic}`];
   return githubAuthArgs;
+};
+
+const parseGitHubRepo = (remoteUrl) => {
+  const normalized = remoteUrl.trim().replace(/\.git$/i, '');
+  const match = normalized.match(/github\.com[:/]([^/]+\/[^/]+)$/i);
+  return match ? match[1] : '';
+};
+
+const getGitHubRepoInfo = () => {
+  if (githubRepoInfo) {
+    return githubRepoInfo;
+  }
+
+  const remoteUrl = runGit(['remote', 'get-url', options.remote], {
+    capture: true,
+    allowFailure: true,
+  });
+
+  const nameWithOwner = parseGitHubRepo(remoteUrl);
+  if (!nameWithOwner) {
+    githubRepoInfo = null;
+    return githubRepoInfo;
+  }
+
+  const defaultBranch =
+    ghCommand
+      ? JSON.parse(
+          runGh(
+            ['repo', 'view', nameWithOwner, '--json', 'defaultBranchRef,nameWithOwner'],
+            { capture: true },
+          ),
+        ).defaultBranchRef?.name
+      : 'main';
+
+  githubRepoInfo = {
+    nameWithOwner,
+    defaultBranch: defaultBranch || 'main',
+  };
+  return githubRepoInfo;
+};
+
+const ensureGitIdentity = () => {
+  const currentName = runGit(['config', '--local', '--get', 'user.name'], {
+    capture: true,
+    allowFailure: true,
+  });
+  const currentEmail = runGit(['config', '--local', '--get', 'user.email'], {
+    capture: true,
+    allowFailure: true,
+  });
+
+  if (currentName && currentEmail) {
+    return;
+  }
+
+  let fallbackName = currentName;
+  let fallbackEmail = currentEmail;
+
+  if (ghCommand) {
+    const authStatus = runGh(['auth', 'status'], { capture: true, allowFailure: true });
+    if (authStatus) {
+      const user = JSON.parse(runGh(['api', 'user', '--jq', '{login: .login, name: .name}'], { capture: true }));
+      fallbackName = fallbackName || user.login || user.name || 'github-actions[bot]';
+      fallbackEmail = fallbackEmail || `${user.login || 'github'}@users.noreply.github.com`;
+    }
+  }
+
+  fallbackName = fallbackName || 'Codex';
+  fallbackEmail = fallbackEmail || 'codex@local';
+
+  if (!currentName) {
+    runGit(['config', '--local', 'user.name', fallbackName]);
+  }
+
+  if (!currentEmail) {
+    runGit(['config', '--local', 'user.email', fallbackEmail]);
+  }
+};
+
+const syncDefaultBranchOnGitHub = (branch, headSha) => {
+  if (!options.syncDefaultBranch || options.dryRun) {
+    return;
+  }
+
+  const repoInfo = getGitHubRepoInfo();
+  if (!repoInfo || branch === repoInfo.defaultBranch) {
+    return;
+  }
+
+  const defaultRef = JSON.parse(
+    runGh(['api', `repos/${repoInfo.nameWithOwner}/git/ref/heads/${repoInfo.defaultBranch}`], { capture: true }),
+  );
+  const defaultSha = defaultRef.object.sha;
+  const headCommit = JSON.parse(
+    runGh(['api', `repos/${repoInfo.nameWithOwner}/git/commits/${headSha}`], { capture: true }),
+  );
+  const mergeMessage = `chore: sync ${branch} into ${repoInfo.defaultBranch}`;
+  const mergeCommit = JSON.parse(
+    runGh([
+      'api',
+      `repos/${repoInfo.nameWithOwner}/git/commits`,
+      '--method',
+      'POST',
+      '-f',
+      `message=${mergeMessage}`,
+      '-f',
+      `tree=${headCommit.tree.sha}`,
+      '-f',
+      `parents[]=${defaultSha}`,
+      '-f',
+      `parents[]=${headSha}`,
+    ], { capture: true }),
+  );
+
+  runGh([
+    'api',
+    `repos/${repoInfo.nameWithOwner}/git/refs/heads/${repoInfo.defaultBranch}`,
+    '--method',
+    'PATCH',
+    '-f',
+    `sha=${mergeCommit.sha}`,
+    '-F',
+    'force=false',
+  ]);
 };
 
 const clearStaleIndexLock = () => {
@@ -529,6 +691,7 @@ const deployOnce = () => {
   }
 
   runGit(['remote', 'get-url', options.remote], { capture: true });
+  ensureGitIdentity();
 
   if (options.build && !buildCompleted) {
     runNpm(['run', 'build']);
@@ -552,30 +715,10 @@ const deployOnce = () => {
     console.log('No staged changes to commit.');
   }
 
-  runGit(['fetch', options.remote, branch], { auth: true });
-
-  const remoteRef = `${options.remote}/${branch}`;
-  const remoteExists = runGit(['rev-parse', '--verify', remoteRef], {
-    capture: true,
-    allowFailure: true,
-  });
-
-  if (remoteExists) {
-    let { ahead, behind } = getAheadBehind(branch, remoteRef);
-
-    if (behind > 0) {
-      console.log(`Rebasing ${branch} onto ${remoteRef} before push...`);
-      runGit(['rebase', remoteRef]);
-      ({ ahead, behind } = getAheadBehind(branch, remoteRef));
-    }
-
-    if (ahead === 0 && behind === 0) {
-      console.log('Local branch is already in sync with GitHub.');
-    }
-  }
-
   runGit(['push', '-u', options.remote, branch], { auth: true });
   const head = runGit(['rev-parse', '--short', 'HEAD'], { capture: true });
+  const headFull = runGit(['rev-parse', 'HEAD'], { capture: true });
+  syncDefaultBranchOnGitHub(branch, headFull);
   if (options.dryRun) {
     console.log(`GitHub deployment dry run completed for ${options.remote}/${branch} at ${head}.`);
   } else {
