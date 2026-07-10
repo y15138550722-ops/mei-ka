@@ -339,11 +339,14 @@ function localImageTextRecognitionPlugin() {
 
 export default defineConfig({
   plugins: [projectPreviewDocumentPlugin(), localImageTextRecognitionPlugin(), rootIndexFallbackPlugin(), react()],
-  publicDir: '../docs',
+  publicDir: './public',
   server: {
     host: '0.0.0.0',
     port: 5173,
     strictPort: false,
     open: true,
+    watch: {
+      ignored: ['**/dist/**'],
+    },
   },
 })

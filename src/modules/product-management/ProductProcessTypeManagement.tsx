@@ -307,10 +307,15 @@ const ProductProcessTypeManagement: React.FC = () => {
             },
           ];
 
-    updateProduct(product.productId, {
-      processTypes: nextProcessTypes,
-      updatedAt: getCurrentTimestamp(),
-    });
+    try {
+      updateProduct(product.productId, {
+        processTypes: nextProcessTypes,
+        updatedAt: getCurrentTimestamp(),
+      });
+    } catch {
+      showToast('error', '办理类型保存失败，请稍后重试');
+      return;
+    }
 
     setVersion((prev) => prev + 1);
     setCurrentPage(1);
@@ -323,10 +328,15 @@ const ProductProcessTypeManagement: React.FC = () => {
 
     const nextProcessTypes = product.processTypes.filter((processType) => processType.typeId !== deleteTarget.typeId);
 
-    updateProduct(product.productId, {
-      processTypes: nextProcessTypes,
-      updatedAt: getCurrentTimestamp(),
-    });
+    try {
+      updateProduct(product.productId, {
+        processTypes: nextProcessTypes,
+        updatedAt: getCurrentTimestamp(),
+      });
+    } catch {
+      showToast('error', '办理类型删除失败，请稍后重试');
+      return;
+    }
 
     setVersion((prev) => prev + 1);
     setCurrentPage(1);

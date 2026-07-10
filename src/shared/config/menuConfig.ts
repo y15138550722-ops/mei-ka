@@ -14,36 +14,48 @@ export const menuConfig: MenuItem[] = [
   {
     key: 'dashboard',
     labelKey: 'menu.dashboard',
-    icon: '📊',
+    icon: 'D',
     path: '/',
   },
   {
     key: 'order-management',
     labelKey: 'menu.orderManagement',
-    icon: '📋',
+    icon: 'O',
     children: [
       {
         key: 'order-list',
         labelKey: 'menu.orderList',
-        icon: '🧾',
+        icon: 'T',
         path: '/orders',
+      },
+      {
+        key: 'order-domestic-license-order-management',
+        labelKey: 'menu.domesticLicenseOrderManagement',
+        icon: 'DL',
+        path: '/order-management/domestic-license-orders',
       },
       {
         key: 'order-notary-order-management',
         labelKey: 'menu.notaryOrderManagement',
-        icon: '📜',
+        icon: 'N',
         path: '/order-management/notary-orders',
+      },
+      {
+        key: 'order-external-notary-order-management',
+        labelKey: 'menu.externalNotaryOrderManagement',
+        icon: 'EN',
+        path: '/order-management/external-notary-orders',
       },
       {
         key: 'order-idp-order-management',
         labelKey: 'menu.idpOrderManagement',
-        icon: '🚗',
+        icon: 'IDP',
         path: '/order-management/idp-orders',
       },
       {
         key: 'order-api-order-management',
         labelKey: 'menu.apiOrderManagement',
-        icon: '🔌',
+        icon: 'API',
         children: [
           {
             key: 'order-klook-order-management',
@@ -54,7 +66,7 @@ export const menuConfig: MenuItem[] = [
           {
             key: 'order-hello-order-management',
             labelKey: 'menu.helloOrderManagement',
-            icon: '哈',
+            icon: 'H',
             path: '/order-management/api-orders/hello',
           },
         ],
@@ -64,12 +76,12 @@ export const menuConfig: MenuItem[] = [
   {
     key: 'product-management',
     labelKey: 'menu.productManagement',
-    icon: '📦',
+    icon: 'P',
     children: [
       {
         key: 'product-list',
         labelKey: 'menu.productList',
-        icon: '🏷️',
+        icon: 'PL',
         path: '/products',
       },
     ],
@@ -77,18 +89,18 @@ export const menuConfig: MenuItem[] = [
   {
     key: 'file-preview',
     labelKey: 'menu.filePreview',
-    icon: '📁',
+    icon: 'F',
     path: '/file-preview',
   },
   {
     key: 'notary-office',
     labelKey: 'menu.notaryOffice',
-    icon: '🏛️',
+    icon: 'NO',
     children: [
       {
         key: 'notary-order-list',
         labelKey: 'menu.notaryOrderList',
-        icon: '📜',
+        icon: 'N',
         path: '/notary/orders',
       },
     ],

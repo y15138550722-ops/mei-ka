@@ -8,6 +8,7 @@ const resources = {
     'menu.dashboard': '工作台',
     'menu.orderManagement': '订单中心',
     'menu.orderList': '翻译订单管理',
+    'menu.domesticLicenseOrderManagement': '换国内驾照翻译件订单管理',
     'menu.notaryOrderManagement': '公证订单管理',
     'menu.notaryOrderList': '公证订单',
     'menu.productManagement': '产品中心',
@@ -170,6 +171,7 @@ const resources = {
     'menu.dashboard': 'Dashboard',
     'menu.orderManagement': 'Order Center',
     'menu.orderList': 'Translation Orders',
+    'menu.domesticLicenseOrderManagement': 'Domestic License Translation Orders',
     'menu.notaryOrderManagement': 'Notary Order Management',
     'menu.notaryOrderList': 'Notary Orders',
     'menu.productManagement': 'Product Center',
@@ -348,6 +350,10 @@ const menuLabelTranslations: Record<string, Record<Locale, string>> = {
   'menu.helloOrderManagement': {
     'zh-CN': '哈啰订单管理',
     'en-US': 'Hello Order Management',
+  },
+  'menu.externalNotaryOrderManagement': {
+    'zh-CN': '外采公证订单管理',
+    'en-US': 'Outsourced Notary Orders',
   },
 };
 

@@ -1,12 +1,14 @@
 ﻿// ============================================
-// ProductList 鈥?Product Management
+// ProductList - Product Management
 // ============================================
 import React, { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '../../shared/i18n/config';
 import { addProduct, deleteProduct, getNextProductId, getProducts, updateProduct } from '../../services/mockDataService';
 import ListUnifiedPagination from '../../shared/components/list/ListUnifiedPagination';
+import ResolvedImage from '../../shared/components/ResolvedImage';
 import type { AgentLevel, Product, ProductCategory, ProductProcessType } from '../../shared/types';
+import { saveLocalImageSource } from '../../shared/utils/localImageStore';
 import { getProductProcessTypeLabel } from '../../shared/utils/productProcessType';
 import './ProductList.css';
 
@@ -233,7 +235,7 @@ const ProductList: React.FC = () => {
     event.target.value = '';
   };
 
-  const handleSaveProduct = () => {
+  const handleSaveProduct = async () => {
     const title = editorDraft.title.trim();
     const description = editorDraft.description.trim();
     const defaultPrice = Number(editorDraft.defaultPrice);
@@ -244,51 +246,66 @@ const ProductList: React.FC = () => {
       return;
     }
 
-    if (editorMode === 'edit') {
-      const existingProduct = products.find((product) => product.productId === editorDraft.productId);
-      if (!existingProduct) return;
+    try {
+      if (editorMode === 'edit') {
+        const existingProduct = products.find((product) => product.productId === editorDraft.productId);
+        if (!existingProduct) return;
 
-      updateProduct(existingProduct.productId, {
-        title,
-        description,
-        category: editorDraft.category,
-        coverImage: editorDraft.coverImage || undefined,
-        defaultPrice,
-        weight,
-        status: editorDraft.status,
-        updatedAt: getCurrentTimestamp(),
-      });
-    } else {
-      const productId = getNextProductId();
-      const timestamp = getCurrentTimestamp();
+        const coverImage = await saveLocalImageSource(
+          `product-cover-${existingProduct.productId}`,
+          editorDraft.coverImage,
+        );
 
-      addProduct({
-        productId,
-        title,
-        description,
-        category: editorDraft.category,
-        coverImage: editorDraft.coverImage || undefined,
-        defaultPrice,
-        weight,
-        status: editorDraft.status,
-        processTypes: [],
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      });
+        updateProduct(existingProduct.productId, {
+          title,
+          description,
+          category: editorDraft.category,
+          coverImage: coverImage || undefined,
+          defaultPrice,
+          weight,
+          status: editorDraft.status,
+          updatedAt: getCurrentTimestamp(),
+        });
+      } else {
+        const productId = getNextProductId();
+        const timestamp = getCurrentTimestamp();
+        const coverImage = await saveLocalImageSource(`product-cover-${productId}`, editorDraft.coverImage);
+
+        addProduct({
+          productId,
+          title,
+          description,
+          category: editorDraft.category,
+          coverImage: coverImage || undefined,
+          defaultPrice,
+          weight,
+          status: editorDraft.status,
+          processTypes: [],
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        });
+      }
+
+      refreshProducts();
+      setCurrentPage(1);
+      handleCloseEditor();
+      showToast('success', t('product.toast.saveSuccess'));
+    } catch {
+      showToast('error', '产品保存失败，请减少封面图片大小后重试');
     }
-
-    refreshProducts();
-    setCurrentPage(1);
-    handleCloseEditor();
-    showToast('success', t('product.toast.saveSuccess'));
   };
 
   const handleDeleteProduct = () => {
     if (!confirmDeleteId) return;
-    deleteProduct(confirmDeleteId);
-    refreshProducts();
-    setConfirmDeleteId(null);
-    showToast('success', t('product.toast.deleteSuccess'));
+
+    try {
+      deleteProduct(confirmDeleteId);
+      refreshProducts();
+      setConfirmDeleteId(null);
+      showToast('success', t('product.toast.deleteSuccess'));
+    } catch {
+      showToast('error', '产品删除失败，请稍后重试');
+    }
   };
 
   const handleOpenPriceDetail = (product: Product) => {
@@ -349,22 +366,26 @@ const ProductList: React.FC = () => {
       };
     });
 
-    updateProduct(priceEditorProduct.productId, {
-      processTypes: nextProcessTypes,
-      defaultPrice: nextProcessTypes.length > 0
-        ? getProductDefaultPriceFromProcessTypes(nextProcessTypes)
-        : getProductDefaultPrice(priceEditorProduct),
-      updatedAt: getCurrentTimestamp(),
-    });
+    try {
+      updateProduct(priceEditorProduct.productId, {
+        processTypes: nextProcessTypes,
+        defaultPrice: nextProcessTypes.length > 0
+          ? getProductDefaultPriceFromProcessTypes(nextProcessTypes)
+          : getProductDefaultPrice(priceEditorProduct),
+        updatedAt: getCurrentTimestamp(),
+      });
 
-    const savedProduct = getProducts().find((product) => product.productId === priceEditorProduct.productId) || null;
+      const savedProduct = getProducts().find((product) => product.productId === priceEditorProduct.productId) || null;
 
-    refreshProducts();
-    handleClosePriceEditor();
-    if (savedProduct) {
-      setPriceDetailProduct(savedProduct);
+      refreshProducts();
+      handleClosePriceEditor();
+      if (savedProduct) {
+        setPriceDetailProduct(savedProduct);
+      }
+      showToast('success', '\u4ef7\u683c\u77e9\u9635\u5df2\u66f4\u65b0');
+    } catch {
+      showToast('error', '价格保存失败，请稍后重试');
     }
-    showToast('success', '\u4ef7\u683c\u77e9\u9635\u5df2\u66f4\u65b0');
   };
 
   const priceDetailModalWidth = useMemo(() => {
@@ -404,7 +425,7 @@ const ProductList: React.FC = () => {
     if (product.coverImage) {
       return (
         <div className="product-cover product-cover--uploaded">
-          <img className="product-cover__image" src={product.coverImage} alt={product.title} />
+          <ResolvedImage className="product-cover__image" src={product.coverImage} alt={product.title} />
         </div>
       );
     }
@@ -650,7 +671,11 @@ const ProductList: React.FC = () => {
                     onClick={() => coverInputRef.current?.click()}
                   >
                     {editorDraft.coverImage ? (
-                      <img className="product-editor-modal__upload-image" src={editorDraft.coverImage} alt="产品封面预览" />
+                      <ResolvedImage
+                        className="product-editor-modal__upload-image"
+                        src={editorDraft.coverImage}
+                        alt="产品封面预览"
+                      />
                     ) : (
                       <span className="product-editor-modal__upload-plus">+</span>
                     )}
