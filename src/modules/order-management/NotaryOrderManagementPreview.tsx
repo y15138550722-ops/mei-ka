@@ -178,6 +178,21 @@ const ADDITIONAL_CERTIFICATE_IMAGES: CertificateImage[] = [
 ];
 
 const PREVIEW_IMAGES = [...CERTIFICATE_IMAGES, ...ADDITIONAL_CERTIFICATE_IMAGES];
+const EXTERNAL_NOTARY_SOURCE_EMAIL_PREFIX = 'external-notary-order-';
+const EXTERNAL_NOTARY_SOURCE_EMAIL_DOMAIN = 'meika.local';
+
+const isExternalNotarySourceOrder = (order: Pick<Order, 'customerEmail' | 'logs'>) =>
+  (order.customerEmail.startsWith(EXTERNAL_NOTARY_SOURCE_EMAIL_PREFIX) &&
+    order.customerEmail.endsWith(`@${EXTERNAL_NOTARY_SOURCE_EMAIL_DOMAIN}`)) ||
+  order.logs.some((log) => /代理端录入外采公证订单|外采订单 .* 已同步至公证订单管理/.test(log.action));
+
+const getExternalPreviewImages = (order: Order) =>
+  (order.notarySubmissionImages || []).reduce<Record<string, string>>((result, image) => {
+    if (image.key && image.src) {
+      result[image.key] = image.src;
+    }
+    return result;
+  }, {});
 
 const getMergedLocationKeys = <T extends string>(sourceOptions: readonly T[], currentValue: string) =>
   currentValue && !sourceOptions.includes(currentValue as T) ? [currentValue, ...sourceOptions] : [...sourceOptions];
@@ -717,31 +732,38 @@ const buildBarcodeNumber = (licenseNo: string, orderId: string) => {
 
 const buildLicenseAuditProfile = (order: Order) => {
   const seed = getOrderSeed(order.orderId);
+  const isExternalSourceOrder = isExternalNotarySourceOrder(order);
   const licenseNameSource = resolvePersistedValue(order.licenseName, order.customerName);
   const licenseNoSource = resolvePersistedValue(order.licenseNo, order.customerPassport);
-  const licenseCategorySource = resolvePersistedValue(order.licenseCategory, 'C1');
-  const birthDateSource = resolvePersistedValue(order.licenseBirthDate, createDateFromSeed(seed + 73, 1984, 12));
+  const licenseCategorySource = resolvePersistedValue(order.licenseCategory, isExternalSourceOrder ? '' : 'C1');
+  const birthDateSource = resolvePersistedValue(order.licenseBirthDate, isExternalSourceOrder ? '' : createDateFromSeed(seed + 73, 1984, 12));
   const licenseAddressSource = resolvePersistedValue(order.licenseAddress, order.deliveryAddress || '');
-  const firstIssueDateSource = resolvePersistedValue(order.licenseFirstIssueDate, createDateFromSeed(seed + 17, 2010, 8));
-  const validFromDateSource = resolvePersistedValue(order.licenseValidFromDate, createDateFromSeed(seed + 41, 2021, 4));
-  const validUntilDateSource = resolvePersistedValue(order.licenseValidUntilDate, addYearsToDate(validFromDateSource, 10));
-  const validYearsSource = resolvePersistedValue(order.licenseValidYears, '10年');
-  const issuingAuthoritySource = resolvePersistedValue(order.licenseIssuingAuthority, LICENSE_ISSUING_AUTHORITY_OPTIONS[0]);
+  const firstIssueDateSource = resolvePersistedValue(order.licenseFirstIssueDate, isExternalSourceOrder ? '' : createDateFromSeed(seed + 17, 2010, 8));
+  const validFromDateSource = resolvePersistedValue(order.licenseValidFromDate, isExternalSourceOrder ? '' : createDateFromSeed(seed + 41, 2021, 4));
+  const validUntilDateSource = resolvePersistedValue(
+    order.licenseValidUntilDate,
+    isExternalSourceOrder || !validFromDateSource ? '' : addYearsToDate(validFromDateSource, 10),
+  );
+  const validYearsSource = resolvePersistedValue(order.licenseValidYears, isExternalSourceOrder ? '' : '10年');
+  const issuingAuthoritySource = resolvePersistedValue(
+    order.licenseIssuingAuthority,
+    isExternalSourceOrder ? '' : LICENSE_ISSUING_AUTHORITY_OPTIONS[0],
+  );
   const issuingRegionSource = resolvePersistedValue(order.licenseIssuingRegion, extractIssuingRegion(licenseAddressSource));
   const issuingRegion = getDisplayValue(issuingRegionSource);
   const issuingRegionParts = splitIssuingRegion(issuingRegion === '--' ? '' : issuingRegion);
-  const genderSource = resolvePersistedValue(order.licenseGender, seed % 4 === 0 ? '女' : '男');
-  const nationalitySource = resolvePersistedValue(order.licenseNationality, '中国/CHN');
+  const genderSource = resolvePersistedValue(order.licenseGender, isExternalSourceOrder ? '' : seed % 4 === 0 ? '女' : '男');
+  const nationalitySource = resolvePersistedValue(order.licenseNationality, isExternalSourceOrder ? '' : '中国/CHN');
   const licenseName = getDisplayValue(licenseNameSource);
   const licenseNo = getDisplayValue(licenseNoSource);
   const licenseCategory = getDisplayValue(licenseCategorySource);
   const archiveNumberSource = resolvePersistedValue(
     order.licenseArchiveNumber,
-    buildArchiveNumber(licenseNo === '--' ? '' : licenseNo, order.orderId),
+    isExternalSourceOrder ? '' : buildArchiveNumber(licenseNo === '--' ? '' : licenseNo, order.orderId),
   );
   const barcodeNumberSource = resolvePersistedValue(
     order.licenseBarcodeNumber,
-    buildBarcodeNumber(licenseNo === '--' ? '' : licenseNo, order.orderId),
+    isExternalSourceOrder ? '' : buildBarcodeNumber(licenseNo === '--' ? '' : licenseNo, order.orderId),
   );
   const autoPinyinParts = getNamePinyinParts(licenseName === '--' ? '' : licenseName);
   const surnamePinyin = getDisplayValue(resolvePersistedValue(order.idpSurnameEn, autoPinyinParts.surnamePinyin));
@@ -826,7 +848,7 @@ const NotaryOrderManagementPreview: React.FC = () => {
   const [rejectReason, setRejectReason] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [certificateImages, setCertificateImages] = useState<Record<string, string>>(
-    fetchedOrder?.notaryCertificateImages || {},
+    fetchedOrder ? { ...getExternalPreviewImages(fetchedOrder), ...(fetchedOrder.notaryCertificateImages || {}) } : {},
   );
   const [exportingPowerOfAttorneyKey, setExportingPowerOfAttorneyKey] = useState<NotaryPowerOfAttorneyKey | null>(null);
   const [isExportingImagesPdf, setIsExportingImagesPdf] = useState(false);
@@ -844,7 +866,7 @@ const NotaryOrderManagementPreview: React.FC = () => {
     setShowApproveModal(false);
     setSelectedNotaryOffice('');
     setPreviewImage(null);
-    setCertificateImages(fetchedOrder?.notaryCertificateImages || {});
+    setCertificateImages(fetchedOrder ? { ...getExternalPreviewImages(fetchedOrder), ...(fetchedOrder.notaryCertificateImages || {}) } : {});
     setRejectReason('');
     setExportingPowerOfAttorneyKey(null);
     setIsExportingImagesPdf(false);
@@ -866,6 +888,7 @@ const NotaryOrderManagementPreview: React.FC = () => {
   );
   const logisticsDisplayCompany = order?.logisticsCompany?.trim() || officeOrder?.logisticsCompany?.trim() || '';
   const logisticsDisplayTrackingNumber = order?.trackingNumber?.trim() || officeOrder?.trackingNumber?.trim() || '';
+  const isExternalSourceOrder = order ? isExternalNotarySourceOrder(order) : false;
   const isOfficeRejectedOrder = order ? isNotaryOfficeRejected(order, officeOrder) : false;
   const isAuditable = order?.status === 'pending_review' && previewMode === 'audit';
   const canModifyOrder =
@@ -906,7 +929,7 @@ const NotaryOrderManagementPreview: React.FC = () => {
     }
 
     setEditForm(buildOrderEditForm(order));
-    setCertificateImages(order.notaryCertificateImages || {});
+    setCertificateImages({ ...getExternalPreviewImages(order), ...(order.notaryCertificateImages || {}) });
     setIsEditing(true);
   }, [order?.orderId, shouldStartInEditMode]);
 
@@ -1133,13 +1156,13 @@ const NotaryOrderManagementPreview: React.FC = () => {
 
   const handleModify = () => {
     setEditForm(buildOrderEditForm(order));
-    setCertificateImages(order.notaryCertificateImages || {});
+    setCertificateImages({ ...getExternalPreviewImages(order), ...(order.notaryCertificateImages || {}) });
     setIsEditing(true);
   };
 
   const handleCancelEdit = () => {
     setEditForm(buildOrderEditForm(order));
-    setCertificateImages(order.notaryCertificateImages || {});
+    setCertificateImages({ ...getExternalPreviewImages(order), ...(order.notaryCertificateImages || {}) });
     setIsEditing(false);
   };
 
@@ -1251,7 +1274,7 @@ const NotaryOrderManagementPreview: React.FC = () => {
 
     setOrder(nextOrder);
     setEditForm(buildOrderEditForm(nextOrder));
-    setCertificateImages(nextOrder.notaryCertificateImages || {});
+    setCertificateImages({ ...getExternalPreviewImages(nextOrder), ...(nextOrder.notaryCertificateImages || {}) });
     setIsEditing(false);
     showToast('success', '驾照信息、证件信息和收货信息已更新');
   };
@@ -1544,6 +1567,18 @@ const NotaryOrderManagementPreview: React.FC = () => {
       label: '商品名称',
       value: getDisplayValue(order.productName),
     },
+    ...(isExternalNotarySourceOrder(order)
+      ? [
+          {
+            label: '语言选择',
+            value: getDisplayValue(order.language),
+          },
+          {
+            label: '使用国家',
+            value: getDisplayValue(order.useCountry),
+          },
+        ]
+      : []),
     {
       label: '办理类型',
       value: getProductProcessTypeLabel(order.processType, t),
@@ -1553,7 +1588,6 @@ const NotaryOrderManagementPreview: React.FC = () => {
       value: currencyFormatter.format(order.lockedPrice || 0),
     },
   ];
-
   const logisticsInfoItems: Array<{ label: string; value: React.ReactNode; fullWidth?: boolean }> = canSubmitLogistics
     ? [
         {

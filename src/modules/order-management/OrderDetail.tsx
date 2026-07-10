@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { getOrderById, updateOrder } from '../../services/mockDataService';
 import ResolvedImage from '../../shared/components/ResolvedImage';
@@ -88,6 +88,8 @@ type DetailFieldItem = {
   fieldClassName?: string;
   labelClassName?: string;
 };
+
+const LOGISTICS_COMPANY_OPTIONS = ['顺丰速运', '中通快递', '圆通速递', '申通快递', '韵达速递', '京东快递', 'EMS'];
 
 const DOMESTIC_EXCHANGE_LOCATION_OPTIONS = [
   { province: '北京市', cities: ['北京市'] },
@@ -878,6 +880,10 @@ const OrderDetail: React.FC = () => {
   const [rejectReason, setRejectReason] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<OrderEditForm | null>(fetchedOrder ? buildOrderEditForm(fetchedOrder) : null);
+  const [logisticsForm, setLogisticsForm] = useState({
+    logisticsCompany: fetchedOrder?.logisticsCompany || '',
+    trackingNumber: fetchedOrder?.trackingNumber || '',
+  });
 
   useEffect(() => {
     setOrder(fetchedOrder);
@@ -886,6 +892,10 @@ const OrderDetail: React.FC = () => {
     setShowRejectModal(false);
     setPreviewImage(null);
     setRejectReason('');
+    setLogisticsForm({
+      logisticsCompany: fetchedOrder?.logisticsCompany || '',
+      trackingNumber: fetchedOrder?.trackingNumber || '',
+    });
   }, [fetchedOrder]);
 
   const latestAuditLog = useMemo(() => (order ? getLatestAuditLog(order.logs) : null), [order]);
@@ -900,6 +910,7 @@ const OrderDetail: React.FC = () => {
   const isIdpOrder = order?.productCategory === 'idp';
   const domesticLicenseInfo = order?.domesticLicenseInfo || null;
   const isDomesticLicenseOrder = Boolean(domesticLicenseInfo);
+  const canFillLogistics = Boolean(order && isDomesticLicenseOrder && order.status !== 'pending_review');
   const auditPageTitle = isAuditable ? '订单审核' : '查看审核';
 
   const inferredOrderListSource = order ? getOrderListSource(order.productCategory) : null;
@@ -996,6 +1007,47 @@ const OrderDetail: React.FC = () => {
     }
 
     navigate(sourceListPath);
+  };
+
+  const handleSaveLogistics = () => {
+    if (!canFillLogistics) {
+      showToast('error', '待审核订单暂不可填写物流');
+      return;
+    }
+
+    const logisticsCompany = logisticsForm.logisticsCompany.trim();
+    const trackingNumber = logisticsForm.trackingNumber.trim();
+
+    if (!logisticsCompany) {
+      showToast('error', '请填写快递公司');
+      return;
+    }
+
+    if (!trackingNumber) {
+      showToast('error', '请填写物流单号');
+      return;
+    }
+
+    const timestamp = getCurrentTimestamp();
+    const nextUpdates: Partial<Order> = {
+      logisticsCompany,
+      trackingNumber,
+      status: 'shipped',
+      shippedAt: timestamp,
+      updatedAt: timestamp,
+      logs: [
+        ...order.logs,
+        {
+          time: timestamp,
+          operator: '运营-物流',
+          action: `填写物流并发货：${logisticsCompany} ${trackingNumber}`,
+        },
+      ],
+    };
+
+    updateOrder(order.orderId, nextUpdates);
+    setOrder({ ...order, ...nextUpdates } as Order);
+    showToast('success', '物流信息已保存，订单已发货');
   };
 
   const handleApprove = () => {
@@ -1941,6 +1993,48 @@ const OrderDetail: React.FC = () => {
     },
   ];
 
+  const domesticOrderDetailViewBasicItems: DetailFieldItem[] = [
+    {
+      label: '中文姓名',
+      value: getDisplayValue(domesticLicenseInfo?.chineseName || order.licenseName || order.customerName),
+    },
+    {
+      label: '联系邮箱',
+      value: getDisplayValue(order.customerEmail),
+    },
+    {
+      label: '换证城市',
+      value: getDisplayValue(
+        order.licenseIssuingRegion ||
+          (domesticLicenseInfo
+            ? [domesticLicenseInfo.exchangeProvince, domesticLicenseInfo.exchangeCity].filter(Boolean).join(' ')
+            : ''),
+      ),
+    },
+    {
+      label: '驾驶证发放国家及城市',
+      value: getDisplayValue(
+        domesticLicenseInfo ? [domesticLicenseInfo.foreignCountry, domesticLicenseInfo.foreignCity].filter(Boolean).join(' ') : '',
+      ),
+    },
+  ];
+
+  const domesticAuditOrderInfoItems: DetailFieldItem[] = [
+    ...orderInfoItems,
+    {
+      label: '产品名称',
+      value: getDisplayValue(order.productName),
+    },
+    {
+      label: '办理类型',
+      value: getProcessTypeLabel(order.processType),
+    },
+    {
+      label: '价格',
+      value: currencyFormatter.format(order.lockedPrice || 0),
+    },
+  ];
+
   return (
     <div className="animate-fadeIn">
       {toast && (
@@ -1998,13 +2092,13 @@ const OrderDetail: React.FC = () => {
       {isViewPreview && (
         <div className="app-main order-audit-page order-detail-view-page">
           <div className="order-detail-view-layout">
-            <section className="card order-detail-view-card">
-              <div className="card__header order-audit-card__header order-detail-view-card__header">
-                <h2 className="order-audit-card__title">{'\u6536\u8d27\u4fe1\u606f'}</h2>
-              </div>
+              <section className="card order-detail-view-card">
+                <div className="card__header order-audit-card__header order-detail-view-card__header">
+                  <h2 className="order-audit-card__title">{isDomesticLicenseOrder ? '商品信息' : '\u6536\u8d27\u4fe1\u606f'}</h2>
+                </div>
               <div className="card__body order-detail-view-card__body">
                 <div className="order-detail-view-grid order-detail-view-grid--delivery">
-                  {(isDomesticLicenseOrder ? domesticOrderDetailViewDeliveryItems : orderDetailViewDeliveryItems).map((item) => (
+                  {(isDomesticLicenseOrder ? orderDetailViewProductItems : orderDetailViewDeliveryItems).map((item) => (
                     <div
                       key={item.label}
                       className={`order-detail-view-field ${item.fullWidth ? 'order-detail-view-field--full' : ''}`}
@@ -2019,11 +2113,11 @@ const OrderDetail: React.FC = () => {
 
               <section className="card order-detail-view-card">
                 <div className="card__header order-audit-card__header order-detail-view-card__header">
-                  <h2 className="order-audit-card__title">{'\u5546\u54c1\u4fe1\u606f'}</h2>
+                  <h2 className="order-audit-card__title">{isDomesticLicenseOrder ? '基本信息' : '\u5546\u54c1\u4fe1\u606f'}</h2>
                 </div>
                 <div className="card__body order-detail-view-card__body">
                 <div className="order-detail-view-grid order-detail-view-grid--product">
-                  {orderDetailViewProductItems.map((item) => (
+                  {(isDomesticLicenseOrder ? domesticOrderDetailViewBasicItems : orderDetailViewProductItems).map((item) => (
                     <div key={item.label} className="order-detail-view-field">
                       <span className="order-detail-view-field__label">{item.label}:</span>
                       <div className="order-detail-view-field__value">{item.value}</div>
@@ -2034,6 +2128,58 @@ const OrderDetail: React.FC = () => {
               </section>
 
               {isDomesticLicenseOrder && (
+                <section className="card order-detail-view-card">
+                  <div className="card__header order-audit-card__header order-detail-view-card__header">
+                    <h2 className="order-audit-card__title">物流填写</h2>
+                  </div>
+                  <div className="card__body order-detail-view-card__body">
+                    <div className="order-audit-grid">
+                      <div className="order-audit-field">
+                        <span className="order-audit-field__label">快递公司:</span>
+                        <select
+                          className="form-select order-audit-field__editor"
+                          value={logisticsForm.logisticsCompany}
+                          disabled={!canFillLogistics}
+                          onChange={(event) =>
+                            setLogisticsForm((current) => ({ ...current, logisticsCompany: event.target.value }))
+                          }
+                        >
+                          <option value="">请选择快递公司</option>
+                          {LOGISTICS_COMPANY_OPTIONS.map((company) => (
+                            <option key={company} value={company}>
+                              {company}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="order-audit-field">
+                        <span className="order-audit-field__label">物流单号:</span>
+                        <input
+                          className="form-input order-audit-field__editor"
+                          value={logisticsForm.trackingNumber}
+                          placeholder="请输入物流单号"
+                          disabled={!canFillLogistics}
+                          onChange={(event) =>
+                            setLogisticsForm((current) => ({ ...current, trackingNumber: event.target.value }))
+                          }
+                        />
+                      </div>
+                    </div>
+                    {!canFillLogistics && (
+                      <p className="order-audit-modal__hint" style={{ marginTop: 12 }}>
+                        待审核订单暂不可填写物流信息。
+                      </p>
+                    )}
+                    <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
+                      <button type="button" className="btn btn--primary" onClick={handleSaveLogistics} disabled={!canFillLogistics}>
+                        保存物流信息
+                      </button>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {!isDomesticLicenseOrder && (
                 <>
                   <section className="card order-detail-view-card">
                     <div className="card__header order-audit-card__header order-detail-view-card__header">
@@ -2209,6 +2355,67 @@ const OrderDetail: React.FC = () => {
                         );
                       })()
                     ))}
+                  </div>
+                </section>
+              </>
+            ) : isDomesticLicenseOrder ? (
+              <>
+                <section className="card order-audit-card">
+                  <div className="card__header order-audit-card__header">
+                    <h2 className="order-audit-card__title">订单信息</h2>
+                  </div>
+                  <div className="card__body order-audit-card__body">
+                    <div className="order-audit-grid">
+                      {domesticAuditOrderInfoItems.map((item) => (
+                        <div
+                          key={item.label}
+                          className={`order-audit-field ${item.fullWidth ? 'order-audit-field--full' : ''} ${item.fieldClassName || ''}`.trim()}
+                        >
+                          <span className={`order-audit-field__label ${item.labelClassName || ''}`.trim()}>{item.label}:</span>
+                          <div className="order-audit-field__value">{item.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+
+                <section className="card order-audit-card">
+                  <div className="card__header order-audit-card__header">
+                    <h2 className="order-audit-card__title">附件信息</h2>
+                    {isEditing && <span className="order-audit-editing-tip">编辑中</span>}
+                  </div>
+                  <div className="card__body order-audit-card__body">
+                    <div className="order-audit-grid order-audit-grid--domestic-license">
+                      {domesticLicenseInfoItems.map((item) => (
+                        <div
+                          key={item.label}
+                          className={`order-audit-field ${item.fullWidth ? 'order-audit-field--full' : ''} ${item.fieldClassName || ''}`.trim()}
+                        >
+                          <span className={`order-audit-field__label ${item.labelClassName || ''}`.trim()}>{item.label}:</span>
+                          <div className="order-audit-field__value">{item.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+
+                <section className="card order-audit-card">
+                  <div className="card__header order-audit-card__header">
+                    <h2 className="order-audit-card__title">收货信息</h2>
+                    {isEditing && <span className="order-audit-editing-tip">编辑中</span>}
+                  </div>
+                  <div className="card__body order-audit-card__body">
+                    <div className="order-audit-grid">
+                      {deliveryInfoItems.map((item) => (
+                        <div
+                          key={item.label}
+                          className={`order-audit-field ${item.fullWidth ? 'order-audit-field--full' : ''} ${item.fieldClassName || ''}`.trim()}
+                        >
+                          <span className={`order-audit-field__label ${item.labelClassName || ''}`.trim()}>{item.label}:</span>
+                          <div className="order-audit-field__value">{item.value}</div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </section>
               </>

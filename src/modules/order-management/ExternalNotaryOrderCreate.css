@@ -1,0 +1,405 @@
+.external-notary-create-page {
+  padding: 24px;
+}
+
+.external-notary-create-page__toolbar {
+  padding: 0;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+.external-notary-create-page__error {
+  position: static;
+  min-width: auto;
+  margin-bottom: 16px;
+}
+
+.external-notary-create-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(360px, 6fr);
+  gap: 20px;
+  align-items: stretch;
+}
+
+.external-notary-create-column {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+}
+
+.external-notary-create-column--side {
+  min-width: 0;
+}
+
+.external-notary-create-panel {
+  padding: 22px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.external-notary-create-panel--product {
+  flex: 0 0 auto;
+}
+
+.external-notary-create-panel--sticky {
+  position: sticky;
+  top: 20px;
+}
+
+.external-notary-create-panel--grow {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.external-notary-create-panel--grow .external-notary-form-grid {
+  flex: 1 1 auto;
+  align-content: start;
+}
+
+.external-notary-create-panel--remark {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.external-notary-create-panel--remark .form-group {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.external-notary-create-panel--remark .external-notary-create-textarea--tall {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
+.external-notary-create-panel__header {
+  margin-bottom: 18px;
+}
+
+.external-notary-create-panel__header h3 {
+  margin: 0 0 6px;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.external-notary-create-panel__header p {
+  margin: 0;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.external-notary-create-field + .external-notary-create-field {
+  margin-top: 18px;
+}
+
+.external-notary-create-field .form-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.external-notary-create-page .form-input,
+.external-notary-create-page .form-select,
+.external-notary-create-page textarea {
+  font-size: 12px;
+}
+
+.external-notary-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.external-notary-choice-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 8px 10px;
+  border: 1px solid #d7e1ee;
+  border-radius: 6px;
+  background: #ffffff;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.external-notary-choice-card:hover,
+.external-notary-choice-card--active {
+  border-color: #6366f1;
+  background: #f5f3ff;
+  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.12);
+}
+
+.external-notary-choice-card__title {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+.external-notary-create-page .form-input::placeholder,
+.external-notary-create-page textarea::placeholder {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+}
+
+.external-notary-create-page .external-notary-create-select--placeholder {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+}
+
+.external-notary-choice-card--active .external-notary-choice-card__title {
+  font-weight: 700;
+}
+
+.external-notary-country-input {
+  max-width: 270px;
+}
+
+.external-notary-chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.external-notary-chip {
+  min-width: 88px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid #d7e1ee;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.external-notary-chip:hover,
+.external-notary-chip--active {
+  border-color: #0ea5e9;
+  background: #0ea5e9;
+  color: #ffffff;
+}
+
+.external-notary-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.external-notary-form-grid__full {
+  grid-column: 1 / -1;
+}
+
+.external-notary-create-textarea--tall {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.external-notary-create-textarea--medium {
+  min-height: 73.22px;
+  resize: vertical;
+}
+
+.external-notary-upload-board {
+  margin-top: 20px;
+  padding: 18px;
+  border: 1px solid #d6e0ee;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.external-notary-upload-board__title {
+  margin-bottom: 14px;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.external-notary-upload-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.external-notary-upload-card {
+  position: relative;
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px dashed #94a3b8;
+  background: #ffffff;
+  color: #64748b;
+  font-size: 11px;
+  text-align: center;
+  overflow: hidden;
+}
+
+.external-notary-upload-card:hover {
+  border-color: #0ea5e9;
+  color: #0284c7;
+}
+
+.external-notary-upload-card--filled {
+  justify-content: flex-end;
+  border-style: solid;
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.external-notary-upload-card__icon {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #e0f2fe;
+  color: #0284c7;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.external-notary-upload-card__preview {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0f172a;
+}
+
+.external-notary-upload-card__preview::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0) 42%, rgba(15, 23, 42, 0.82) 100%);
+}
+
+.external-notary-upload-card__preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.external-notary-upload-card__label,
+.external-notary-upload-card small {
+  position: relative;
+  z-index: 1;
+  max-width: 100%;
+}
+
+.external-notary-upload-card__label {
+  color: inherit;
+  font-weight: 600;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.external-notary-required-mark {
+  color: #ef4444;
+  margin-right: 2px;
+}
+
+.external-notary-upload-card small {
+  color: #64748b;
+  font-size: 10px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+}
+
+.external-notary-upload-card--filled small {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.external-notary-upload-card__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.external-notary-upload-card__empty {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.external-notary-upload-card__actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.external-notary-upload-card__action {
+  min-height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(15, 23, 42, 0.55);
+  color: #ffffff;
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.external-notary-upload-card__action--danger {
+  border-color: rgba(248, 113, 113, 0.5);
+  background: rgba(127, 29, 29, 0.65);
+}
+
+@media (max-width: 1080px) {
+  .external-notary-create-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .external-notary-create-panel--sticky {
+    position: static;
+  }
+}
+
+@media (max-width: 720px) {
+  .external-notary-create-page {
+    padding: 16px;
+  }
+
+  .external-notary-form-grid,
+  .external-notary-upload-grid,
+  .external-notary-choice-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

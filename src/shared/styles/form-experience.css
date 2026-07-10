@@ -394,6 +394,62 @@
   border-top: none;
   white-space: nowrap;
 }
+.domestic-license-filter-layout {
+  grid-template-columns: 1fr;
+  width: min(100%, 1136px);
+  gap: 16px;
+}
+.domestic-license-filter-grid {
+  grid-template-columns: repeat(4, 260px);
+  column-gap: 32px;
+  row-gap: 18px;
+  align-items: end;
+}
+.domestic-license-filter-field {
+  margin-bottom: 0;
+}
+.domestic-license-filter-field--agent {
+  grid-column: 1;
+  grid-row: 1;
+}
+.domestic-license-filter-field--time {
+  grid-column: 2 / span 2;
+  grid-row: 1;
+}
+.domestic-license-filter-field--process {
+  grid-column: 4;
+  grid-row: 1;
+}
+.domestic-license-filter-field--location {
+  grid-column: 1 / span 2;
+  grid-row: 2;
+}
+.domestic-license-filter-field--status {
+  grid-column: 3;
+  grid-row: 2;
+}
+.domestic-license-filter-field--keyword {
+  grid-column: 4;
+  grid-row: 2;
+}
+.domestic-license-filter-grid .order-filter-linked-selects {
+  grid-template-columns: 260px 260px;
+  justify-content: start;
+  gap: 20px;
+}
+.domestic-license-filter-grid .order-filter-range {
+  gap: 8px;
+}
+.domestic-license-filter-grid .order-filter-range .form-input {
+  flex: 0 0 260px;
+  max-width: 260px;
+}
+.domestic-license-filter-actions {
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border-light);
+}
 .order-list-card {
   overflow: hidden;
 }
@@ -1513,6 +1569,28 @@
     grid-column: auto;
     justify-content: flex-end;
   }
+  .domestic-license-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .domestic-license-filter-field--agent,
+  .domestic-license-filter-field--process,
+  .domestic-license-filter-field--status,
+  .domestic-license-filter-field--keyword {
+    grid-column: span 1;
+    grid-row: auto;
+  }
+  .domestic-license-filter-field--time,
+  .domestic-license-filter-field--location {
+    grid-column: span 2;
+    grid-row: auto;
+  }
+  .domestic-license-filter-grid .order-filter-linked-selects {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .domestic-license-filter-grid .order-filter-range .form-input {
+    flex: 1 1 0;
+    max-width: none;
+  }
   .order-filter-panel__header {
     flex-direction: column;
   }
@@ -1559,6 +1637,20 @@
   }
   .translation-order-filter-actions {
     justify-content: flex-start;
+  }
+  .domestic-license-filter-grid {
+    grid-template-columns: 1fr;
+  }
+  .domestic-license-filter-field--agent,
+  .domestic-license-filter-field--process,
+  .domestic-license-filter-field--status,
+  .domestic-license-filter-field--keyword,
+  .domestic-license-filter-field--time,
+  .domestic-license-filter-field--location {
+    grid-column: span 1;
+  }
+  .domestic-license-filter-grid .order-filter-linked-selects {
+    grid-template-columns: 1fr;
   }
   .order-list-card__toolbar,
   .order-list-card__tabs-row {

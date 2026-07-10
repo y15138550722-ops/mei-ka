@@ -106,6 +106,200 @@
   align-items: start;
 }
 
+.notary-preview-layout--sidebar-only {
+  grid-template-columns: minmax(0, 560px);
+  justify-content: end;
+}
+
+.notary-preview-external-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.48fr);
+  gap: var(--space-5);
+  align-items: stretch;
+}
+
+.notary-preview-external-card {
+  overflow: hidden;
+}
+
+.notary-preview-external-card--attachments {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.notary-preview-external-card__header {
+  display: flex;
+  align-items: center;
+  min-height: 56px;
+  padding: 0 18px;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.notary-preview-external-card__header h2 {
+  font-size: 16px;
+  color: #0f172a;
+}
+
+.notary-preview-external-card__body {
+  padding: 28px 18px 24px;
+}
+
+.notary-preview-external-layout > .notary-preview-external-card:nth-of-type(4):not(.notary-preview-external-card--attachments) {
+  display: none;
+}
+
+.notary-preview-external-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px 52px;
+}
+
+.notary-preview-external-field {
+  min-width: 0;
+}
+
+.notary-preview-external-field--full {
+  grid-column: 1 / -1;
+}
+
+.notary-preview-external-field span {
+  display: block;
+  margin-bottom: 10px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.notary-preview-external-field strong {
+  display: block;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.8;
+  word-break: break-word;
+}
+
+.notary-preview-external-attachments {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  align-content: start;
+}
+
+.notary-preview-external-card--attachments .notary-preview-external-card__body {
+  flex: 1;
+}
+
+.notary-preview-external-attachment {
+  overflow: hidden;
+  border: 1px solid #d9e2ef;
+  border-radius: 12px;
+  background: #111827;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+}
+
+.notary-preview-external-attachment__media {
+  aspect-ratio: 1.14 / 1;
+  background: #0f172a;
+}
+
+.notary-preview-external-attachment__trigger {
+  width: 100%;
+  height: 100%;
+  border: none;
+  padding: 0;
+  background: transparent;
+  display: block;
+  cursor: zoom-in;
+}
+
+.notary-preview-external-attachment__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.notary-preview-external-attachment__caption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 10px 12px;
+  color: #ffffff;
+}
+
+.notary-preview-external-attachment__label {
+  width: 100%;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.notary-preview-external-attachment__name {
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.notary-preview-external-empty {
+  padding: 28px 0;
+  color: #94a3b8;
+  font-size: 14px;
+  text-align: center;
+}
+
+.notary-preview-image-modal {
+  width: min(92vw, 1080px);
+  max-height: 92vh;
+  background: #ffffff;
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
+  overflow: hidden;
+}
+
+.notary-preview-image-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.notary-preview-image-modal__title {
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.notary-preview-image-modal__body {
+  padding: 18px;
+  max-height: calc(92vh - 72px);
+  overflow: auto;
+  background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+}
+
+.notary-preview-image-modal__image {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.14);
+}
+
 .notary-preview-browser {
   overflow: hidden;
 }

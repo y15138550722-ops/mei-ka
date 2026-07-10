@@ -87,10 +87,15 @@ const ProductForm: React.FC = () => {
       updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
     };
 
-    if (isEdit) {
-      updateProduct(id!, productData);
-    } else {
-      addProduct(productData);
+    try {
+      if (isEdit) {
+        updateProduct(id!, productData);
+      } else {
+        addProduct(productData);
+      }
+    } catch {
+      showToast('error', '产品保存失败，请稍后重试');
+      return;
     }
 
     showToast('success', t('product.toast.saveSuccess'));

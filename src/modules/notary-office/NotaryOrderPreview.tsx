@@ -3,9 +3,11 @@ import JSZip from 'jszip';
 import { useNavigate, useParams } from 'react-router-dom';
 import ResolvedImage from '../../shared/components/ResolvedImage';
 import { useTranslation } from '../../shared/i18n/config';
+import { getExternalNotaryOrders } from '../../services/externalNotaryOrderService';
 import {
   getNotaryOfficeOrderById,
   syncNotaryOfficeApprovalToManagement,
+  syncNotaryOfficeRejectionToExternalOrder,
   syncNotaryOfficeRejectionToManagement,
   updateNotaryOfficeOrder,
 } from '../../services/notaryOfficeOrderService';
@@ -23,6 +25,7 @@ type PreviewFileGroup = 'primary' | 'supporting';
 type AuditItemStatus = 'success' | 'warning';
 type OfficePreviewStatus = 'idle' | 'loading' | 'ready' | 'error';
 type GeneratedPreviewStatus = 'loading' | 'ready' | 'error';
+type PreviewImageState = { label: string; src: string } | null;
 
 interface PreviewFile {
   id: string;
@@ -224,6 +227,38 @@ const SUPPORTING_FILES: PreviewFile[] = Array.from({ length: 8 }, (_, index) => 
 }));
 
 const ALL_FILES = [...ORDER_PREVIEW_FILES, ...SUPPORTING_FILES];
+const EXTERNAL_NOTARY_SOURCE_EMAIL_PREFIX = 'external-notary-order-';
+const EXTERNAL_NOTARY_SOURCE_EMAIL_DOMAIN = 'meika.local';
+
+const isExternalNotarySourceOrder = (order: Pick<Order, 'customerEmail' | 'logs'>) =>
+  (order.customerEmail.startsWith(EXTERNAL_NOTARY_SOURCE_EMAIL_PREFIX) &&
+    order.customerEmail.endsWith(`@${EXTERNAL_NOTARY_SOURCE_EMAIL_DOMAIN}`)) ||
+  order.logs.some((log) => /代理端录入外采公证订单|外采订单 .* 已同步至公证订单管理/.test(log.action));
+
+const getExternalNotarySourceOrderId = (order: Pick<Order, 'customerEmail' | 'logs'>) => {
+  const sourceEmail = order.customerEmail?.trim().toLowerCase() || '';
+  const emailPrefix = `${EXTERNAL_NOTARY_SOURCE_EMAIL_PREFIX}`;
+
+  if (sourceEmail.startsWith(emailPrefix) && sourceEmail.endsWith(`@${EXTERNAL_NOTARY_SOURCE_EMAIL_DOMAIN}`)) {
+    return sourceEmail.slice(emailPrefix.length, sourceEmail.indexOf('@')).toUpperCase();
+  }
+
+  const sourceLog = [...order.logs].reverse().find((log) => log.action.match(/来源[:：]\s*([A-Za-z]\d+)/));
+  const matchedOrderId = sourceLog?.action.match(/来源[:：]\s*([A-Za-z]\d+)/)?.[1]?.trim();
+  return matchedOrderId ? matchedOrderId.toUpperCase() : undefined;
+};
+
+const EXTERNAL_ATTACHMENT_LABELS: Record<string, string> = {
+  'license-front': '驾照正面图片',
+  'license-back': '驾照反面图片',
+  'extra-front': '驾照副页正面图片',
+  'extra-back': '驾照副页反面图片',
+  'identity-front': '身份证正面',
+  'identity-back': '身份证反面',
+  'digital-license': '电子驾照',
+  'passport-front': '护照/港澳台通行证',
+  'passport-visa': '护照签证页',
+};
 
 const buildPassportPdfSource = (order: Order) => {
   const images = order.notaryCertificateImages || {};
@@ -1088,6 +1123,7 @@ const NotaryOrderPreview: React.FC = () => {
   const [toast, setToast] = useState<{ type: string; message: string } | null>(null);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [previewImage, setPreviewImage] = useState<PreviewImageState>(null);
   const [officePreviewStatus, setOfficePreviewStatus] = useState<OfficePreviewStatus>('idle');
   const [officePreviewHtml, setOfficePreviewHtml] = useState('');
   const [resolvedImageSources, setResolvedImageSources] = useState<Record<string, string>>({});
@@ -1308,6 +1344,34 @@ const NotaryOrderPreview: React.FC = () => {
 
   const currentFileIndex = allFiles.findIndex((file) => file.id === selectedFile.id) + 1;
   const isAuditable = order.status === 'pending_review';
+  const isExternalSourceOrder = isExternalNotarySourceOrder(order);
+  const externalSourceOrderId = isExternalSourceOrder ? getExternalNotarySourceOrderId(order) : undefined;
+  const externalSourceOrder = useMemo(
+    () => (externalSourceOrderId ? getExternalNotaryOrders().find((item) => item.orderId === externalSourceOrderId) : undefined),
+    [externalSourceOrderId, order.updatedAt],
+  );
+  const externalDisplayData = isExternalSourceOrder
+    ? {
+        productName: externalSourceOrder?.productName || order.productName || '--',
+        serviceName: externalSourceOrder?.serviceName?.trim() || order.processType || '--',
+        language: externalSourceOrder?.language || order.language || '--',
+        useCountry: externalSourceOrder?.useCountry?.trim() || getNotaryUseCountry(order),
+        licenseNo: externalSourceOrder?.licenseNo || order.licenseNo || '--',
+        fullName: externalSourceOrder?.customerName || order.licenseName || order.customerName || '--',
+        surnamePinyin: externalSourceOrder?.surnamePinyin || order.idpSurnameEn || '--',
+        givenNamePinyin: externalSourceOrder?.givenNamePinyin || order.idpGivenNameEn || '--',
+        deliveryAddress: externalSourceOrder?.deliveryAddress || order.deliveryAddress || '--',
+        recipientPhone: externalSourceOrder?.recipientPhone || order.customerPhone || '--',
+        recipientName: externalSourceOrder?.recipientName || order.customerName || '--',
+        remark: externalSourceOrder?.remark || order.remark || '--',
+      }
+    : null;
+  const externalAttachmentItems = supportingFiles.map((file, index) => ({
+    key: file.id,
+    label: EXTERNAL_ATTACHMENT_LABELS[file.id] || file.name,
+    fileName: `${index + 1}.png`,
+    path: file.path,
+  }));
 
   const checklist: Array<{ label: string; detail: string; status: AuditItemStatus }> = [
     {
@@ -1347,7 +1411,7 @@ const NotaryOrderPreview: React.FC = () => {
   const completionRate = Math.round((completedChecks / checklist.length) * 100);
 
   const workbenchStats = [
-    { label: '主材料', value: String(primaryFiles.length) },
+    ...(!isExternalSourceOrder ? [{ label: '主材料', value: String(primaryFiles.length) }] : []),
     { label: '附件图片', value: String(supportingFiles.length) },
   ];
 
@@ -1433,6 +1497,29 @@ const NotaryOrderPreview: React.FC = () => {
     }
 
     if (status === 'rejected' && nextRejectReason) {
+      syncNotaryOfficeRejectionToExternalOrder(
+        {
+          ...order,
+          status,
+          rejectReason: nextRejectReason,
+          remark: nextRejectReason || order.remark,
+          updatedAt: currentTimestamp,
+          logs: [
+            ...order.logs,
+            {
+              time: currentTimestamp,
+              operator: '公证处审核员',
+              action: `公证处审核驳回：${nextRejectReason}`,
+            },
+          ],
+        },
+        {
+          rejectReason: nextRejectReason,
+          operator: '公证处审核员',
+          rejectedAt: currentTimestamp,
+        },
+      );
+
       syncNotaryOfficeRejectionToManagement(
         {
           ...order,
@@ -1600,88 +1687,213 @@ const NotaryOrderPreview: React.FC = () => {
       </header>
 
       <div className="app-main notary-preview-page">
-        <div className="notary-preview-layout">
-          <section className="card notary-preview-browser">
-            <div className="notary-preview-browser__head">
-              <div>
-                <div className="notary-preview-browser__eyebrow">文件预览中心</div>
-                <h2>{selectedFile.name}</h2>
+        {isExternalSourceOrder ? (
+          <div className="notary-preview-external-layout">
+            <section className="card notary-preview-external-card">
+              <div className="notary-preview-external-card__header">
+                <h2>产品信息</h2>
               </div>
-
-              <div className="notary-preview-browser__tools">
-                <span className="notary-preview-browser__count">
-                  当前文件 {currentFileIndex} / {allFiles.length}
-                </span>
-                <button className="btn btn--secondary" type="button" onClick={handleDownload}>
-                  下载当前文件
-                </button>
-              </div>
-            </div>
-
-            <div className="notary-preview-browser__body">
-              <aside className="notary-preview-file-nav">
-                <div className="notary-preview-file-nav__section">
-                  <div className="notary-preview-file-nav__header">
-                    <h3>核心预览文件</h3>
-                    <span>{primaryFiles.length} 份</span>
+              <div className="notary-preview-external-card__body">
+                <div className="notary-preview-external-grid">
+                  <div className="notary-preview-external-field">
+                    <span>产品类型</span>
+                    <strong>{externalDisplayData?.productName || '--'}</strong>
                   </div>
-                  <div className="notary-preview-file-nav__list">
-                    {primaryFiles.map((file) => (
-                      <button
-                        key={file.id}
-                        className={`notary-preview-file-card ${
-                          selectedFile.id === file.id ? 'notary-preview-file-card--active' : ''
-                        }`}
-                        type="button"
-                        onClick={() => setSelectedFileId(file.id)}
-                      >
-                        <span className="notary-preview-file-card__type">{fileTypeLabel[file.type]}</span>
-                        <strong>{file.name}</strong>
-                      </button>
+                  <div className="notary-preview-external-field">
+                    <span>服务内容</span>
+                    <strong>{externalDisplayData?.serviceName || '--'}</strong>
+                  </div>
+                  <div className="notary-preview-external-field">
+                    <span>语言</span>
+                    <strong>{externalDisplayData?.language || '--'}</strong>
+                  </div>
+                  <div className="notary-preview-external-field">
+                    <span>使用国家</span>
+                    <strong>{externalDisplayData?.useCountry || '--'}</strong>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="card notary-preview-external-card">
+              <div className="notary-preview-external-card__header">
+                <h2>驾照信息</h2>
+              </div>
+              <div className="notary-preview-external-card__body">
+                <div className="notary-preview-external-grid">
+                  <div className="notary-preview-external-field">
+                    <span>驾驶证号码</span>
+                    <strong>{externalDisplayData?.licenseNo || '--'}</strong>
+                  </div>
+                  <div className="notary-preview-external-field">
+                    <span>姓名</span>
+                    <strong>{externalDisplayData?.fullName || '--'}</strong>
+                  </div>
+                  <div className="notary-preview-external-field">
+                    <span>姓氏拼音</span>
+                    <strong>{externalDisplayData?.surnamePinyin || '--'}</strong>
+                  </div>
+                  <div className="notary-preview-external-field">
+                    <span>名字拼音</span>
+                    <strong>{externalDisplayData?.givenNamePinyin || '--'}</strong>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="card notary-preview-external-card">
+              <div className="notary-preview-external-card__header">
+                <h2>收货信息</h2>
+              </div>
+              <div className="notary-preview-external-card__body">
+                <div className="notary-preview-external-grid">
+                  <div className="notary-preview-external-field notary-preview-external-field--full">
+                    <span>收件地址</span>
+                    <strong>{externalDisplayData?.deliveryAddress || '--'}</strong>
+                  </div>
+                  <div className="notary-preview-external-field">
+                    <span>电话号码</span>
+                    <strong>{externalDisplayData?.recipientPhone || '--'}</strong>
+                  </div>
+                  <div className="notary-preview-external-field">
+                    <span>收件人姓名</span>
+                    <strong>{externalDisplayData?.recipientName || '--'}</strong>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="card notary-preview-external-card">
+              <div className="notary-preview-external-card__header">
+                <h2>备注</h2>
+              </div>
+              <div className="notary-preview-external-card__body">
+                <div className="notary-preview-external-grid">
+                  <div className="notary-preview-external-field notary-preview-external-field--full">
+                    <span>备注内容</span>
+                    <strong>{externalDisplayData?.remark || '--'}</strong>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="card notary-preview-external-card notary-preview-external-card--attachments">
+              <div className="notary-preview-external-card__header">
+                <h2>附件图片</h2>
+              </div>
+              <div className="notary-preview-external-card__body">
+                {externalAttachmentItems.length > 0 ? (
+                  <div className="notary-preview-external-attachments">
+                    {externalAttachmentItems.map((item) => (
+                      <div key={item.key} className="notary-preview-external-attachment">
+                        <div className="notary-preview-external-attachment__media">
+                          <button
+                            type="button"
+                            className="notary-preview-external-attachment__trigger"
+                            onClick={() => setPreviewImage({ label: item.label, src: item.path })}
+                            aria-label={`查看${item.label}大图`}
+                          >
+                            <ResolvedImage src={item.path} alt={item.label} className="notary-preview-external-attachment__image" />
+                          </button>
+                        </div>
+                        <div className="notary-preview-external-attachment__caption">
+                          <span className="notary-preview-external-attachment__label">{item.label}</span>
+                          <span className="notary-preview-external-attachment__name">{item.fileName}</span>
+                        </div>
+                      </div>
                     ))}
                   </div>
-                </div>
-
-                <div className="notary-preview-file-nav__section">
-                  <div className="notary-preview-file-nav__header">
-                    <h3>附件图片</h3>
-                    <span>{supportingFiles.length} 张</span>
-                  </div>
-                  <div className="notary-preview-thumb-list">
-                    {supportingFiles.map((file) => (
-                      <button
-                        key={file.id}
-                        className={`notary-preview-thumb ${
-                          selectedFile.id === file.id ? 'notary-preview-thumb--active' : ''
-                        }`}
-                        type="button"
-                        onClick={() => setSelectedFileId(file.id)}
-                      >
-                        <ResolvedImage src={file.path} alt={file.name} />
-                        <span>{file.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </aside>
-
-              <div className="notary-preview-viewer-panel">
-                <div className="notary-preview-viewer-panel__meta">
-                  <div className="notary-preview-file-meta">
-                    <span className={`notary-preview-file-chip notary-preview-file-chip--${selectedFile.group}`}>
-                      {selectedFile.group === 'primary' ? '主材料' : '附件图片'}
-                    </span>
-                    <span className="notary-preview-file-chip notary-preview-file-chip--type">
-                      {fileTypeLabel[selectedFilePreviewType]}
-                    </span>
-                    {!selectedFile.canInlinePreview && <span className="notary-preview-file-tip">需下载后查看</span>}
-                  </div>
-                </div>
-
-                <div className="notary-preview-viewer">{renderViewer()}</div>
+                ) : (
+                  <div className="notary-preview-external-empty">暂无附件图片</div>
+                )}
               </div>
-            </div>
-          </section>
+            </section>
+          </div>
+        ) : (
+        <div className={`notary-preview-layout ${isExternalSourceOrder ? 'notary-preview-layout--sidebar-only' : ''}`.trim()}>
+          {!isExternalSourceOrder && (
+            <section className="card notary-preview-browser">
+              <div className="notary-preview-browser__head">
+                <div>
+                  <div className="notary-preview-browser__eyebrow">文件预览中心</div>
+                  <h2>{selectedFile.name}</h2>
+                </div>
+
+                <div className="notary-preview-browser__tools">
+                  <span className="notary-preview-browser__count">
+                    当前文件 {currentFileIndex} / {allFiles.length}
+                  </span>
+                  <button className="btn btn--secondary" type="button" onClick={handleDownload}>
+                    下载当前文件
+                  </button>
+                </div>
+              </div>
+
+              <div className="notary-preview-browser__body">
+                <aside className="notary-preview-file-nav">
+                  <div className="notary-preview-file-nav__section">
+                    <div className="notary-preview-file-nav__header">
+                      <h3>核心预览文件</h3>
+                      <span>{primaryFiles.length} 份</span>
+                    </div>
+                    <div className="notary-preview-file-nav__list">
+                      {primaryFiles.map((file) => (
+                        <button
+                          key={file.id}
+                          className={`notary-preview-file-card ${
+                            selectedFile.id === file.id ? 'notary-preview-file-card--active' : ''
+                          }`}
+                          type="button"
+                          onClick={() => setSelectedFileId(file.id)}
+                        >
+                          <span className="notary-preview-file-card__type">{fileTypeLabel[file.type]}</span>
+                          <strong>{file.name}</strong>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="notary-preview-file-nav__section">
+                    <div className="notary-preview-file-nav__header">
+                      <h3>附件图片</h3>
+                      <span>{supportingFiles.length} 张</span>
+                    </div>
+                    <div className="notary-preview-thumb-list">
+                      {supportingFiles.map((file) => (
+                        <button
+                          key={file.id}
+                          className={`notary-preview-thumb ${
+                            selectedFile.id === file.id ? 'notary-preview-thumb--active' : ''
+                          }`}
+                          type="button"
+                          onClick={() => setSelectedFileId(file.id)}
+                        >
+                          <ResolvedImage src={file.path} alt={file.name} />
+                          <span>{file.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </aside>
+
+                <div className="notary-preview-viewer-panel">
+                  <div className="notary-preview-viewer-panel__meta">
+                    <div className="notary-preview-file-meta">
+                      <span className={`notary-preview-file-chip notary-preview-file-chip--${selectedFile.group}`}>
+                        {selectedFile.group === 'primary' ? '主材料' : '附件图片'}
+                      </span>
+                      <span className="notary-preview-file-chip notary-preview-file-chip--type">
+                        {fileTypeLabel[selectedFilePreviewType]}
+                      </span>
+                      {!selectedFile.canInlinePreview && <span className="notary-preview-file-tip">需下载后查看</span>}
+                    </div>
+                  </div>
+
+                  <div className="notary-preview-viewer">{renderViewer()}</div>
+                </div>
+              </div>
+            </section>
+          )}
 
           <aside className="notary-preview-sidebar">
             <section className="card notary-preview-console">
@@ -1707,63 +1919,66 @@ const NotaryOrderPreview: React.FC = () => {
                 ))}
               </div>
 
-              <div className="notary-preview-console__section">
-                <div className="notary-preview-console__section-head">
-                  <h3>审核摘要</h3>
-                  <span>
-                    {completedChecks}/{checklist.length} 项已就绪
-                  </span>
-                </div>
-
-                <div className="notary-preview-progress">
-                  <div className="notary-preview-progress__track">
-                    <div className="notary-preview-progress__bar" style={{ width: `${completionRate}%` }} />
+              {!isExternalSourceOrder && (
+                <div className="notary-preview-console__section">
+                  <div className="notary-preview-console__section-head">
+                    <h3>审核摘要</h3>
+                    <span>
+                      {completedChecks}/{checklist.length} 项已就绪
+                    </span>
                   </div>
-                  <strong>{completionRate}%</strong>
-                </div>
 
-                <dl className="notary-preview-summary">
-                  {summaryItems.map((item) => (
-                    <div key={item.label}>
-                      <dt>{item.label}</dt>
-                      <dd>{item.value}</dd>
+                  <div className="notary-preview-progress">
+                    <div className="notary-preview-progress__track">
+                      <div className="notary-preview-progress__bar" style={{ width: `${completionRate}%` }} />
                     </div>
-                  ))}
-                </dl>
-
-                <div className="notary-preview-address">
-                  <span>收货信息</span>
-                  <strong>
-                    {order.customerName} / {order.customerPhone}
-                  </strong>
-                  <p>{order.deliveryAddress}</p>
-                </div>
-
-                {order.rejectReason && (
-                  <div className="notary-preview-alert notary-preview-alert--danger">
-                    <span>历史驳回原因</span>
-                    <strong>{order.rejectReason}</strong>
+                    <strong>{completionRate}%</strong>
                   </div>
-                )}
 
-                <ul className="notary-preview-checklist">
-                  {checklist.map((item) => (
-                    <li
-                      key={item.label}
-                      className={`notary-preview-checklist__item notary-preview-checklist__item--${item.status}`}
-                    >
-                      <div className="notary-preview-checklist__marker" />
-                      <div>
-                        <strong>{item.label}</strong>
-                        <span>{item.detail}</span>
+                  <dl className="notary-preview-summary">
+                    {summaryItems.map((item) => (
+                      <div key={item.label}>
+                        <dt>{item.label}</dt>
+                        <dd>{item.value}</dd>
                       </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+                    ))}
+                  </dl>
+
+                  <div className="notary-preview-address">
+                    <span>收货信息</span>
+                    <strong>
+                      {order.customerName} / {order.customerPhone}
+                    </strong>
+                    <p>{order.deliveryAddress}</p>
+                  </div>
+
+                  {order.rejectReason && (
+                    <div className="notary-preview-alert notary-preview-alert--danger">
+                      <span>历史驳回原因</span>
+                      <strong>{order.rejectReason}</strong>
+                    </div>
+                  )}
+
+                  <ul className="notary-preview-checklist">
+                    {checklist.map((item) => (
+                      <li
+                        key={item.label}
+                        className={`notary-preview-checklist__item notary-preview-checklist__item--${item.status}`}
+                      >
+                        <div className="notary-preview-checklist__marker" />
+                        <div>
+                          <strong>{item.label}</strong>
+                          <span>{item.detail}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </section>
           </aside>
         </div>
+        )}
       </div>
 
       {showRejectModal && (
@@ -1804,6 +2019,22 @@ const NotaryOrderPreview: React.FC = () => {
               >
                 确认驳回
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {previewImage && (
+        <div className="modal-overlay" onClick={() => setPreviewImage(null)}>
+          <div className="notary-preview-image-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="notary-preview-image-modal__header">
+              <h3 className="notary-preview-image-modal__title">{previewImage.label}</h3>
+              <button className="btn btn--ghost btn--sm" type="button" onClick={() => setPreviewImage(null)}>
+                关闭
+              </button>
+            </div>
+            <div className="notary-preview-image-modal__body">
+              <ResolvedImage className="notary-preview-image-modal__image" src={previewImage.src} alt={`${previewImage.label}大图预览`} />
             </div>
           </div>
         </div>

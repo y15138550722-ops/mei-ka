@@ -6,11 +6,14 @@ import { getStoredAuthSession, logoutAuthSession, type AuthSession } from './sha
 const Dashboard = lazy(() => import('./modules/dashboard/Dashboard'));
 const OrderList = lazy(() => import('./modules/order-management/OrderList'));
 const IdpOrderList = lazy(() => import('./modules/order-management/IdpOrderList'));
+const DomesticLicenseOrderManagement = lazy(() => import('./modules/order-management/DomesticLicenseOrderManagement'));
 const IddTemplatePreview = lazy(() => import('./modules/order-management/IddTemplatePreview'));
 const OrderDetail = lazy(() => import('./modules/order-management/OrderDetail'));
 const NotaryOrderManagementList = lazy(() => import('./modules/order-management/NotaryOrderManagementList'));
 const NotaryOrderManagementPreview = lazy(() => import('./modules/order-management/NotaryOrderManagementPreview'));
 const NotaryItineraryExport = lazy(() => import('./modules/order-management/NotaryItineraryExport'));
+const ExternalNotaryOrderManagement = lazy(() => import('./modules/order-management/ExternalNotaryOrderManagement'));
+const ExternalNotaryOrderCreate = lazy(() => import('./modules/order-management/ExternalNotaryOrderCreate'));
 const KlookOrderManagement = lazy(() => import('./modules/order-management/KlookOrderManagement'));
 const KlookOrderDetail = lazy(() => import('./modules/order-management/KlookOrderDetail'));
 const HelloOrderManagement = lazy(() => import('./modules/order-management/HelloOrderManagement'));
@@ -156,12 +159,16 @@ const App: React.FC = () => {
           <Route path="/" element={<Dashboard />} />
           <Route path="/orders" element={<OrderList />} />
           <Route path="/orders/:id" element={<OrderDetail />} />
+          <Route path="/order-management/domestic-license-orders" element={<DomesticLicenseOrderManagement />} />
+          <Route path="/order-management/domestic-license-orders/:id" element={<OrderDetail />} />
           <Route path="/order-management/idp-orders" element={<IdpOrderList />} />
           <Route path="/order-management/idp-orders/:id" element={<OrderDetail />} />
           <Route path="/order-management/idp-orders/:id/templates" element={<IddTemplatePreview />} />
           <Route path="/order-management/notary-orders" element={<NotaryOrderManagementList />} />
           <Route path="/order-management/notary-orders/:id/preview" element={<NotaryOrderManagementPreview />} />
           <Route path="/order-management/notary-orders/:id/itinerary-export" element={<NotaryItineraryExport />} />
+          <Route path="/order-management/external-notary-orders" element={<ExternalNotaryOrderManagement />} />
+          <Route path="/order-management/external-notary-orders/new" element={<ExternalNotaryOrderCreate />} />
           <Route path="/order-management/api-orders" element={<Navigate to="/order-management/api-orders/klook" replace />} />
           <Route path="/order-management/api-orders/klook" element={<KlookOrderManagement />} />
           <Route

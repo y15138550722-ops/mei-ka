@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import JSZip from 'jszip';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { getExternalNotaryOrders, type ExternalNotaryOrder } from '../../services/externalNotaryOrderService';
 import { useTranslation } from '../../shared/i18n/config';
 import {
   getNotaryOfficeOrders,
@@ -10,6 +11,7 @@ import {
 import ListUnifiedPagination from '../../shared/components/list/ListUnifiedPagination';
 import type { Order, OrderStatus, ProcessType } from '../../shared/types';
 import { formatBeijingTimestamp } from '../../shared/utils/dateTime';
+import { resolveLocalImageSource } from '../../shared/utils/localImageStore';
 import { getLanguageOptionsForProduct } from '../../shared/utils/notaryLanguageOptions';
 import { getProcessTypeTone } from '../../shared/utils/productProcessType';
 
@@ -40,6 +42,8 @@ const NOTARY_DOWNLOAD_TEMPLATE_PATHS = [
     path: NOTARY_DOWNLOAD_TEMPLATE_URL,
   },
 ];
+const EXTERNAL_NOTARY_SOURCE_EMAIL_PREFIX = 'external-notary-order-';
+const EXTERNAL_NOTARY_SOURCE_EMAIL_DOMAIN = 'meika.local';
 
 const NOTARY_LANGUAGE_COUNTRY_MAP: Record<string, string> = {
   英语: '美国',
@@ -97,6 +101,24 @@ const getInitialNotaryFilterStatus = (status: string | null): OrderStatus | '' =
 
 const sanitizeDownloadPart = (value: string) => value.replace(/[\\/:*?"<>|]/g, '-').trim();
 
+const isExternalNotarySourceOrder = (order: Pick<Order, 'customerEmail' | 'logs'>) =>
+  (order.customerEmail.startsWith(EXTERNAL_NOTARY_SOURCE_EMAIL_PREFIX) &&
+    order.customerEmail.endsWith(`@${EXTERNAL_NOTARY_SOURCE_EMAIL_DOMAIN}`)) ||
+  order.logs.some((log) => /来源[:：]\s*([A-Za-z]\d+)/.test(log.action));
+
+const getExternalNotarySourceOrderId = (order: Pick<Order, 'customerEmail' | 'logs'>) => {
+  const sourceEmail = order.customerEmail?.trim().toLowerCase() || '';
+  const emailPrefix = `${EXTERNAL_NOTARY_SOURCE_EMAIL_PREFIX}`;
+
+  if (sourceEmail.startsWith(emailPrefix) && sourceEmail.endsWith(`@${EXTERNAL_NOTARY_SOURCE_EMAIL_DOMAIN}`)) {
+    return sourceEmail.slice(emailPrefix.length, sourceEmail.indexOf('@')).toUpperCase();
+  }
+
+  const sourceLog = [...order.logs].reverse().find((log) => log.action.match(/来源[:：]\s*([A-Za-z]\d+)/));
+  const matchedOrderId = sourceLog?.action.match(/来源[:：]\s*([A-Za-z]\d+)/)?.[1]?.trim();
+  return matchedOrderId ? matchedOrderId.toUpperCase() : undefined;
+};
+
 const getNotaryCountryLabel = (order: Order) => {
   const useCountry = getNotaryUseCountry(order);
   if (useCountry) {
@@ -129,6 +151,19 @@ const getNotaryProductionFileContext = (order: Order) => {
 
 const buildNotaryZipFilename = (order: Order) => getNotaryProductionFileContext(order).zipFileName;
 
+const buildExternalNotaryZipFilename = (externalOrder: ExternalNotaryOrder) => {
+  const name = sanitizeDownloadPart(externalOrder.licenseName || externalOrder.customerName || '姓名未设置');
+  const pinyin = sanitizeDownloadPart(
+    [externalOrder.surnamePinyin?.trim(), externalOrder.givenNamePinyin?.trim()].filter(Boolean).join(' ') || '姓名拼音未设置',
+  );
+  const useCountry = sanitizeDownloadPart(externalOrder.useCountry?.trim() || '使用国家未设置');
+  const language = sanitizeDownloadPart(externalOrder.language?.trim() || '语言未设置');
+  const productName = sanitizeDownloadPart(externalOrder.productName?.trim() || '产品名称未设置');
+  const serviceName = sanitizeDownloadPart(externalOrder.serviceName?.trim() || '服务类型未设置');
+
+  return `${[name, pinyin, useCountry, language, productName, serviceName].join(' ')}.zip`;
+};
+
 const renameNotaryTemplatePath = (path: string, context: ReturnType<typeof getNotaryProductionFileContext>) => {
   const normalizedPath = path.replace(/\\/g, '/');
   const pathSegments = normalizedPath.split('/');
@@ -142,6 +177,35 @@ const renameNotaryTemplatePath = (path: string, context: ReturnType<typeof getNo
         .join(context.name),
     )
     .join('/');
+};
+
+const getAttachmentExtension = (fileName: string, source: string) => {
+  const normalizedFileName = fileName.split('?')[0].split('#')[0].toLowerCase();
+  if (/\.(png)$/.test(normalizedFileName)) return 'png';
+  if (/\.(jpg|jpeg)$/.test(normalizedFileName)) return 'jpg';
+  if (/\.(gif)$/.test(normalizedFileName)) return 'gif';
+  if (/\.(webp)$/.test(normalizedFileName)) return 'webp';
+
+  const normalizedSource = source.split('?')[0].split('#')[0].toLowerCase();
+  if (normalizedSource.endsWith('.png')) return 'png';
+  if (normalizedSource.endsWith('.jpg') || normalizedSource.endsWith('.jpeg')) return 'jpg';
+  if (normalizedSource.endsWith('.gif')) return 'gif';
+  if (normalizedSource.endsWith('.webp')) return 'webp';
+
+  const mimeMatch = source.match(/^data:image\/([a-zA-Z0-9+.-]+);base64,/);
+  if (mimeMatch?.[1]) {
+    return mimeMatch[1] === 'jpeg' ? 'jpg' : mimeMatch[1];
+  }
+
+  return 'png';
+};
+
+const buildExternalAttachmentFileName = (attachment: ExternalNotaryOrder['attachments'][number], resolvedSource: string) => {
+  const rawName = sanitizeDownloadPart(attachment.name?.trim() || attachment.title?.trim() || attachment.key);
+  if (/\.[A-Za-z0-9]+$/.test(rawName)) {
+    return rawName;
+  }
+  return `${rawName}.${getAttachmentExtension(rawName, resolvedSource)}`;
 };
 
 const getProductionDisplayNotaryOfficeName = (order: Order) =>
@@ -381,7 +445,64 @@ const NotaryOrderList: React.FC = () => {
 
   const getNotaryDownloadTemplate = () => NOTARY_DOWNLOAD_TEMPLATE_PATHS[0];
 
+  const getExternalSourceOrder = (order: Order) => {
+    if (!isExternalNotarySourceOrder(order)) {
+      return undefined;
+    }
+
+    const sourceOrderId = getExternalNotarySourceOrderId(order);
+    if (!sourceOrderId) {
+      return undefined;
+    }
+
+    return getExternalNotaryOrders().find((item) => item.orderId === sourceOrderId);
+  };
+
   const buildNotaryProductionZipBlob = async (order: Order) => {
+    const externalSourceOrder = getExternalSourceOrder(order);
+    if (externalSourceOrder) {
+      const productionZip = new JSZip();
+      const usedNames = new Set<string>();
+
+      await Promise.all(
+        externalSourceOrder.attachments.map(async (attachment) => {
+          const resolvedSource = await resolveLocalImageSource(attachment.src);
+          if (!resolvedSource) {
+            return;
+          }
+
+          const response = await fetch(resolvedSource);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch external attachment: ${attachment.key}`);
+          }
+
+          const baseName = buildExternalAttachmentFileName(attachment, resolvedSource);
+          let nextName = baseName;
+          let duplicateIndex = 2;
+          while (usedNames.has(nextName)) {
+            const extensionIndex = baseName.lastIndexOf('.');
+            if (extensionIndex === -1) {
+              nextName = `${baseName}_${duplicateIndex}`;
+            } else {
+              nextName = `${baseName.slice(0, extensionIndex)}_${duplicateIndex}${baseName.slice(extensionIndex)}`;
+            }
+            duplicateIndex += 1;
+          }
+          usedNames.add(nextName);
+
+          productionZip.file(nextName, await response.arrayBuffer());
+        }),
+      );
+
+      return productionZip.generateAsync({
+        type: 'blob',
+        compression: 'DEFLATE',
+        compressionOptions: {
+          level: 6,
+        },
+      });
+    }
+
     const template = getNotaryDownloadTemplate();
     const response = await fetch(template.path);
 
@@ -503,7 +624,11 @@ const NotaryOrderList: React.FC = () => {
       const blob = await buildNotaryProductionZipBlob(targetOrder);
       const downloadUrl = window.URL.createObjectURL(blob);
 
-      triggerNotaryZipDownload(downloadUrl, buildNotaryZipFilename(targetOrder));
+      const externalSourceOrder = getExternalSourceOrder(targetOrder);
+      triggerNotaryZipDownload(
+        downloadUrl,
+        externalSourceOrder ? buildExternalNotaryZipFilename(externalSourceOrder) : buildNotaryZipFilename(targetOrder),
+      );
       window.setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 0);
     } catch (error) {
       console.error('[notary-download] Failed to start zip download', error);
@@ -600,8 +725,12 @@ const NotaryOrderList: React.FC = () => {
         selectedOrders.map(async (order) => {
           const blob = await buildNotaryProductionZipBlob(order);
           const downloadUrl = window.URL.createObjectURL(blob);
+          const externalSourceOrder = getExternalSourceOrder(order);
 
-          triggerNotaryZipDownload(downloadUrl, buildNotaryZipFilename(order));
+          triggerNotaryZipDownload(
+            downloadUrl,
+            externalSourceOrder ? buildExternalNotaryZipFilename(externalSourceOrder) : buildNotaryZipFilename(order),
+          );
           window.setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 0);
         }),
       );

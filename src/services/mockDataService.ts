@@ -27,7 +27,7 @@ const PRODUCT_NEXT_ID_STORAGE_KEY = 'meika-products-next-id';
 const ORDER_STORAGE_KEY = 'meika-orders';
 const ORDER_DATA_VERSION_STORAGE_KEY = 'meika-order-data-version';
 export const ORDER_DATA_CHANGED_EVENT = 'meika-orders-changed';
-const ORDER_DATA_VERSION = 'notary-management-clear-system-notary-orders-v1';
+const ORDER_DATA_VERSION = 'domestic-license-order-management-seed-v2';
 const REMOVED_ORDER_IDS = new Set(['MK2600057', 'MK2600061']);
 const FORCE_VATICAN_USE_COUNTRY_ORDER_ID = 'MK2600082';
 
@@ -66,8 +66,10 @@ const PRODUCT_CATEGORIES: ProductCategory[] = ['translation', 'notary', 'idp', '
 const EXTRA_IDP_PENDING_ORDER_COUNT = 5;
 const NOTARY_PENDING_REVIEW_ORDER_COUNT = 0;
 const DOMESTIC_LICENSE_PRODUCT_TITLE = '换国内驾照翻译件';
+const REMOVED_PRODUCT_TITLES = new Set(['公证办理服务']);
 const DOMESTIC_LICENSE_UNTRANSLATED_ORDER_IDS = ['MK2600087', 'MK2600088', 'MK2600089', 'MK2600090', 'MK2600091'];
 const DOMESTIC_LICENSE_UNMADE_ORDER_IDS = new Set(['MK2600088']);
+const DOMESTIC_LICENSE_MANAGEMENT_EXTRA_ORDER_IDS = ['MK2600092', 'MK2600093', 'MK2600094', 'MK2600095'];
 const FORCE_DOMESTIC_LICENSE_UNTRANSLATED_ORDER_IDS = new Set(['MK2600076']);
 const PRODUCTION_OPERATOR = '生产端';
 const PRODUCTION_NODE_ACTIONS = new Set(['已翻译', '已制作', '已发货']);
@@ -316,12 +318,13 @@ const PRODUCT_SEEDS: Array<{
   { title: '西班牙语言宣誓翻译(电子版)', category: 'translation', weight: 24, status: 'active' },
   { title: '德语宣誓翻译(电子版)', category: 'translation', weight: 23, status: 'active' },
   { title: '法语宣誓翻译(电子版)', category: 'translation', weight: 22, status: 'active' },
-  { title: '公证办理服务', category: 'notary', weight: 18, status: 'active' },
   { title: 'IDP', category: 'idp', weight: 16, status: 'active' },
   { title: 'IDP（加急）', category: 'idp', weight: 15, status: 'active' },
   { title: 'IDD国际驾照', category: 'idp', weight: 14, status: 'active' },
   { title: 'IDD国际驾照（加急）', category: 'idp', weight: 13, status: 'active' },
 ];
+
+const PRODUCT_SEED_IDENTITY_SET = new Set(PRODUCT_SEEDS.map((seed) => `${seed.category}::${seed.title}`));
 
 const PROCESS_TYPE_ESTIMATED_DAYS: Record<ProcessType, number> = {
   normal: 15,
@@ -428,6 +431,9 @@ const isProductCategory = (value: unknown): value is ProductCategory =>
   typeof value === 'string' && PRODUCT_CATEGORIES.includes(value as ProductCategory);
 
 const isProductStatus = (value: unknown): value is Product['status'] => value === 'active' || value === 'inactive';
+
+const isRemovedProduct = (product: Pick<Product, 'category' | 'title'>) =>
+  product.category === 'notary' && REMOVED_PRODUCT_TITLES.has(product.title.trim());
 
 const clonePricing = (pricing: PriceTier[]): PriceTier[] => pricing.map((item) => ({ ...item }));
 
@@ -661,6 +667,29 @@ const buildFallbackProcessTypes = (productId: string, productTitle: string, defa
     return buildProcessTypeWithPricing(`PT-${productId}-${index + 1}`, template, (agentIndex) => basePrice - agentIndex * 20);
   });
 
+const isSystemGeneratedFallbackProcessTypes = (
+  productId: string,
+  productTitle: string,
+  defaultPrice: number,
+  processTypes: ProductProcessType[],
+) => {
+  const fallbackProcessTypes = buildFallbackProcessTypes(productId, productTitle, defaultPrice);
+
+  return (
+    processTypes.length === fallbackProcessTypes.length &&
+    processTypes.every((processType, index) => {
+      const fallbackProcessType = fallbackProcessTypes[index];
+
+      return (
+        processType.typeId === fallbackProcessType.typeId &&
+        processType.name === fallbackProcessType.name &&
+        hasDefaultBuiltInMetadata(processType) &&
+        matchesPricingPattern(processType.pricing, defaultPrice + index * 80, 20)
+      );
+    })
+  );
+};
+
 const normalizeProcessTypesForProduct = (
   productTitle: string,
   productId: string,
@@ -710,15 +739,24 @@ const normalizeProduct = (value: unknown, index: number): Product => {
   const weight = toNonNegativeInteger(record.weight, fallbackSeed?.weight ?? 0);
   const status = isProductStatus(record.status) ? record.status : fallbackSeed?.status || 'inactive';
   const defaultPrice = toNonNegativeNumber(record.defaultPrice, 299);
-  const rawProcessTypes = Array.isArray(record.processTypes) ? record.processTypes : [];
-  const normalizedRawProcessTypes = rawProcessTypes.map((processType, processIndex) =>
+  const storedProcessTypes = Array.isArray(record.processTypes) ? record.processTypes : undefined;
+  const normalizedRawProcessTypes = (storedProcessTypes ?? []).map((processType, processIndex) =>
     normalizeProcessType(processType, productId, processIndex),
   );
+  const isSeedProduct = PRODUCT_SEED_IDENTITY_SET.has(`${category}::${title}`);
+  const shouldRemoveGeneratedProcessTypes =
+    Boolean(storedProcessTypes) &&
+    !isSeedProduct &&
+    isSystemGeneratedFallbackProcessTypes(productId, title, defaultPrice, normalizedRawProcessTypes);
   const processTypes = normalizeProcessTypesForProduct(
     title,
     productId,
     defaultPrice,
-    normalizedRawProcessTypes.length > 0 ? normalizedRawProcessTypes : buildFallbackProcessTypes(productId, title, defaultPrice),
+    storedProcessTypes
+      ? shouldRemoveGeneratedProcessTypes
+        ? []
+        : normalizedRawProcessTypes
+      : buildFallbackProcessTypes(productId, title, defaultPrice),
   );
 
   return {
@@ -769,7 +807,9 @@ const loadProducts = (): Product[] => {
       return defaultProducts;
     }
 
-    const normalizedProducts = parsedValue.map((product, index) => normalizeProduct(product, index));
+    const normalizedProducts = parsedValue
+      .map((product, index) => normalizeProduct(product, index))
+      .filter((product) => !isRemovedProduct(product));
     const hasDomesticLicenseProduct = normalizedProducts.some((product) => product.title === DOMESTIC_LICENSE_PRODUCT_TITLE);
     const mergedProducts = hasDomesticLicenseProduct
       ? normalizedProducts
@@ -1132,6 +1172,80 @@ const createDomesticLicenseUntranslatedOrders = (products: Product[]): Order[] =
   });
 };
 
+const createDomesticLicenseManagementExtraOrders = (products: Product[]): Order[] => {
+  const product = products.find((item) => item.title === DOMESTIC_LICENSE_PRODUCT_TITLE);
+  const processTypes = product?.processTypes || [];
+
+  if (!product || processTypes.length === 0) {
+    return [];
+  }
+
+  const baseCreatedAt = '2026-07-09 10:00:00';
+
+  return DOMESTIC_LICENSE_MANAGEMENT_EXTRA_ORDER_IDS.map((orderId, index) => {
+    const seed = 120 + index;
+    const processType = processTypes[index % processTypes.length] || processTypes[0];
+    const customerName = NAMES[seed % NAMES.length];
+    const customerPassport = PASSPORTS[seed % PASSPORTS.length];
+    const agentLevel = AGENT_LEVELS[seed % AGENT_LEVELS.length];
+    const createdAt = addSecondsToTimestamp(baseCreatedAt, index * 900);
+    const approvedAt = addSecondsToTimestamp(createdAt, 1800);
+    const isPendingReview = index % 2 === 0;
+    const domesticLicenseInfo = buildDomesticLicenseInfo(seed, customerName, customerPassport);
+    const domesticExchangeLocation = [domesticLicenseInfo.exchangeProvince, domesticLicenseInfo.exchangeCity].join(' ');
+    const domesticForeignLocation = [domesticLicenseInfo.foreignCountry, domesticLicenseInfo.foreignCity].join(' ');
+    const lockedPrice = processType.pricing.find((item) => item.agentLevel === agentLevel)?.price || product.defaultPrice || 289;
+
+    return {
+      orderId,
+      customerName,
+      customerPhone: PHONES[seed % PHONES.length],
+      customerPassport,
+      customerEmail: `domestic-mgmt-${index + 1}@example.com`,
+      productId: product.productId,
+      productName: product.title,
+      productCategory: product.category,
+      processType: processType.name,
+      processTypeId: processType.typeId,
+      pushTimeliness: getPushTimeliness(processType, seed),
+      channel: CHANNELS[seed % CHANNELS.length],
+      agentLevel,
+      lockedPrice,
+      status: isPendingReview ? 'pending_review' : 'pending_production',
+      deliveryAddress: ADDRESSES[seed % ADDRESSES.length],
+      logisticsCompany: '',
+      trackingNumber: '',
+      remark: isPendingReview ? '用户端提交' : '代理端提交',
+      licenseName: domesticLicenseInfo.chineseName,
+      licenseNo: domesticLicenseInfo.licenseNumber,
+      licenseCategory: domesticLicenseInfo.classType,
+      licenseGender: domesticLicenseInfo.sex,
+      licenseBirthDate: domesticLicenseInfo.birthDate,
+      licenseAddress: domesticForeignLocation,
+      licenseFirstIssueDate: domesticLicenseInfo.issueDate,
+      licenseValidUntilDate: domesticLicenseInfo.expiryDate,
+      licenseArchiveNumber: domesticLicenseInfo.fileNumber,
+      licenseIssuingRegion: domesticExchangeLocation,
+      useCountry: domesticLicenseInfo.foreignCountry,
+      managementOrderId: isPendingReview ? undefined : getCompactTimestamp(addSecondsToTimestamp(approvedAt, index)),
+      domesticLicenseInfo,
+      createdAt,
+      updatedAt: isPendingReview ? createdAt : approvedAt,
+      shippedAt: undefined,
+      logs: isPendingReview
+        ? [
+            { time: createdAt, operator: '用户端', action: '用户端提交订单' },
+            { time: addSecondsToTimestamp(createdAt, 60), operator: '系统', action: '订单创建' },
+          ]
+        : [
+            { time: createdAt, operator: '代理端', action: '代理端录单提交' },
+            { time: addSecondsToTimestamp(createdAt, 60), operator: '系统', action: '订单创建' },
+            { time: approvedAt, operator: '运营-小王', action: '审核通过' },
+          ],
+    };
+  });
+};
+
 function createOrders(products: Product[]): Order[] {
   if (products.length === 0) {
     return [];
@@ -1328,6 +1442,7 @@ function createOrders(products: Product[]): Order[] {
     excludeDomesticLicenseSystemGeneratedOrders([
       ...orders,
       ...createDomesticLicenseUntranslatedOrders(products),
+      ...createDomesticLicenseManagementExtraOrders(products),
     ]),
   ).map(normalizeDomesticLicenseAuditState);
 }
@@ -1418,24 +1533,51 @@ export function getProductById(id: string) {
 }
 
 export function updateProduct(id: string, updates: Partial<Product>) {
+  const previousProducts = _products;
+  const previousOrders = _orders;
+
   _products = _products.map((product) => (product.productId === id ? normalizeProduct({ ...product, ...updates }, 0) : product));
-  syncOrdersWithProducts();
-  persistProducts();
-  persistOrders();
+  try {
+    syncOrdersWithProducts();
+    persistProducts();
+    persistOrders();
+  } catch (error) {
+    _products = previousProducts;
+    _orders = previousOrders;
+    throw error;
+  }
 }
 
 export function addProduct(product: Product) {
+  const previousProducts = _products;
+  const previousOrders = _orders;
+
   _products = [..._products, normalizeProduct(product, _products.length)];
-  syncOrdersWithProducts();
-  persistProducts();
-  persistOrders();
+  try {
+    syncOrdersWithProducts();
+    persistProducts();
+    persistOrders();
+  } catch (error) {
+    _products = previousProducts;
+    _orders = previousOrders;
+    throw error;
+  }
 }
 
 export function deleteProduct(id: string) {
+  const previousProducts = _products;
+  const previousOrders = _orders;
+
   _products = _products.filter((product) => product.productId !== id);
-  syncOrdersWithProducts();
-  persistProducts();
-  persistOrders();
+  try {
+    syncOrdersWithProducts();
+    persistProducts();
+    persistOrders();
+  } catch (error) {
+    _products = previousProducts;
+    _orders = previousOrders;
+    throw error;
+  }
 }
 
 export function getNextProductId() {
