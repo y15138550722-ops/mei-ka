@@ -430,9 +430,9 @@
 
 .license-translation-order-product {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
 }
 
 .license-translation-process-pill {
@@ -492,7 +492,7 @@
 
 .license-translation-table {
   width: 100%;
-  min-width: 1420px;
+  min-width: 1320px;
   border-collapse: collapse;
   table-layout: fixed;
 }
@@ -524,7 +524,7 @@
 }
 
 .license-translation-table th:nth-child(3) {
-  width: 116px;
+  width: 210px;
 }
 
 .license-translation-table th:nth-child(4) {
@@ -532,15 +532,15 @@
 }
 
 .license-translation-table th:nth-child(5) {
-  width: 240px;
+  width: 300px;
 }
 
 .license-translation-table th:nth-child(6) {
-  width: 260px;
+  width: 250px;
 }
 
 .license-translation-table th:nth-child(7) {
-  width: 250px;
+  width: 132px;
 }
 
 .license-translation-table th:nth-child(8) {
@@ -1016,17 +1016,19 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(15, 23, 42, 0.36);
+  background: rgba(15, 23, 42, 0.46);
+  backdrop-filter: blur(2px);
 }
 
 .license-translation-detail-modal {
-  width: min(100%, 980px);
-  max-height: min(88vh, 920px);
+  width: min(100%, 1120px);
+  max-height: min(92vh, 960px);
   display: grid;
   grid-template-rows: auto 1fr auto;
-  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
   background: #ffffff;
-  box-shadow: 0 22px 50px rgba(15, 23, 42, 0.22);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.28);
   overflow: hidden;
 }
 
@@ -1185,18 +1187,19 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 16px 18px;
+  padding: 18px 24px;
   border-bottom: 1px solid #edf1f7;
 }
 
 .license-translation-detail-modal__header > div {
   display: grid;
-  gap: 4px;
+  gap: 3px;
 }
 
 .license-translation-detail-modal__header strong {
   color: #111827;
-  font-size: 16px;
+  font-size: 20px;
+  line-height: 1.35;
 }
 
 .license-translation-detail-modal__header span {
@@ -1216,8 +1219,8 @@
 
 .license-translation-detail-modal__body {
   display: grid;
-  gap: 18px;
-  padding: 18px;
+  gap: 22px;
+  padding: 24px;
   overflow: auto;
 }
 
@@ -1268,34 +1271,42 @@
 
 .license-translation-detail-section {
   display: grid;
-  gap: 12px;
+  gap: 14px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.license-translation-detail-section:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
 }
 
 .license-translation-detail-section h3 {
   margin: 0;
   color: #111827;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
 }
 
 .license-translation-detail-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  column-gap: 28px;
+  row-gap: 0;
 }
 
 .license-translation-detail-grid--product {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .license-translation-detail-field {
   display: grid;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
-  padding: 12px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #f8fafc;
+  min-height: 62px;
+  align-content: center;
+  padding: 9px 0 11px;
+  border-bottom: 1px solid #edf1f7;
 }
 
 .license-translation-detail-field--wide {
@@ -1303,23 +1314,27 @@
 }
 
 .license-translation-detail-field span {
-  color: #64748b;
+  color: #6b7280;
   font-size: 12px;
   font-weight: 700;
 }
 
 .license-translation-detail-field strong {
   color: #111827;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 600;
   line-height: 1.55;
   word-break: break-word;
 }
 
 .license-translation-attachments {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 16px;
+}
+
+.license-translation-detail-modal--companion .license-translation-attachments {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .license-translation-attachment {
@@ -1333,19 +1348,38 @@
   cursor: zoom-in;
 }
 
+.license-translation-attachment:disabled {
+  cursor: default;
+}
+
 .license-translation-attachment__preview {
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 16 / 10;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border-radius: 6px;
   background: #f8fafc;
   overflow: hidden;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.license-translation-attachment:not(:disabled):hover .license-translation-attachment__preview {
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
 }
 
 .license-translation-attachment__preview img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
+}
+
+.license-translation-attachment__placeholder {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: #94a3b8;
+  font-size: 13px;
 }
 
 .license-translation-attachment figcaption {
@@ -1355,8 +1389,8 @@
 }
 
 .license-translation-attachment__caption {
-  color: #334155;
-  font-size: 12px;
+  color: #1f2937;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -2687,6 +2721,10 @@
     grid-template-columns: 1fr;
   }
 
+  .license-translation-detail-modal--companion .license-translation-attachments {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .license-translation-image-backdrop {
     padding: 12px;
   }
@@ -2716,5 +2754,18 @@
 
   .user-member-modal {
     max-height: calc(100vh - 24px);
+  }
+}
+
+@media (max-width: 520px) {
+  .license-translation-detail-modal__header,
+  .license-translation-detail-modal__footer,
+  .license-translation-detail-modal__body {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .license-translation-detail-modal--companion .license-translation-attachments {
+    grid-template-columns: 1fr;
   }
 }

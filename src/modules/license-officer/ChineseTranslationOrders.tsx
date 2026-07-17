@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { getOrders, updateOrder } from '../../services/mockDataService';
 import ResolvedImage from '../../shared/components/ResolvedImage';
+import { orderPreviewAssets } from '../../shared/config/orderPreviewAssets';
 import ListUnifiedPagination from '../../shared/components/list/ListUnifiedPagination';
 import type { Order } from '../../shared/types';
 import { getStoredAuthSession } from '../../shared/utils/auth';
@@ -22,6 +23,8 @@ import {
   PRODUCTION_OPERATOR,
   isProductionVisibleChineseTranslationOrder,
 } from './productionOrderVisibility';
+import idpPassportFrontDefault from '../order-management/assets/idp-passport-front.png';
+import idpWhitePhotoDefault from '../order-management/assets/idp-white-photo.png';
 import './ChineseTranslationOrders.css';
 
 type ProductionOrderStatus = 'untranslated' | 'unmade' | 'unshipped' | 'shipped' | 'cancelled';
@@ -44,7 +47,7 @@ const PRODUCTION_STATUS_OPTIONS: Array<{ value: ProductionOrderStatus | ''; labe
   { value: 'cancelled', label: '已取消' },
 ];
 
-const CHINESE_TRANSLATION_TYPE = '中文翻译件';
+const DOMESTIC_LICENSE_COMPANION_PRODUCT_TITLE = '陪同换证';
 const TRANSLATED_ACTION = '已翻译';
 const MADE_ACTION = '已制作';
 const SHIPPED_ACTION = '已发货';
@@ -128,38 +131,22 @@ const getOrderCountry = (order: Order) => {
 };
 
 const getOrderInfo = (order: Order) => ({
-  productName: order.productName,
-  processTypeLabel: order.processType || '正常办理',
-  processTypeTone: getProcessTypeTone(order.processType || '正常办理'),
   foreignLocation:
     [order.domesticLicenseInfo?.foreignCountry, order.domesticLicenseInfo?.foreignCity].filter(Boolean).join(' ') ||
     getOrderCountry(order),
   exchangeLocation: order.domesticLicenseInfo
     ? order.licenseIssuingRegion || `${order.domesticLicenseInfo.exchangeProvince} ${order.domesticLicenseInfo.exchangeCity}`
     : '',
-  chineseName: order.licenseName || order.customerName,
-  licenseNumber: order.licenseNo || order.customerPassport,
-  licenseCategory: order.licenseCategory || 'C1',
+  chineseName: order.domesticLicenseInfo?.chineseName || order.licenseName || order.customerName,
 });
-
-const getDomesticExchangeLocation = (order: Order) =>
-  order.licenseIssuingRegion ||
-  [order.domesticLicenseInfo?.exchangeProvince, order.domesticLicenseInfo?.exchangeCity].filter(Boolean).join(' ');
-
-const getDomesticForeignLocation = (order: Order) =>
-  [order.domesticLicenseInfo?.foreignCountry, order.domesticLicenseInfo?.foreignCity].filter(Boolean).join(' ') ||
-  getOrderCountry(order);
 
 const getDisplayValue = (value?: string | number | null) => {
   const normalizedValue = String(value ?? '').trim();
   return normalizedValue || '--';
 };
 
-const getReceiptInfo = (order: Order) => [
-  `收货人：${order.customerName || '--'}`,
-  `手机号：${order.customerPhone || '--'}`,
-  `收货地址：${order.deliveryAddress || '--'}`,
-];
+const isCompanionLicenseOrder = (order: Order) =>
+  order.productName.trim() === DOMESTIC_LICENSE_COMPANION_PRODUCT_TITLE;
 
 const getShippingInfo = (order: Order) => [
   `物流公司：${order.logisticsCompany || '--'}`,
@@ -207,7 +194,7 @@ const ChineseTranslationOrders: React.FC = () => {
   );
 
   const [filterStatus, setFilterStatus] = useState<ProductionOrderStatus | ''>('');
-  const [filterOrderId, setFilterOrderId] = useState('');
+  const [filterProduct, setFilterProduct] = useState('');
   const [filterKeyword, setFilterKeyword] = useState('');
   const [filterProcessType, setFilterProcessType] = useState('');
   const [filterForeignCountry, setFilterForeignCountry] = useState('');
@@ -273,18 +260,17 @@ const ChineseTranslationOrders: React.FC = () => {
   );
 
   const filteredOrders = useMemo(() => {
-    const orderIdKeyword = filterOrderId.trim().toLowerCase();
     const keyword = filterKeyword.trim().toLowerCase();
 
     return allOrders.filter((order) => {
       const productionStatus = normalizeProductionStatus(order);
       if (filterStatus && productionStatus !== filterStatus) return false;
+      if (filterProduct && order.productName.trim() !== filterProduct) return false;
       if (filterProcessType && order.processType !== filterProcessType) return false;
       const foreignCountry = order.domesticLicenseInfo?.foreignCountry?.trim() || getOrderCountry(order);
       const foreignCity = order.domesticLicenseInfo?.foreignCity?.trim() || '';
       if (filterForeignCountry && foreignCountry !== filterForeignCountry) return false;
       if (filterForeignCity && foreignCity !== filterForeignCity) return false;
-      if (orderIdKeyword && !order.orderId.toLowerCase().includes(orderIdKeyword)) return false;
 
       if (keyword) {
         const searchableText = [
@@ -303,19 +289,18 @@ const ChineseTranslationOrders: React.FC = () => {
 
       return true;
     });
-  }, [allOrders, filterForeignCity, filterForeignCountry, filterKeyword, filterOrderId, filterProcessType, filterStatus]);
+  }, [allOrders, filterForeignCity, filterForeignCountry, filterKeyword, filterProcessType, filterProduct, filterStatus]);
 
   const statusCountBaseOrders = useMemo(() => {
-    const orderIdKeyword = filterOrderId.trim().toLowerCase();
     const keyword = filterKeyword.trim().toLowerCase();
 
     return allOrders.filter((order) => {
+      if (filterProduct && order.productName.trim() !== filterProduct) return false;
       if (filterProcessType && order.processType !== filterProcessType) return false;
       const foreignCountry = order.domesticLicenseInfo?.foreignCountry?.trim() || getOrderCountry(order);
       const foreignCity = order.domesticLicenseInfo?.foreignCity?.trim() || '';
       if (filterForeignCountry && foreignCountry !== filterForeignCountry) return false;
       if (filterForeignCity && foreignCity !== filterForeignCity) return false;
-      if (orderIdKeyword && !order.orderId.toLowerCase().includes(orderIdKeyword)) return false;
 
       if (keyword) {
         const searchableText = [
@@ -334,7 +319,7 @@ const ChineseTranslationOrders: React.FC = () => {
 
       return true;
     });
-  }, [allOrders, filterForeignCity, filterForeignCountry, filterKeyword, filterOrderId, filterProcessType]);
+  }, [allOrders, filterForeignCity, filterForeignCountry, filterKeyword, filterProcessType, filterProduct]);
 
   const statusCounts = useMemo(() => {
     const counts: Record<ProductionOrderStatus | '', number> = {
@@ -367,7 +352,7 @@ const ChineseTranslationOrders: React.FC = () => {
 
   const handleReset = () => {
     setFilterStatus('');
-    setFilterOrderId('');
+    setFilterProduct('');
     setFilterKeyword('');
     setFilterProcessType('');
     setFilterForeignCountry('');
@@ -782,44 +767,47 @@ const ChineseTranslationOrders: React.FC = () => {
 
     const order = detailOrder;
     const domesticInfo = order.domesticLicenseInfo;
+    const companionOrder = isCompanionLicenseOrder(order);
     const productItems = [
-      ['商品名称', order.productName],
-      ['换证城市', getDomesticExchangeLocation(order)],
-      ['驾驶证发放国家及城市', getDomesticForeignLocation(order)],
-      ['办理类型', order.processType || '正常办理'],
+      ['订单编号', order.orderId],
+      ['产品名称', order.productName],
+      ['办理类型', getProductProcessTypeLabel(order.processType || '正常办理', t)],
+      ['价格', `¥${order.lockedPrice || 0}`],
     ];
-    const licenseItems = [
-      ['中文姓名', domesticInfo?.chineseName || order.licenseName || order.customerName],
-      ['DL/驾驶证编号', domesticInfo?.licenseNumber || order.licenseNo || order.customerPassport],
-      ['EXP/有效期至', domesticInfo?.expiryDate],
-      ['LN/姓', domesticInfo?.surname],
-      ['FN/名', domesticInfo?.givenName],
-      ['DOB/出生日期', domesticInfo?.birthDate],
-      ['RSTR/限制条件', domesticInfo?.rstr],
-      ['SEX/性别', domesticInfo?.sex],
-      ['HAIR/头发颜色', domesticInfo?.hairColor],
-      ['EYES/眼睛', domesticInfo?.eyeColor],
-      ['HGT/身高', domesticInfo?.height],
-      ['WGT/体重', domesticInfo?.weight],
-      ['ISS/签发日期', domesticInfo?.issueDate],
-      ['DD/文件识别号', domesticInfo?.fileNumber],
-      ['CLASS/准驾车型', domesticInfo?.classType || order.licenseCategory],
-      ['ENDORSEMENTS/额外准驾车型', domesticInfo?.endorsements],
-      ['RESTRICTIONS/限制条件', domesticInfo?.restrictions],
-      ['其他', domesticInfo?.other],
-    ];
-    const attachmentItems = domesticInfo
+    const supplementaryItems = companionOrder
       ? [
-          { label: '驾照正面照片', src: domesticInfo.frontPhoto },
-          { label: '驾照反面照片', src: domesticInfo.backPhoto },
-          ...(domesticInfo.passportPhoto ? [{ label: '护照', src: domesticInfo.passportPhoto }] : []),
+          ['联系人', order.customerName],
+          ['到达城市', order.arrivalCity],
+          ['到达机场', order.arrivalAirport],
+          ['到达日期与时间', order.arrivalDateTime],
+          ['航班号', order.flightNumber],
         ]
+      : [
+          ['收货人', order.customerName],
+          ['手机号', order.customerPhone],
+          ['收货地址', order.deliveryAddress],
+        ];
+    const attachmentItems = domesticInfo
+      ? companionOrder
+        ? [
+            { label: '驾照正面图片', src: domesticInfo.frontPhoto || orderPreviewAssets.licenseFront },
+            { label: '驾照反面图片', src: domesticInfo.backPhoto || orderPreviewAssets.licenseBack },
+            { label: '护照', src: domesticInfo.passportPhoto || idpPassportFrontDefault },
+            { label: '白底照片', src: domesticInfo.whiteBackgroundPhoto || idpWhitePhotoDefault },
+          ]
+        : [
+            { label: '驾照正面图片', src: domesticInfo.frontPhoto || orderPreviewAssets.licenseFront },
+            { label: '驾照反面图片', src: domesticInfo.backPhoto || orderPreviewAssets.licenseBack },
+            { label: '护照', src: domesticInfo.passportPhoto || idpPassportFrontDefault },
+          ]
       : [];
 
     return (
       <div className="license-translation-modal-backdrop" role="presentation" onMouseDown={() => setDetailOrder(null)}>
         <section
-          className="license-translation-detail-modal"
+          className={`license-translation-detail-modal ${
+            companionOrder ? 'license-translation-detail-modal--companion' : ''
+          }`}
           role="dialog"
           aria-modal="true"
           aria-label="查看订单"
@@ -828,7 +816,6 @@ const ChineseTranslationOrders: React.FC = () => {
           <header className="license-translation-detail-modal__header">
             <div>
               <strong>查看订单</strong>
-              <span>{order.orderId}</span>
             </div>
             <button type="button" onClick={() => setDetailOrder(null)} aria-label="关闭">
               ×
@@ -837,10 +824,15 @@ const ChineseTranslationOrders: React.FC = () => {
 
           <div className="license-translation-detail-modal__body">
             <section className="license-translation-detail-section">
-              <h3>商品信息</h3>
+              <h3>产品信息</h3>
               <div className="license-translation-detail-grid license-translation-detail-grid--product">
                 {productItems.map(([label, value]) => (
-                  <div key={label} className="license-translation-detail-field">
+                  <div
+                    key={label}
+                    className={`license-translation-detail-field ${
+                      label === '驾驶证发放国家及城市' ? 'license-translation-detail-field--wide' : ''
+                    }`}
+                  >
                     <span>{label}</span>
                     <strong>{getDisplayValue(value)}</strong>
                   </div>
@@ -849,21 +841,7 @@ const ChineseTranslationOrders: React.FC = () => {
             </section>
 
             <section className="license-translation-detail-section">
-              <h3>驾照信息</h3>
-              <div className="license-translation-detail-grid">
-                {licenseItems.map(([label, value]) => (
-                  <div
-                    key={label}
-                    className={`license-translation-detail-field ${
-                      label === '其他' ? 'license-translation-detail-field--wide' : ''
-                    }`}
-                  >
-                    <span>{label}</span>
-                    <strong>{getDisplayValue(value)}</strong>
-                  </div>
-                ))}
-              </div>
-
+              <h3>附件信息</h3>
               <div className="license-translation-attachments" aria-label="上传附件">
                 {attachmentItems.length > 0 ? (
                   attachmentItems.map((item) => (
@@ -871,10 +849,15 @@ const ChineseTranslationOrders: React.FC = () => {
                       key={item.label}
                       type="button"
                       className="license-translation-attachment"
-                      onClick={() => setPreviewImage(item)}
+                      disabled={!item.src}
+                      onClick={() => item.src && setPreviewImage({ label: item.label, src: item.src })}
                     >
                       <div className="license-translation-attachment__preview">
-                        <ResolvedImage src={item.src} alt={`${item.label}预览`} />
+                        {item.src ? (
+                          <ResolvedImage src={item.src} alt={`${item.label}预览`} />
+                        ) : (
+                          <span className="license-translation-attachment__placeholder">暂无图片</span>
+                        )}
                       </div>
                       <span className="license-translation-attachment__caption">{item.label}</span>
                     </button>
@@ -882,6 +865,23 @@ const ChineseTranslationOrders: React.FC = () => {
                 ) : (
                   <div className="license-translation-attachments__empty">暂无上传附件</div>
                 )}
+              </div>
+            </section>
+
+            <section className="license-translation-detail-section">
+              <h3>{companionOrder ? '航班信息' : '收货信息'}</h3>
+              <div className="license-translation-detail-grid">
+                {supplementaryItems.map(([label, value]) => (
+                  <div
+                    key={label}
+                    className={`license-translation-detail-field ${
+                      label === '收货地址' ? 'license-translation-detail-field--wide' : ''
+                    }`}
+                  >
+                    <span>{label}</span>
+                    <strong>{getDisplayValue(value)}</strong>
+                  </div>
+                ))}
               </div>
             </section>
           </div>
@@ -994,8 +994,12 @@ const ChineseTranslationOrders: React.FC = () => {
 
       <section className="license-translation-filter">
         <label>
-          <span>订单号搜索</span>
-          <input value={filterOrderId} onChange={(event) => setFilterOrderId(event.target.value)} placeholder="请输入订单号" />
+          <span>产品类型</span>
+          <select value={filterProduct} onChange={(event) => setFilterProduct(event.target.value)}>
+            <option value="">全部产品类型</option>
+            <option value={CHINESE_TRANSLATION_PRODUCT_TITLE}>{CHINESE_TRANSLATION_PRODUCT_TITLE}</option>
+            <option value={DOMESTIC_LICENSE_COMPANION_PRODUCT_TITLE}>{DOMESTIC_LICENSE_COMPANION_PRODUCT_TITLE}</option>
+          </select>
         </label>
 
         <label>
@@ -1099,10 +1103,9 @@ const ChineseTranslationOrders: React.FC = () => {
               <tr>
                 <th>序号</th>
                 <th>订单号</th>
-                <th>订单类型</th>
+                <th>产品及办理类型</th>
                 <th>发起时间</th>
                 <th>订单信息</th>
-                <th>收货信息</th>
                 <th>订单状态</th>
                 <th>操作</th>
               </tr>
@@ -1110,7 +1113,7 @@ const ChineseTranslationOrders: React.FC = () => {
             <tbody>
               {paginatedOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="license-translation-empty">
+                  <td colSpan={7} className="license-translation-empty">
                     当前筛选条件下没有订单
                   </td>
                 </tr>
@@ -1124,7 +1127,20 @@ const ChineseTranslationOrders: React.FC = () => {
                       <td>
                         <strong className="license-translation-order-id">{order.orderId}</strong>
                       </td>
-                      <td>{CHINESE_TRANSLATION_TYPE}</td>
+                      <td>
+                        <div className="license-translation-order-product">
+                          <span>{order.productName}</span>
+                          <button
+                            type="button"
+                            className={`license-translation-process-pill license-translation-process-pill--${getProcessTypeTone(
+                              order.processType || '正常办理',
+                            )}`}
+                            tabIndex={-1}
+                          >
+                            {getProductProcessTypeLabel(order.processType || '正常办理', t)}
+                          </button>
+                        </div>
+                      </td>
                       <td>{order.createdAt}</td>
                       <td>
                         <div className="license-translation-info">
@@ -1133,36 +1149,19 @@ const ChineseTranslationOrders: React.FC = () => {
 
                             return (
                               <>
-                                <div className="license-translation-order-product">
-                                  <span>{`商品：${orderInfo.productName}`}</span>
-                                  <button
-                                    type="button"
-                                    className={`license-translation-process-pill license-translation-process-pill--${orderInfo.processTypeTone}`}
-                                    tabIndex={-1}
-                                  >
-                                    {orderInfo.processTypeLabel}
-                                  </button>
-                                </div>
-                                <span>{`驾驶证发放国家及城市：${orderInfo.foreignLocation}`}</span>
-                                {orderInfo.exchangeLocation ? <span>{`换证城市：${orderInfo.exchangeLocation}`}</span> : null}
                                 <span>{`中文姓名：${orderInfo.chineseName}`}</span>
-                                <span>{`驾驶证编号：${orderInfo.licenseNumber}`}</span>
-                                <div className="license-translation-order-category-row">
-                                  <span>准驾车型：</span>
-                                  <button type="button" className="license-translation-order-category-pill" tabIndex={-1}>
-                                    {orderInfo.licenseCategory}
-                                  </button>
-                                </div>
+                                {isCompanionLicenseOrder(order) ? (
+                                  <span>{`联系电话：${order.customerPhone || '--'}`}</span>
+                                ) : (
+                                  <>
+                                    <span>{`联系邮箱：${order.customerEmail || '--'}`}</span>
+                                    <span>{`换证城市：${orderInfo.exchangeLocation || '--'}`}</span>
+                                  </>
+                                )}
+                                <span>{`驾驶证发放国家及城市：${orderInfo.foreignLocation}`}</span>
                               </>
                             );
                           })()}
-                        </div>
-                      </td>
-                      <td>
-                        <div className="license-translation-info">
-                          {getReceiptInfo(order).map((item) => (
-                            <span key={item}>{item}</span>
-                          ))}
                         </div>
                       </td>
                       <td>

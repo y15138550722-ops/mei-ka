@@ -122,10 +122,13 @@ export const saveLocalImageSource = async (id: string, source?: string | null) =
 };
 
 export const saveDomesticLicenseImages = async (info: DomesticLicenseInfo, storageKey: string) => {
-  const [frontPhoto, backPhoto, passportPhoto] = await Promise.all([
+  const [frontPhoto, backPhoto, passportPhoto, whiteBackgroundPhoto] = await Promise.all([
     saveLocalImageSource(`${storageKey}-front`, info.frontPhoto),
     saveLocalImageSource(`${storageKey}-back`, info.backPhoto),
     info.passportPhoto ? saveLocalImageSource(`${storageKey}-passport`, info.passportPhoto) : Promise.resolve(undefined),
+    info.whiteBackgroundPhoto
+      ? saveLocalImageSource(`${storageKey}-white-background`, info.whiteBackgroundPhoto)
+      : Promise.resolve(undefined),
   ]);
 
   return {
@@ -133,6 +136,7 @@ export const saveDomesticLicenseImages = async (info: DomesticLicenseInfo, stora
     frontPhoto,
     backPhoto,
     passportPhoto: passportPhoto || undefined,
+    whiteBackgroundPhoto: whiteBackgroundPhoto || undefined,
   };
 };
 
@@ -161,7 +165,8 @@ export const migrateDomesticLicenseOrderImages = async (orders: Order[]) => {
       const changed =
         nextDomesticInfo.frontPhoto !== domesticInfo.frontPhoto ||
         nextDomesticInfo.backPhoto !== domesticInfo.backPhoto ||
-        nextDomesticInfo.passportPhoto !== domesticInfo.passportPhoto;
+        nextDomesticInfo.passportPhoto !== domesticInfo.passportPhoto ||
+        nextDomesticInfo.whiteBackgroundPhoto !== domesticInfo.whiteBackgroundPhoto;
 
       if (!changed) {
         return order;

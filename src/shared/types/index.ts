@@ -60,6 +60,7 @@ export interface DomesticLicenseInfo {
   frontPhoto: string;
   backPhoto: string;
   passportPhoto?: string;
+  whiteBackgroundPhoto?: string;
 }
 
 export interface Order {
@@ -82,6 +83,10 @@ export interface Order {
   logisticsCompany?: string;
   trackingNumber: string;
   shippedAt?: string;
+  arrivalCity?: string;
+  arrivalAirport?: string;
+  arrivalDateTime?: string;
+  flightNumber?: string;
   remark: string;
   rejectReason?: string;
   pushedNotaryOfficeId?: string;
