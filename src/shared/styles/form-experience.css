@@ -396,17 +396,30 @@
 }
 .domestic-license-filter-layout {
   grid-template-columns: 1fr;
-  width: min(100%, 1136px);
+  width: 100%;
   gap: 16px;
 }
 .domestic-license-filter-grid {
-  grid-template-columns: repeat(4, 260px);
-  column-gap: 32px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  column-gap: 24px;
   row-gap: 18px;
   align-items: end;
 }
 .domestic-license-filter-field {
   margin-bottom: 0;
+}
+.domestic-license-filter-grid .form-input::placeholder {
+  color: #94a3b8;
+  opacity: 1;
+}
+.domestic-license-filter-grid .domestic-license-filter-control--placeholder {
+  color: #94a3b8;
+}
+.domestic-license-filter-grid .form-select option {
+  color: #1f2937;
+}
+.domestic-license-filter-grid .form-select option[value=''] {
+  color: #94a3b8;
 }
 .domestic-license-filter-field--agent {
   grid-column: 1;
@@ -429,29 +442,35 @@
   grid-row: 2;
 }
 .domestic-license-filter-field--keyword {
-  grid-column: 4;
+  grid-column: 3;
   grid-row: 2;
 }
 .domestic-license-filter-grid .order-filter-linked-selects {
-  grid-template-columns: 260px 260px;
-  justify-content: start;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
 }
 .domestic-license-filter-grid .order-filter-range {
   gap: 8px;
 }
 .domestic-license-filter-grid .order-filter-range .form-input {
-  flex: 0 0 260px;
-  max-width: 260px;
+  flex: 1 1 0;
+  max-width: none;
+  min-width: 0;
 }
 .domestic-license-filter-actions {
-  justify-content: flex-end;
+  grid-column: 4;
+  grid-row: 2;
+  align-self: end;
+  justify-content: flex-start;
   gap: 12px;
-  padding-top: 16px;
-  border-top: 1px solid var(--color-border-light);
+  padding-top: 0;
+  border-top: none;
 }
 .order-list-card {
   overflow: hidden;
+}
+.domestic-license-list-tabs-row {
+  padding-top: 8px;
 }
 .order-list-card__toolbar {
   display: flex;
@@ -1246,14 +1265,17 @@
   font-weight: 700;
   text-decoration: none;
 }
-.notary-logistics-modal {
+.notary-logistics-modal,
+.domestic-license-logistics-modal {
   max-width: 520px;
 }
-.notary-logistics-modal__body {
+.notary-logistics-modal__body,
+.domestic-license-logistics-modal__body {
   display: grid;
   gap: 16px;
 }
-.notary-logistics-modal__summary {
+.notary-logistics-modal__summary,
+.domestic-license-logistics-modal__summary {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1569,6 +1591,13 @@
     grid-column: auto;
     justify-content: flex-end;
   }
+  .domestic-license-filter-actions {
+    grid-column: auto;
+    grid-row: auto;
+    justify-content: flex-start;
+    padding-top: 0;
+    border-top: none;
+  }
   .domestic-license-filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1637,6 +1666,12 @@
   }
   .translation-order-filter-actions {
     justify-content: flex-start;
+  }
+  .domestic-license-filter-actions {
+    grid-column: auto;
+    grid-row: auto;
+    padding-top: 0;
+    border-top: none;
   }
   .domestic-license-filter-grid {
     grid-template-columns: 1fr;

@@ -305,6 +305,10 @@
   grid-template-columns: 138px minmax(0, 1fr);
 }
 
+.order-audit-field--domestic-country-city {
+  grid-template-columns: 168px minmax(0, 1fr);
+}
+
 .order-audit-field__label {
   color: #64748b;
   font-size: 13px;
@@ -581,6 +585,31 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.order-audit-image-grid--three-up {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.order-audit-basic-section {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.order-audit-basic-section__title {
+  margin: 0 0 4px;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.order-audit-basic-section__title--spaced {
+  margin-bottom: 14px;
+}
+
+.order-audit-image-grid--embedded {
+  padding: 8px 0 0;
+}
+
 .notary-order-management-preview .order-audit-image-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
@@ -603,6 +632,10 @@
   justify-content: flex-start;
   gap: 8px;
   min-height: 32px;
+}
+
+.order-audit-image-slot__meta--editable {
+  justify-content: space-between;
 }
 
 .order-audit-image-slot__label {
@@ -631,6 +664,24 @@
   border-color: #4ade80;
   background: #dcfce7;
   color: #15803d;
+}
+
+.order-audit-image-upload-btn--domestic {
+  min-width: 76px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-color: #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.08);
+}
+
+.order-audit-image-upload-btn--domestic:hover {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.2);
 }
 
 .order-audit-image-upload-input {
@@ -1023,6 +1074,10 @@
   .order-audit-image-grid--four-up {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .order-audit-image-grid--three-up {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 768px) {
@@ -1054,6 +1109,10 @@
   }
 
   .order-audit-image-grid--four-up {
+    grid-template-columns: 1fr;
+  }
+
+  .order-audit-image-grid--three-up {
     grid-template-columns: 1fr;
   }
 

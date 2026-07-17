@@ -519,7 +519,7 @@ const ProductList: React.FC = () => {
                 {paginatedProducts.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="empty-state">
-                      <div className="empty-state__icon">馃摝</div>
+                      <div className="empty-state__icon">📝</div>
                       <div className="empty-state__text">{t('common.noData')}</div>
                     </td>
                   </tr>

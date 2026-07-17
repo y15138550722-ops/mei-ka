@@ -1,4 +1,5 @@
 import { formatBeijingTimestamp } from './dateTime';
+import orderListTemplateUrl from '../../public/templates/order-list-template.xlsx?url';
 
 export interface TranslationOrderExportRow {
   orderId: string;
@@ -15,15 +16,16 @@ export interface TranslationOrderExportRow {
 }
 
 const TEMPLATE_PATHS = [
+  orderListTemplateUrl,
   `${import.meta.env.BASE_URL}templates/order-list-template.xlsx`,
+  `${import.meta.env.BASE_URL}ETC/xlsx/orde%20list.xlsx`,
   `${import.meta.env.BASE_URL}orde%20list.xlsx`,
   `${import.meta.env.BASE_URL}orde list.xlsx`,
 ];
 const HEADER_ROW_INDEX = 1;
 const DATA_START_ROW_INDEX = HEADER_ROW_INDEX + 1;
 const TEMPLATE_COLUMN_COUNT = 11;
-const EXCELJS_RUNTIME_PATH = `${import.meta.env.BASE_URL}vendor/exceljs.bare.min.js`;
-const EXCELJS_RUNTIME_SCRIPT_ID = 'exceljs-runtime-script';
+const DOWNLOAD_URL_REVOKE_DELAY_MS = 60_000;
 
 const cloneExcelStyle = <T,>(style: T): T => JSON.parse(JSON.stringify(style ?? {})) as T;
 type ExcelJsNamespace = typeof import('exceljs');
@@ -49,8 +51,25 @@ const buildExportFileName = () => {
   return `\u7ffb\u8bd1\u8ba2\u5355\u5217\u8868_${timestamp}.xlsx`;
 };
 
-const downloadBuffer = (buffer: BlobPart, fileName: string) => {
-  const blob = new Blob([buffer], {
+const toStandaloneArrayBuffer = (buffer: ArrayBuffer | ArrayBufferView) => {
+  const bytes =
+    buffer instanceof ArrayBuffer
+      ? new Uint8Array(buffer)
+      : new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+
+  return bytes.slice().buffer;
+};
+
+const assertXlsxBuffer = (buffer: ArrayBuffer, sourceLabel: string) => {
+  const bytes = new Uint8Array(buffer);
+  if (bytes.length < 4 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) {
+    throw new Error(`${sourceLabel} is not a valid XLSX file`);
+  }
+};
+
+const downloadBuffer = (buffer: ArrayBuffer | ArrayBufferView, fileName: string) => {
+  const standaloneBuffer = toStandaloneArrayBuffer(buffer);
+  const blob = new Blob([standaloneBuffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
   const downloadUrl = window.URL.createObjectURL(blob);
@@ -64,17 +83,7 @@ const downloadBuffer = (buffer: BlobPart, fileName: string) => {
 
   window.setTimeout(() => {
     window.URL.revokeObjectURL(downloadUrl);
-  }, 0);
-};
-
-const getExcelJsRuntimeFromWindow = () => {
-  const runtime = (window as Window & { ExcelJS?: ExcelJsNamespace }).ExcelJS;
-
-  if (!runtime?.Workbook) {
-    throw new Error('Failed to initialize Excel export module');
-  }
-
-  return runtime;
+  }, DOWNLOAD_URL_REVOKE_DELAY_MS);
 };
 
 const loadBundledExcelJsRuntime = async () => {
@@ -94,52 +103,13 @@ const loadExcelJsRuntime = async () => {
     throw new Error('Excel export is only available in the browser');
   }
 
-  const loadedRuntime = (window as Window & { ExcelJS?: ExcelJsNamespace }).ExcelJS;
-  if (loadedRuntime?.Workbook) {
-    return loadedRuntime;
-  }
-
   if (excelJsRuntimePromise) {
     return excelJsRuntimePromise;
   }
 
-  excelJsRuntimePromise = new Promise<ExcelJsNamespace>((resolve, reject) => {
-    const existingScript = document.getElementById(EXCELJS_RUNTIME_SCRIPT_ID) as HTMLScriptElement | null;
-    const script = existingScript ?? document.createElement('script');
-
-    const cleanup = () => {
-      script.removeEventListener('load', handleLoad);
-      script.removeEventListener('error', handleError);
-    };
-
-    const handleLoad = () => {
-      cleanup();
-
-      try {
-        resolve(getExcelJsRuntimeFromWindow());
-      } catch (error) {
-        excelJsRuntimePromise = null;
-        reject(error);
-      }
-    };
-
-    const handleError = () => {
-      cleanup();
-      loadBundledExcelJsRuntime().then(resolve).catch((error) => {
-        excelJsRuntimePromise = null;
-        reject(error);
-      });
-    };
-
-    script.addEventListener('load', handleLoad);
-    script.addEventListener('error', handleError);
-
-    if (!existingScript) {
-      script.id = EXCELJS_RUNTIME_SCRIPT_ID;
-      script.src = EXCELJS_RUNTIME_PATH;
-      script.async = true;
-      document.head.appendChild(script);
-    }
+  excelJsRuntimePromise = loadBundledExcelJsRuntime().catch((error) => {
+    excelJsRuntimePromise = null;
+    throw error;
   });
 
   return excelJsRuntimePromise;
@@ -156,7 +126,9 @@ const loadTemplateBuffer = async () => {
   for (const templatePath of TEMPLATE_PATHS) {
     const response = await fetch(templatePath);
     if (response.ok) {
-      return response.arrayBuffer();
+      const templateBuffer = await response.arrayBuffer();
+      assertXlsxBuffer(templateBuffer, 'Export template');
+      return templateBuffer;
     }
 
     failedPaths.push(`${templatePath} (${response.status})`);
@@ -203,5 +175,11 @@ export const exportTranslationOrders = async (
   });
 
   const exportBuffer = await workbook.xlsx.writeBuffer();
-  downloadBuffer(exportBuffer, fileName);
+  const standaloneExportBuffer = toStandaloneArrayBuffer(exportBuffer);
+  assertXlsxBuffer(standaloneExportBuffer, 'Generated export');
+
+  const validationWorkbook = await createWorkbook();
+  await validationWorkbook.xlsx.load(standaloneExportBuffer);
+
+  downloadBuffer(standaloneExportBuffer, fileName);
 };

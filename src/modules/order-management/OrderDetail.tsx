@@ -17,6 +17,11 @@ type CertificateImage = {
 };
 
 type EditableIdpImageField = 'whiteBackgroundPhoto' | 'signatureImage';
+type EditableDomesticImageField =
+  | 'domesticFrontPhoto'
+  | 'domesticBackPhoto'
+  | 'domesticPassportPhoto'
+  | 'domesticWhiteBackgroundPhoto';
 
 type OrderEditForm = {
   licenseNo: string;
@@ -44,7 +49,12 @@ type OrderEditForm = {
   currentResidenceEnglish: string;
   customerName: string;
   customerPhone: string;
+  customerEmail: string;
   deliveryAddress: string;
+  arrivalCity: string;
+  arrivalAirport: string;
+  arrivalDateTime: string;
+  flightNumber: string;
   whiteBackgroundPhoto: string;
   signatureImage: string;
   domesticExchangeProvince: string;
@@ -69,6 +79,10 @@ type OrderEditForm = {
   domesticEndorsements: string;
   domesticRestrictions: string;
   domesticOther: string;
+  domesticFrontPhoto: string;
+  domesticBackPhoto: string;
+  domesticPassportPhoto: string;
+  domesticWhiteBackgroundPhoto: string;
 };
 
 type OrderListSource = {
@@ -89,7 +103,9 @@ type DetailFieldItem = {
   labelClassName?: string;
 };
 
+const DOMESTIC_LICENSE_COMPANION_PRODUCT_TITLE = '陪同换证';
 const LOGISTICS_COMPANY_OPTIONS = ['顺丰速运', '中通快递', '圆通速递', '申通快递', '韵达速递', '京东快递', 'EMS'];
+const LOGISTICS_EDITABLE_STATUSES = new Set<OrderStatus>(['pending_production', 'in_production', 'translating']);
 
 const DOMESTIC_EXCHANGE_LOCATION_OPTIONS = [
   { province: '北京市', cities: ['北京市'] },
@@ -294,12 +310,7 @@ const currencyFormatter = new Intl.NumberFormat('zh-CN', {
 
 const getCurrentTimestamp = () => formatBeijingTimestamp();
 
-const getCompactTimestamp = (timestamp = getCurrentTimestamp()) => timestamp.replace(/\D/g, '').slice(0, 14);
-
 const getOrderSeed = (orderId: string) => Number(orderId.replace(/\D/g, '').slice(-6) || '0');
-
-const getLicenseOfficerPushOrderId = (order: Pick<Order, 'managementOrderId'>, timestamp = getCurrentTimestamp()) =>
-  order.managementOrderId?.trim() || getCompactTimestamp(timestamp);
 
 const padNumber = (value: number) => String(value).padStart(2, '0');
 
@@ -724,6 +735,26 @@ const getEditableIdpImageField = (key: CertificateImage['key']): EditableIdpImag
   return null;
 };
 
+const getEditableDomesticImageField = (key: CertificateImage['key']): EditableDomesticImageField | null => {
+  if (key === 'domestic-license-front') {
+    return 'domesticFrontPhoto';
+  }
+
+  if (key === 'domestic-license-back') {
+    return 'domesticBackPhoto';
+  }
+
+  if (key === 'domestic-passport') {
+    return 'domesticPassportPhoto';
+  }
+
+  if (key === 'domestic-white-background-photo') {
+    return 'domesticWhiteBackgroundPhoto';
+  }
+
+  return null;
+};
+
 const getDefaultIdpLicenseCategory = (seed: number) => {
   const categoryOptions = ['A', 'B', 'C'] as const;
   return categoryOptions[Math.abs(seed) % categoryOptions.length];
@@ -837,7 +868,12 @@ const buildOrderEditForm = (order: Order): OrderEditForm => {
     currentResidenceEnglish: toEditableValue(order.idpCurrentResidenceEn, getIdpGeneratedEnglishAddress(selectedResidenceSource)),
     customerName: toEditableValue(order.customerName),
     customerPhone: toEditableValue(order.customerPhone),
+    customerEmail: toEditableValue(order.customerEmail),
     deliveryAddress: toEditableValue(order.deliveryAddress),
+    arrivalCity: toEditableValue(order.arrivalCity),
+    arrivalAirport: toEditableValue(order.arrivalAirport),
+    arrivalDateTime: toEditableValue(order.arrivalDateTime),
+    flightNumber: toEditableValue(order.flightNumber),
     whiteBackgroundPhoto: toEditableValue(order.idpWhitePhoto, idpWhitePhotoDefault),
     signatureImage: toEditableValue(order.idpSignature, idpSignatureDefault),
     domesticExchangeProvince: toEditableValue(domesticInfo?.exchangeProvince),
@@ -862,6 +898,10 @@ const buildOrderEditForm = (order: Order): OrderEditForm => {
     domesticEndorsements: toEditableValue(domesticInfo?.endorsements),
     domesticRestrictions: toEditableValue(domesticInfo?.restrictions),
     domesticOther: toEditableValue(domesticInfo?.other),
+    domesticFrontPhoto: toEditableValue(domesticInfo?.frontPhoto),
+    domesticBackPhoto: toEditableValue(domesticInfo?.backPhoto),
+    domesticPassportPhoto: toEditableValue(domesticInfo?.passportPhoto),
+    domesticWhiteBackgroundPhoto: toEditableValue(domesticInfo?.whiteBackgroundPhoto),
   };
 };
 
@@ -910,7 +950,8 @@ const OrderDetail: React.FC = () => {
   const isIdpOrder = order?.productCategory === 'idp';
   const domesticLicenseInfo = order?.domesticLicenseInfo || null;
   const isDomesticLicenseOrder = Boolean(domesticLicenseInfo);
-  const canFillLogistics = Boolean(order && isDomesticLicenseOrder && order.status !== 'pending_review');
+  const isCompanionLicenseOrder = order?.productName === DOMESTIC_LICENSE_COMPANION_PRODUCT_TITLE;
+  const canFillLogistics = Boolean(order && isDomesticLicenseOrder && LOGISTICS_EDITABLE_STATUSES.has(order.status));
   const auditPageTitle = isAuditable ? '订单审核' : '查看审核';
 
   const inferredOrderListSource = order ? getOrderListSource(order.productCategory) : null;
@@ -1000,6 +1041,31 @@ const OrderDetail: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
+  const handleDomesticImageUpload = (field: EditableDomesticImageField, file: File | null) => {
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      showToast('error', '请选择图片文件');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      if (!result) {
+        showToast('error', '图片读取失败，请重试');
+        return;
+      }
+
+      handleEditFieldChange(field, result);
+      showToast('success', '附件图片已更新，保存后生效');
+    };
+    reader.onerror = () => showToast('error', '图片读取失败，请重试');
+    reader.readAsDataURL(file);
+  };
+
   const handleReturn = () => {
     if (window.history.length > 1) {
       navigate(-1);
@@ -1011,20 +1077,15 @@ const OrderDetail: React.FC = () => {
 
   const handleSaveLogistics = () => {
     if (!canFillLogistics) {
-      showToast('error', '待审核订单暂不可填写物流');
+      showToast('error', '待审核订单暂不可填写物流信息');
       return;
     }
 
     const logisticsCompany = logisticsForm.logisticsCompany.trim();
     const trackingNumber = logisticsForm.trackingNumber.trim();
 
-    if (!logisticsCompany) {
-      showToast('error', '请填写快递公司');
-      return;
-    }
-
-    if (!trackingNumber) {
-      showToast('error', '请填写物流单号');
+    if (!logisticsCompany || !trackingNumber) {
+      showToast('error', '请选择物流公司并填写快递单号');
       return;
     }
 
@@ -1032,26 +1093,27 @@ const OrderDetail: React.FC = () => {
     const nextUpdates: Partial<Order> = {
       logisticsCompany,
       trackingNumber,
-      status: 'shipped',
-      shippedAt: timestamp,
       updatedAt: timestamp,
       logs: [
         ...order.logs,
         {
           time: timestamp,
           operator: '运营-物流',
-          action: `填写物流并发货：${logisticsCompany} ${trackingNumber}`,
+          action: `填写物流信息：${logisticsCompany} ${trackingNumber}`,
         },
       ],
     };
 
     updateOrder(order.orderId, nextUpdates);
     setOrder({ ...order, ...nextUpdates } as Order);
-    showToast('success', '物流信息已保存，订单已发货');
+    showToast('success', '物流信息已保存');
   };
 
   const handleApprove = () => {
     const timestamp = getCurrentTimestamp();
+    const approvalAction = isDomesticLicenseOrder
+      ? '审核通过，进入生产端中文翻译件'
+      : '审核通过';
     const nextUpdates: Partial<Order> = {
       status: 'pending_production',
       updatedAt: timestamp,
@@ -1060,18 +1122,19 @@ const OrderDetail: React.FC = () => {
         {
           time: timestamp,
           operator: '审核员',
-          action: '审核通过',
+          action: approvalAction,
         },
       ],
     };
 
-    if (isDomesticLicenseOrder) {
-      nextUpdates.managementOrderId = getLicenseOfficerPushOrderId(order, timestamp);
-    }
-
     updateOrder(order.orderId, nextUpdates);
 
-    showToast('success', '审核通过，订单已转入待制作');
+    showToast(
+      'success',
+      isDomesticLicenseOrder
+        ? '审核通过，订单已进入生产端「非标宣誓公证件 / 中文翻译件」'
+        : '审核通过，订单已转入待制作',
+    );
     window.setTimeout(() => navigate(sourceListPath), 1200);
   };
 
@@ -1185,14 +1248,25 @@ const OrderDetail: React.FC = () => {
 
     if (isDomesticLicenseOrder && domesticLicenseInfo) {
       const requiredFields: Array<{ key: keyof OrderEditForm; label: string }> = [
-        { key: 'domesticExchangeProvince', label: '换证省份' },
-        { key: 'domesticExchangeCity', label: '换证城市' },
         { key: 'domesticForeignCountry', label: '境外发放国家' },
         { key: 'domesticForeignCity', label: '境外发放城市' },
         { key: 'domesticChineseName', label: '中文姓名' },
-        { key: 'customerName', label: '收货人' },
         { key: 'customerPhone', label: '联系电话' },
-        { key: 'deliveryAddress', label: '收货地址' },
+        ...(isCompanionLicenseOrder
+          ? [
+              { key: 'customerName' as const, label: '联系人' },
+              { key: 'arrivalCity' as const, label: '到达城市' },
+              { key: 'arrivalAirport' as const, label: '到达机场' },
+              { key: 'arrivalDateTime' as const, label: '到达日期与时间' },
+              { key: 'flightNumber' as const, label: '航班号' },
+            ]
+          : [
+              { key: 'domesticExchangeProvince' as const, label: '换证省份' },
+              { key: 'domesticExchangeCity' as const, label: '换证城市' },
+              { key: 'customerEmail' as const, label: '联系邮箱' },
+              { key: 'customerName' as const, label: '收货人' },
+              { key: 'deliveryAddress' as const, label: '收货地址' },
+            ]),
       ];
 
       const missingField = requiredFields.find(({ key }) => !editForm[key].trim());
@@ -1225,6 +1299,10 @@ const OrderDetail: React.FC = () => {
         endorsements: editForm.domesticEndorsements.trim(),
         restrictions: editForm.domesticRestrictions.trim(),
         other: editForm.domesticOther.trim(),
+        frontPhoto: editForm.domesticFrontPhoto.trim(),
+        backPhoto: editForm.domesticBackPhoto.trim(),
+        passportPhoto: editForm.domesticPassportPhoto.trim(),
+        whiteBackgroundPhoto: editForm.domesticWhiteBackgroundPhoto.trim(),
       };
       const timestamp = getCurrentTimestamp();
       const exchangeLocation = [nextDomesticLicenseInfo.exchangeProvince, nextDomesticLicenseInfo.exchangeCity]
@@ -1248,7 +1326,12 @@ const OrderDetail: React.FC = () => {
         useCountry: nextDomesticLicenseInfo.foreignCountry,
         customerName: editForm.customerName.trim(),
         customerPhone: editForm.customerPhone.trim(),
+        customerEmail: editForm.customerEmail.trim(),
         deliveryAddress: editForm.deliveryAddress.trim(),
+        arrivalCity: editForm.arrivalCity.trim(),
+        arrivalAirport: editForm.arrivalAirport.trim(),
+        arrivalDateTime: editForm.arrivalDateTime.trim(),
+        flightNumber: editForm.flightNumber.trim(),
         updatedAt: timestamp,
         logs: [
           ...order.logs,
@@ -1334,7 +1417,7 @@ const OrderDetail: React.FC = () => {
   const renderEditor = (
     field: keyof OrderEditForm,
     options: {
-      type?: 'text' | 'date' | 'tel';
+      type?: 'text' | 'date' | 'tel' | 'email';
       multiline?: boolean;
       rows?: number;
       placeholder?: string;
@@ -1517,20 +1600,27 @@ const OrderDetail: React.FC = () => {
     ? [
         {
           key: 'domestic-license-front',
-          label: '驾照正面照片',
-          src: domesticLicenseInfo.frontPhoto || null,
+          label: '驾照正面图片',
+          src: (isEditing ? editForm.domesticFrontPhoto : domesticLicenseInfo.frontPhoto) || orderPreviewAssets.licenseFront,
         },
         {
           key: 'domestic-license-back',
-          label: '驾照反面照片',
-          src: domesticLicenseInfo.backPhoto || null,
+          label: '驾照反面图片',
+          src: (isEditing ? editForm.domesticBackPhoto : domesticLicenseInfo.backPhoto) || orderPreviewAssets.licenseBack,
         },
-        ...(domesticLicenseInfo.passportPhoto
+        {
+          key: 'domestic-passport',
+          label: '护照',
+          src: (isEditing ? editForm.domesticPassportPhoto : domesticLicenseInfo.passportPhoto) || idpPassportFrontDefault,
+        },
+        ...(isCompanionLicenseOrder
           ? [
               {
-                key: 'domestic-passport',
-                label: '护照',
-                src: domesticLicenseInfo.passportPhoto || null,
+                key: 'domestic-white-background-photo',
+                label: '白底照片',
+                src:
+                  (isEditing ? editForm.domesticWhiteBackgroundPhoto : domesticLicenseInfo.whiteBackgroundPhoto) ||
+                  idpWhitePhotoDefault,
               },
             ]
           : []),
@@ -1576,11 +1666,13 @@ const OrderDetail: React.FC = () => {
     [...(DOMESTIC_FOREIGN_LICENSE_LOCATION_OPTIONS.find((item) => item.country === editForm.domesticForeignCountry)?.cities ?? [])],
     editForm.domesticForeignCity,
   );
+  const orderStatusLabel =
+    isDomesticLicenseOrder && order.status === 'pending_production' ? '已审核' : ORDER_STATUS_LABELS[order.status];
 
   const orderInfoItems: DetailFieldItem[] = [
     {
       label: '订单状态',
-      value: <span className={`${getStatusTagClass(order.status)} order-audit-status-tag`}>{ORDER_STATUS_LABELS[order.status]}</span>,
+      value: <span className={`${getStatusTagClass(order.status)} order-audit-status-tag`}>{orderStatusLabel}</span>,
     },
     {
       label: '下单时间',
@@ -1621,7 +1713,7 @@ const OrderDetail: React.FC = () => {
     },
     {
       label: '订单状态',
-      value: <span className={`${getStatusTagClass(order.status)} order-audit-status-tag`}>{ORDER_STATUS_LABELS[order.status]}</span>,
+      value: <span className={`${getStatusTagClass(order.status)} order-audit-status-tag`}>{orderStatusLabel}</span>,
     },
     {
       label: '下单时间',
@@ -1993,29 +2085,111 @@ const OrderDetail: React.FC = () => {
     },
   ];
 
-  const domesticOrderDetailViewBasicItems: DetailFieldItem[] = [
-    {
-      label: '中文姓名',
-      value: getDisplayValue(domesticLicenseInfo?.chineseName || order.licenseName || order.customerName),
-    },
-    {
-      label: '联系邮箱',
-      value: getDisplayValue(order.customerEmail),
-    },
-    {
-      label: '换证城市',
-      value: getDisplayValue(
+  const domesticExchangeCityItem: DetailFieldItem = {
+    label: '换证城市',
+    value: isEditing ? (
+      <div className="order-audit-field__inline-editors">
+        {renderSelectEditor(
+          'domesticExchangeProvince',
+          domesticExchangeProvinceOptions,
+          '请选择省份',
+          handleDomesticExchangeProvinceChange,
+        )}
+        {renderSelectEditor(
+          'domesticExchangeCity',
+          domesticExchangeCityOptions,
+          '请选择城市',
+          undefined,
+          !editForm.domesticExchangeProvince,
+        )}
+      </div>
+    ) : (
+      getDisplayValue(
         order.licenseIssuingRegion ||
           (domesticLicenseInfo
             ? [domesticLicenseInfo.exchangeProvince, domesticLicenseInfo.exchangeCity].filter(Boolean).join(' ')
             : ''),
-      ),
+      )
+    ),
+  };
+  const domesticForeignLocationItem: DetailFieldItem = {
+    label: '驾驶证发放国家及城市',
+    value: isEditing ? (
+      <div className="order-audit-field__inline-editors">
+        {renderSelectEditor(
+          'domesticForeignCountry',
+          domesticForeignCountryOptions,
+          '请选择国家',
+          handleDomesticForeignCountryChange,
+        )}
+        {renderSelectEditor(
+          'domesticForeignCity',
+          domesticForeignCityOptions,
+          '请选择城市/州',
+          undefined,
+          !editForm.domesticForeignCountry,
+        )}
+      </div>
+    ) : (
+      getDisplayValue(
+        domesticLicenseInfo ? [domesticLicenseInfo.foreignCountry, domesticLicenseInfo.foreignCity].filter(Boolean).join(' ') : '',
+      )
+    ),
+    fieldClassName: 'order-audit-field--domestic-country-city',
+    labelClassName: 'order-audit-field__label--nowrap',
+  };
+  const domesticChineseNameItem: DetailFieldItem = {
+    label: '中文姓名',
+    value: isEditing
+      ? renderEditor('domesticChineseName', { placeholder: '请输入中文姓名' })
+      : getDisplayValue(domesticLicenseInfo?.chineseName || order.licenseName || order.customerName),
+  };
+  const domesticOrderDetailViewBasicItems: DetailFieldItem[] = isCompanionLicenseOrder
+    ? [
+        domesticForeignLocationItem,
+        {
+          label: '联系电话',
+          value: isEditing
+            ? renderEditor('customerPhone', { type: 'tel', placeholder: '请输入联系电话' })
+            : getDisplayValue(order.customerPhone),
+        },
+        domesticChineseNameItem,
+      ]
+    : [
+        domesticExchangeCityItem,
+        domesticForeignLocationItem,
+        {
+          label: '联系邮箱',
+          value: isEditing
+            ? renderEditor('customerEmail', { type: 'email', placeholder: '请输入联系邮箱' })
+            : getDisplayValue(order.customerEmail),
+        },
+        domesticChineseNameItem,
+      ];
+  const companionFlightInfoItems: DetailFieldItem[] = [
+    {
+      label: '联系人',
+      value: isEditing ? renderEditor('customerName', { placeholder: '请输入联系人' }) : getDisplayValue(order.customerName),
     },
     {
-      label: '驾驶证发放国家及城市',
-      value: getDisplayValue(
-        domesticLicenseInfo ? [domesticLicenseInfo.foreignCountry, domesticLicenseInfo.foreignCity].filter(Boolean).join(' ') : '',
-      ),
+      label: '到达城市',
+      value: isEditing ? renderEditor('arrivalCity', { placeholder: '请输入到达城市' }) : getDisplayValue(order.arrivalCity),
+    },
+    {
+      label: '到达机场',
+      value: isEditing ? renderEditor('arrivalAirport', { placeholder: '请输入到达机场' }) : getDisplayValue(order.arrivalAirport),
+    },
+    {
+      label: '到达日期与时间',
+      value: isEditing
+        ? renderEditor('arrivalDateTime', { placeholder: '如 2026-07-20 14:30' })
+        : getDisplayValue(order.arrivalDateTime),
+      fieldClassName: 'order-audit-field--wide-label',
+      labelClassName: 'order-audit-field__label--nowrap',
+    },
+    {
+      label: '航班号',
+      value: isEditing ? renderEditor('flightNumber', { placeholder: '请输入航班号' }) : getDisplayValue(order.flightNumber),
     },
   ];
 
@@ -2130,12 +2304,12 @@ const OrderDetail: React.FC = () => {
               {isDomesticLicenseOrder && (
                 <section className="card order-detail-view-card">
                   <div className="card__header order-audit-card__header order-detail-view-card__header">
-                    <h2 className="order-audit-card__title">物流填写</h2>
+                    <h2 className="order-audit-card__title">物流信息</h2>
                   </div>
                   <div className="card__body order-detail-view-card__body">
                     <div className="order-audit-grid">
                       <div className="order-audit-field">
-                        <span className="order-audit-field__label">快递公司:</span>
+                        <span className="order-audit-field__label">物流公司:</span>
                         <select
                           className="form-select order-audit-field__editor"
                           value={logisticsForm.logisticsCompany}
@@ -2144,7 +2318,7 @@ const OrderDetail: React.FC = () => {
                             setLogisticsForm((current) => ({ ...current, logisticsCompany: event.target.value }))
                           }
                         >
-                          <option value="">请选择快递公司</option>
+                          <option value="">请选择物流公司</option>
                           {LOGISTICS_COMPANY_OPTIONS.map((company) => (
                             <option key={company} value={company}>
                               {company}
@@ -2153,11 +2327,11 @@ const OrderDetail: React.FC = () => {
                         </select>
                       </div>
                       <div className="order-audit-field">
-                        <span className="order-audit-field__label">物流单号:</span>
+                        <span className="order-audit-field__label">快递单号:</span>
                         <input
                           className="form-input order-audit-field__editor"
                           value={logisticsForm.trackingNumber}
-                          placeholder="请输入物流单号"
+                          placeholder="请输入快递单号"
                           disabled={!canFillLogistics}
                           onChange={(event) =>
                             setLogisticsForm((current) => ({ ...current, trackingNumber: event.target.value }))
@@ -2165,13 +2339,18 @@ const OrderDetail: React.FC = () => {
                         />
                       </div>
                     </div>
-                    {!canFillLogistics && (
+                    {!canFillLogistics && order.status === 'pending_review' && (
                       <p className="order-audit-modal__hint" style={{ marginTop: 12 }}>
                         待审核订单暂不可填写物流信息。
                       </p>
                     )}
                     <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
-                      <button type="button" className="btn btn--primary" onClick={handleSaveLogistics} disabled={!canFillLogistics}>
+                      <button
+                        type="button"
+                        className="btn btn--primary"
+                        onClick={handleSaveLogistics}
+                        disabled={!canFillLogistics}
+                      >
                         保存物流信息
                       </button>
                     </div>
@@ -2207,7 +2386,11 @@ const OrderDetail: React.FC = () => {
 
       {!isViewPreview && (
       <div className="app-main order-audit-page">
-        <div className={`order-audit-layout ${isViewPreview ? 'order-audit-layout--single-column order-detail-view-layout' : ''}`}>
+        <div
+          className={`order-audit-layout ${isViewPreview || isDomesticLicenseOrder ? 'order-audit-layout--single-column' : ''} ${
+            isViewPreview ? 'order-detail-view-layout' : ''
+          }`.trim()}
+        >
           <div className="order-audit-main">
             {isViewPreview ? (
               <>
@@ -2226,7 +2409,7 @@ const OrderDetail: React.FC = () => {
                         </div>
                       </div>
                       <div className="order-detail-view-summary__status">
-                        <span className={`${getStatusTagClass(order.status)} order-audit-status-tag`}>{ORDER_STATUS_LABELS[order.status]}</span>
+                        <span className={`${getStatusTagClass(order.status)} order-audit-status-tag`}>{orderStatusLabel}</span>
                       </div>
                     </div>
                     <div className="order-audit-grid order-detail-view-grid">
@@ -2381,12 +2564,11 @@ const OrderDetail: React.FC = () => {
 
                 <section className="card order-audit-card">
                   <div className="card__header order-audit-card__header">
-                    <h2 className="order-audit-card__title">附件信息</h2>
-                    {isEditing && <span className="order-audit-editing-tip">编辑中</span>}
+                    <h2 className="order-audit-card__title">基本信息</h2>
                   </div>
                   <div className="card__body order-audit-card__body">
-                    <div className="order-audit-grid order-audit-grid--domestic-license">
-                      {domesticLicenseInfoItems.map((item) => (
+                    <div className="order-audit-grid">
+                      {domesticOrderDetailViewBasicItems.map((item) => (
                         <div
                           key={item.label}
                           className={`order-audit-field ${item.fullWidth ? 'order-audit-field--full' : ''} ${item.fieldClassName || ''}`.trim()}
@@ -2396,25 +2578,80 @@ const OrderDetail: React.FC = () => {
                         </div>
                       ))}
                     </div>
-                  </div>
-                </section>
-
-                <section className="card order-audit-card">
-                  <div className="card__header order-audit-card__header">
-                    <h2 className="order-audit-card__title">收货信息</h2>
-                    {isEditing && <span className="order-audit-editing-tip">编辑中</span>}
-                  </div>
-                  <div className="card__body order-audit-card__body">
-                    <div className="order-audit-grid">
-                      {deliveryInfoItems.map((item) => (
-                        <div
-                          key={item.label}
-                          className={`order-audit-field ${item.fullWidth ? 'order-audit-field--full' : ''} ${item.fieldClassName || ''}`.trim()}
-                        >
-                          <span className={`order-audit-field__label ${item.labelClassName || ''}`.trim()}>{item.label}:</span>
-                          <div className="order-audit-field__value">{item.value}</div>
-                        </div>
-                      ))}
+                    <div className="order-audit-basic-section">
+                      <h3 className="order-audit-basic-section__title">附件信息</h3>
+                      <div
+                        className={`order-audit-image-grid ${
+                          isCompanionLicenseOrder ? 'order-audit-image-grid--four-up' : 'order-audit-image-grid--three-up'
+                        } order-audit-image-grid--embedded`}
+                      >
+                        {domesticLicenseImageItems.map((item) => (
+                          <div
+                            key={item.key}
+                            className={`order-audit-image-slot ${item.src ? '' : 'order-audit-image-slot--empty'}`}
+                          >
+                            <div className={`order-audit-image-slot__meta ${isEditing ? 'order-audit-image-slot__meta--editable' : ''}`}>
+                              <span className="order-audit-image-slot__label">{item.label}</span>
+                              {isEditing && (
+                                <>
+                                  <label
+                                    htmlFor={`order-audit-domestic-image-upload-${item.key}`}
+                                  className="order-audit-image-upload-btn order-audit-image-upload-btn--domestic"
+                                >
+                                  {'\u66f4\u6362\u56fe\u7247'}
+                                </label>
+                                  <input
+                                    id={`order-audit-domestic-image-upload-${item.key}`}
+                                    type="file"
+                                    accept="image/png,image/jpeg,image/jpg,image/webp"
+                                    className="order-audit-image-upload-input"
+                                    onChange={(event) => {
+                                      const editableImageField = getEditableDomesticImageField(item.key);
+                                      if (editableImageField) {
+                                        handleDomesticImageUpload(editableImageField, event.target.files?.[0] || null);
+                                      }
+                                      event.target.value = '';
+                                    }}
+                                  />
+                                </>
+                              )}
+                            </div>
+                            <div className="order-audit-image-frame">
+                              {item.src ? (
+                                <button
+                                  type="button"
+                                  className="order-audit-image-trigger"
+                                  onClick={() => setPreviewImage(item)}
+                                  aria-label={`查看${item.label}大图`}
+                                >
+                                  <ResolvedImage className="order-audit-image" src={item.src} alt={`${item.label}预览`} />
+                                </button>
+                              ) : (
+                                <div className="order-audit-image-placeholder" aria-hidden="true">
+                                  <strong>暂无图片</strong>
+                                  <span>等待上传</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="order-audit-basic-section">
+                      <h3 className="order-audit-basic-section__title order-audit-basic-section__title--spaced">
+                        {isCompanionLicenseOrder ? '航班信息' : '收货信息'}
+                      </h3>
+                      <div className="order-audit-grid">
+                        {(isCompanionLicenseOrder ? companionFlightInfoItems : deliveryInfoItems).map((item) => (
+                          <div
+                            key={item.label}
+                            className={`order-audit-field ${item.fullWidth ? 'order-audit-field--full' : ''} ${item.fieldClassName || ''}`.trim()}
+                          >
+                            <span className={`order-audit-field__label ${item.labelClassName || ''}`.trim()}>{item.label}:</span>
+                            <div className="order-audit-field__value">{item.value}</div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </section>
@@ -2521,7 +2758,7 @@ const OrderDetail: React.FC = () => {
             )}
           </div>
 
-          {!isViewPreview && !isIdpOrder && (
+          {!isViewPreview && !isIdpOrder && !isDomesticLicenseOrder && (
             <aside className="card order-audit-image-card">
             <div className="card__header order-audit-card__header">
               <h2 className="order-audit-card__title">证件图片</h2>

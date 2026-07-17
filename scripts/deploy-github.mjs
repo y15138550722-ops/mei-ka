@@ -28,7 +28,7 @@ let buildCompleted = false;
 
 const options = {
   remote: DEFAULT_REMOTE,
-  branch: '',
+  branch: process.env.DEPLOY_BRANCH || 'main',
   message: '',
   build: true,
   trackedOnly: false,
@@ -685,9 +685,27 @@ const deployOnce = () => {
 
   clearStaleIndexLock();
 
-  const branch = options.branch || runGit(['branch', '--show-current'], { capture: true });
+  const currentBranch = runGit(['branch', '--show-current'], { capture: true });
+  const branch = options.branch || currentBranch;
   if (!branch) {
     throw new Error('Current Git state is detached. Pass --branch <name> or checkout a branch first.');
+  }
+
+  if (currentBranch && currentBranch !== branch) {
+    const dirtyStatus = runGit(['status', '--short'], { capture: true });
+    if (dirtyStatus && !options.dryRun) {
+      throw new Error(
+        `Current branch is "${currentBranch}" with uncommitted changes. Commit, stash, or pass --branch ${currentBranch} before deploying.`,
+      );
+    }
+    if (dirtyStatus) {
+      console.warn(
+        `Dry run: current branch is "${currentBranch}" with uncommitted changes; real deployment would stop before switching branches.`,
+      );
+    }
+
+    console.log(`Switching deployment branch from ${currentBranch} to ${branch}...`);
+    runGit(['checkout', branch]);
   }
 
   runGit(['remote', 'get-url', options.remote], { capture: true });
