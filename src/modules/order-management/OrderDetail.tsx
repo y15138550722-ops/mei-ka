@@ -2135,8 +2135,12 @@ const OrderDetail: React.FC = () => {
         domesticLicenseInfo ? [domesticLicenseInfo.foreignCountry, domesticLicenseInfo.foreignCity].filter(Boolean).join(' ') : '',
       )
     ),
-    fieldClassName: 'order-audit-field--domestic-country-city',
-    labelClassName: 'order-audit-field__label--nowrap',
+    fieldClassName: isViewPreview
+      ? 'order-detail-view-field--wide-label'
+      : 'order-audit-field--domestic-country-city',
+    labelClassName: isViewPreview
+      ? 'order-detail-view-field__label--nowrap'
+      : 'order-audit-field__label--nowrap',
   };
   const domesticChineseNameItem: DetailFieldItem = {
     label: '中文姓名',
@@ -2152,6 +2156,12 @@ const OrderDetail: React.FC = () => {
           value: isEditing
             ? renderEditor('customerPhone', { type: 'tel', placeholder: '请输入联系电话' })
             : getDisplayValue(order.customerPhone),
+        },
+        {
+          label: '联系邮箱',
+          value: isEditing
+            ? renderEditor('customerEmail', { type: 'email', placeholder: '请输入联系邮箱' })
+            : getDisplayValue(order.customerEmail),
         },
         domesticChineseNameItem,
       ]
@@ -2292,8 +2302,11 @@ const OrderDetail: React.FC = () => {
                 <div className="card__body order-detail-view-card__body">
                 <div className="order-detail-view-grid order-detail-view-grid--product">
                   {(isDomesticLicenseOrder ? domesticOrderDetailViewBasicItems : orderDetailViewProductItems).map((item) => (
-                    <div key={item.label} className="order-detail-view-field">
-                      <span className="order-detail-view-field__label">{item.label}:</span>
+                    <div
+                      key={item.label}
+                      className={`order-detail-view-field ${item.fullWidth ? 'order-detail-view-field--full' : ''} ${item.fieldClassName || ''}`.trim()}
+                    >
+                      <span className={`order-detail-view-field__label ${item.labelClassName || ''}`.trim()}>{item.label}:</span>
                       <div className="order-detail-view-field__value">{item.value}</div>
                     </div>
                   ))}
