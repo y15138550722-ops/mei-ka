@@ -1105,7 +1105,7 @@ const ChineseTranslationOrders: React.FC = () => {
                 <th>订单号</th>
                 <th>产品及办理类型</th>
                 <th>发起时间</th>
-                <th>订单信息</th>
+                <th>基本信息</th>
                 <th>订单状态</th>
                 <th>操作</th>
               </tr>
@@ -1151,7 +1151,10 @@ const ChineseTranslationOrders: React.FC = () => {
                               <>
                                 <span>{`中文姓名：${orderInfo.chineseName}`}</span>
                                 {isCompanionLicenseOrder(order) ? (
-                                  <span>{`联系电话：${order.customerPhone || '--'}`}</span>
+                                  <>
+                                    <span>{`联系电话：${order.customerPhone || '--'}`}</span>
+                                    <span>{`联系邮箱：${order.customerEmail || '--'}`}</span>
+                                  </>
                                 ) : (
                                   <>
                                     <span>{`联系邮箱：${order.customerEmail || '--'}`}</span>

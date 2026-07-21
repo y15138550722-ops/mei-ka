@@ -229,6 +229,10 @@
   line-height: 1.9;
 }
 
+.order-detail-view-field__label--nowrap {
+  white-space: nowrap;
+}
+
 .order-detail-view-field__value {
   min-width: 0;
   color: #0f172a;
