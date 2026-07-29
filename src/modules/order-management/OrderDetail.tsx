@@ -5,6 +5,7 @@ import ResolvedImage from '../../shared/components/ResolvedImage';
 import { formatBeijingTimestamp } from '../../shared/utils/dateTime';
 import { orderPreviewAssets } from '../../shared/config/orderPreviewAssets';
 import type { DomesticLicenseInfo, Order, OrderLog, OrderStatus, ProductCategory } from '../../shared/types';
+import { saveDomesticLicenseImages } from '../../shared/utils/localImageStore';
 import idpPassportFrontDefault from './assets/idp-passport-front.png';
 import idpSignatureDefault from './assets/idp-signature.png';
 import idpWhitePhotoDefault from './assets/idp-white-photo.png';
@@ -16,12 +17,18 @@ type CertificateImage = {
   src: string | null;
 };
 
+type DomesticAttachmentGroup = {
+  key: string;
+  label: string;
+  images: CertificateImage[];
+};
+
 type EditableIdpImageField = 'whiteBackgroundPhoto' | 'signatureImage';
 type EditableDomesticImageField =
-  | 'domesticFrontPhoto'
-  | 'domesticBackPhoto'
-  | 'domesticPassportPhoto'
-  | 'domesticWhiteBackgroundPhoto';
+  | 'domesticFrontPhotos'
+  | 'domesticBackPhotos'
+  | 'domesticPassportPhotos'
+  | 'domesticWhiteBackgroundPhotos';
 
 type OrderEditForm = {
   licenseNo: string;
@@ -83,7 +90,15 @@ type OrderEditForm = {
   domesticBackPhoto: string;
   domesticPassportPhoto: string;
   domesticWhiteBackgroundPhoto: string;
+  domesticFrontPhotos: string[];
+  domesticBackPhotos: string[];
+  domesticPassportPhotos: string[];
+  domesticWhiteBackgroundPhotos: string[];
 };
+
+type OrderEditTextField = {
+  [Key in keyof OrderEditForm]: OrderEditForm[Key] extends string ? Key : never;
+}[keyof OrderEditForm];
 
 type OrderListSource = {
   path: string;
@@ -735,21 +750,30 @@ const getEditableIdpImageField = (key: CertificateImage['key']): EditableIdpImag
   return null;
 };
 
+const getDomesticImageList = (images: string[] | undefined, legacyImage?: string | null, fallback?: string) => {
+  const normalizedImages = (images || []).map((image) => image.trim()).filter(Boolean);
+  if (normalizedImages.length > 0) {
+    return normalizedImages;
+  }
+
+  return [legacyImage?.trim() || fallback || ''].filter(Boolean);
+};
+
 const getEditableDomesticImageField = (key: CertificateImage['key']): EditableDomesticImageField | null => {
   if (key === 'domestic-license-front') {
-    return 'domesticFrontPhoto';
+    return 'domesticFrontPhotos';
   }
 
   if (key === 'domestic-license-back') {
-    return 'domesticBackPhoto';
+    return 'domesticBackPhotos';
   }
 
   if (key === 'domestic-passport') {
-    return 'domesticPassportPhoto';
+    return 'domesticPassportPhotos';
   }
 
   if (key === 'domestic-white-background-photo') {
-    return 'domesticWhiteBackgroundPhoto';
+    return 'domesticWhiteBackgroundPhotos';
   }
 
   return null;
@@ -902,6 +926,14 @@ const buildOrderEditForm = (order: Order): OrderEditForm => {
     domesticBackPhoto: toEditableValue(domesticInfo?.backPhoto),
     domesticPassportPhoto: toEditableValue(domesticInfo?.passportPhoto),
     domesticWhiteBackgroundPhoto: toEditableValue(domesticInfo?.whiteBackgroundPhoto),
+    domesticFrontPhotos: getDomesticImageList(domesticInfo?.frontPhotos, domesticInfo?.frontPhoto, orderPreviewAssets.licenseFront),
+    domesticBackPhotos: getDomesticImageList(domesticInfo?.backPhotos, domesticInfo?.backPhoto, orderPreviewAssets.licenseBack),
+    domesticPassportPhotos: getDomesticImageList(domesticInfo?.passportPhotos, domesticInfo?.passportPhoto, idpPassportFrontDefault),
+    domesticWhiteBackgroundPhotos: getDomesticImageList(
+      domesticInfo?.whiteBackgroundPhotos,
+      domesticInfo?.whiteBackgroundPhoto,
+      idpWhitePhotoDefault,
+    ),
   };
 };
 
@@ -980,7 +1012,7 @@ const OrderDetail: React.FC = () => {
     window.setTimeout(() => setToast(null), 3000);
   };
 
-  const handleEditFieldChange = (field: keyof OrderEditForm, value: string) => {
+  const handleEditFieldChange = (field: OrderEditTextField, value: string) => {
     setEditForm((currentForm) => (currentForm ? { ...currentForm, [field]: value } : currentForm));
   };
 
@@ -1041,29 +1073,33 @@ const OrderDetail: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
-  const handleDomesticImageUpload = (field: EditableDomesticImageField, file: File | null) => {
-    if (!file) {
+  const handleDomesticImageUpload = (field: EditableDomesticImageField, files: File[]) => {
+    if (files.length === 0) {
       return;
     }
 
-    if (!file.type.startsWith('image/')) {
+    if (files.some((file) => !file.type.startsWith('image/'))) {
       showToast('error', '请选择图片文件');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = typeof reader.result === 'string' ? reader.result : '';
-      if (!result) {
-        showToast('error', '图片读取失败，请重试');
-        return;
-      }
-
-      handleEditFieldChange(field, result);
-      showToast('success', '附件图片已更新，保存后生效');
-    };
-    reader.onerror = () => showToast('error', '图片读取失败，请重试');
-    reader.readAsDataURL(file);
+    Promise.all(
+      files.map(
+        (file) =>
+          new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () =>
+              typeof reader.result === 'string' && reader.result ? resolve(reader.result) : reject(new Error('empty image'));
+            reader.onerror = () => reject(reader.error || new Error('image read failed'));
+            reader.readAsDataURL(file);
+          }),
+      ),
+    )
+      .then((images) => {
+        setEditForm((currentForm) => (currentForm ? { ...currentForm, [field]: images } : currentForm));
+        showToast('success', `已更新${images.length}张附件图片，保存后生效`);
+      })
+      .catch(() => showToast('error', '图片读取失败，请重试'));
   };
 
   const handleReturn = () => {
@@ -1175,9 +1211,9 @@ const OrderDetail: React.FC = () => {
     setIsEditing(false);
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (isIdpOrder) {
-      const requiredFields: Array<{ key: keyof OrderEditForm; label: string }> = [
+      const requiredFields: Array<{ key: OrderEditTextField; label: string }> = [
         { key: 'surname', label: '\u59d3' },
         { key: 'surnameEnglish', label: '\u59d3-\u82f1\u6587' },
         { key: 'givenName', label: '\u540d' },
@@ -1247,7 +1283,7 @@ const OrderDetail: React.FC = () => {
     }
 
     if (isDomesticLicenseOrder && domesticLicenseInfo) {
-      const requiredFields: Array<{ key: keyof OrderEditForm; label: string }> = [
+      const requiredFields: Array<{ key: OrderEditTextField; label: string }> = [
         { key: 'domesticForeignCountry', label: '境外发放国家' },
         { key: 'domesticForeignCity', label: '境外发放城市' },
         { key: 'domesticChineseName', label: '中文姓名' },
@@ -1299,31 +1335,39 @@ const OrderDetail: React.FC = () => {
         endorsements: editForm.domesticEndorsements.trim(),
         restrictions: editForm.domesticRestrictions.trim(),
         other: editForm.domesticOther.trim(),
-        frontPhoto: editForm.domesticFrontPhoto.trim(),
-        backPhoto: editForm.domesticBackPhoto.trim(),
-        passportPhoto: editForm.domesticPassportPhoto.trim(),
-        whiteBackgroundPhoto: editForm.domesticWhiteBackgroundPhoto.trim(),
+        frontPhoto: editForm.domesticFrontPhotos[0] || '',
+        backPhoto: editForm.domesticBackPhotos[0] || '',
+        passportPhoto: editForm.domesticPassportPhotos[0],
+        whiteBackgroundPhoto: editForm.domesticWhiteBackgroundPhotos[0],
+        frontPhotos: editForm.domesticFrontPhotos,
+        backPhotos: editForm.domesticBackPhotos,
+        passportPhotos: editForm.domesticPassportPhotos,
+        whiteBackgroundPhotos: editForm.domesticWhiteBackgroundPhotos,
       };
+      const storedDomesticLicenseInfo = await saveDomesticLicenseImages(
+        nextDomesticLicenseInfo,
+        `domestic-license-${order.orderId}`,
+      );
       const timestamp = getCurrentTimestamp();
-      const exchangeLocation = [nextDomesticLicenseInfo.exchangeProvince, nextDomesticLicenseInfo.exchangeCity]
+      const exchangeLocation = [storedDomesticLicenseInfo.exchangeProvince, storedDomesticLicenseInfo.exchangeCity]
         .filter(Boolean)
         .join(' ');
-      const foreignLocation = [nextDomesticLicenseInfo.foreignCountry, nextDomesticLicenseInfo.foreignCity]
+      const foreignLocation = [storedDomesticLicenseInfo.foreignCountry, storedDomesticLicenseInfo.foreignCity]
         .filter(Boolean)
         .join(' ');
       const nextUpdates: Partial<Order> = {
-        domesticLicenseInfo: nextDomesticLicenseInfo,
-        licenseNo: nextDomesticLicenseInfo.licenseNumber,
-        licenseName: nextDomesticLicenseInfo.chineseName,
-        licenseGender: nextDomesticLicenseInfo.sex,
-        licenseBirthDate: nextDomesticLicenseInfo.birthDate,
-        licenseCategory: nextDomesticLicenseInfo.classType,
+        domesticLicenseInfo: storedDomesticLicenseInfo,
+        licenseNo: storedDomesticLicenseInfo.licenseNumber,
+        licenseName: storedDomesticLicenseInfo.chineseName,
+        licenseGender: storedDomesticLicenseInfo.sex,
+        licenseBirthDate: storedDomesticLicenseInfo.birthDate,
+        licenseCategory: storedDomesticLicenseInfo.classType,
         licenseAddress: foreignLocation,
-        licenseFirstIssueDate: nextDomesticLicenseInfo.issueDate,
-        licenseValidUntilDate: nextDomesticLicenseInfo.expiryDate,
-        licenseArchiveNumber: nextDomesticLicenseInfo.fileNumber,
+        licenseFirstIssueDate: storedDomesticLicenseInfo.issueDate,
+        licenseValidUntilDate: storedDomesticLicenseInfo.expiryDate,
+        licenseArchiveNumber: storedDomesticLicenseInfo.fileNumber,
         licenseIssuingRegion: exchangeLocation,
-        useCountry: nextDomesticLicenseInfo.foreignCountry,
+        useCountry: storedDomesticLicenseInfo.foreignCountry,
         customerName: editForm.customerName.trim(),
         customerPhone: editForm.customerPhone.trim(),
         customerEmail: editForm.customerEmail.trim(),
@@ -1357,7 +1401,7 @@ const OrderDetail: React.FC = () => {
       return;
     }
 
-    const requiredFields: Array<{ key: keyof OrderEditForm; label: string }> = [
+    const requiredFields: Array<{ key: OrderEditTextField; label: string }> = [
       { key: 'licenseNo', label: '驾证号码' },
       { key: 'licenseName', label: '姓名' },
       { key: 'licenseCategory', label: '准驾车型' },
@@ -1415,7 +1459,7 @@ const OrderDetail: React.FC = () => {
   };
 
   const renderEditor = (
-    field: keyof OrderEditForm,
+    field: OrderEditTextField,
     options: {
       type?: 'text' | 'date' | 'tel' | 'email';
       multiline?: boolean;
@@ -1450,7 +1494,7 @@ const OrderDetail: React.FC = () => {
   };
 
   const renderSelectEditor = (
-    field: keyof OrderEditForm,
+    field: OrderEditTextField,
     options: string[],
     placeholder: string,
     onValueChange?: (value: string) => void,
@@ -1596,32 +1640,47 @@ const OrderDetail: React.FC = () => {
     },
   ];
 
-  const domesticLicenseImageItems: CertificateImage[] = domesticLicenseInfo
+  const createAttachmentGroup = (key: string, label: string, sources: string[]): DomesticAttachmentGroup => ({
+    key,
+    label,
+    images: sources.map((src, index) => ({ key: `${key}-${index}`, label: `${label}${sources.length > 1 ? ` ${index + 1}` : ''}`, src })),
+  });
+  const domesticAttachmentGroups: DomesticAttachmentGroup[] = domesticLicenseInfo
     ? [
-        {
-          key: 'domestic-license-front',
-          label: '驾照正面图片',
-          src: (isEditing ? editForm.domesticFrontPhoto : domesticLicenseInfo.frontPhoto) || orderPreviewAssets.licenseFront,
-        },
-        {
-          key: 'domestic-license-back',
-          label: '驾照反面图片',
-          src: (isEditing ? editForm.domesticBackPhoto : domesticLicenseInfo.backPhoto) || orderPreviewAssets.licenseBack,
-        },
-        {
-          key: 'domestic-passport',
-          label: '护照',
-          src: (isEditing ? editForm.domesticPassportPhoto : domesticLicenseInfo.passportPhoto) || idpPassportFrontDefault,
-        },
+        createAttachmentGroup(
+          'domestic-license-front',
+          '驾照正面图片',
+          isEditing
+            ? editForm.domesticFrontPhotos
+            : getDomesticImageList(domesticLicenseInfo.frontPhotos, domesticLicenseInfo.frontPhoto, orderPreviewAssets.licenseFront),
+        ),
+        createAttachmentGroup(
+          'domestic-license-back',
+          '驾照反面图片',
+          isEditing
+            ? editForm.domesticBackPhotos
+            : getDomesticImageList(domesticLicenseInfo.backPhotos, domesticLicenseInfo.backPhoto, orderPreviewAssets.licenseBack),
+        ),
+        createAttachmentGroup(
+          'domestic-passport',
+          '护照',
+          isEditing
+            ? editForm.domesticPassportPhotos
+            : getDomesticImageList(domesticLicenseInfo.passportPhotos, domesticLicenseInfo.passportPhoto, idpPassportFrontDefault),
+        ),
         ...(isCompanionLicenseOrder
           ? [
-              {
-                key: 'domestic-white-background-photo',
-                label: '白底照片',
-                src:
-                  (isEditing ? editForm.domesticWhiteBackgroundPhoto : domesticLicenseInfo.whiteBackgroundPhoto) ||
-                  idpWhitePhotoDefault,
-              },
+              createAttachmentGroup(
+                'domestic-white-background-photo',
+                '白底照片',
+                isEditing
+                  ? editForm.domesticWhiteBackgroundPhotos
+                  : getDomesticImageList(
+                      domesticLicenseInfo.whiteBackgroundPhotos,
+                      domesticLicenseInfo.whiteBackgroundPhoto,
+                      idpWhitePhotoDefault,
+                    ),
+              ),
             ]
           : []),
       ]
@@ -1645,8 +1704,8 @@ const OrderDetail: React.FC = () => {
 
         return item;
       })
-    : domesticLicenseImageItems.length > 0
-      ? domesticLicenseImageItems
+    : domesticAttachmentGroups.length > 0
+      ? domesticAttachmentGroups.flatMap((group) => group.images)
       : CERTIFICATE_IMAGES;
   const auditImageTitle = isIdpOrder ? '\u8bc1\u4ef6\u4fe1\u606f' : isDomesticLicenseOrder ? '驾照附件' : '\u8bc1\u4ef6\u56fe\u7247';
 
@@ -2593,35 +2652,31 @@ const OrderDetail: React.FC = () => {
                     </div>
                     <div className="order-audit-basic-section">
                       <h3 className="order-audit-basic-section__title">附件信息</h3>
-                      <div
-                        className={`order-audit-image-grid ${
-                          isCompanionLicenseOrder ? 'order-audit-image-grid--four-up' : 'order-audit-image-grid--three-up'
-                        } order-audit-image-grid--embedded`}
-                      >
-                        {domesticLicenseImageItems.map((item) => (
-                          <div
-                            key={item.key}
-                            className={`order-audit-image-slot ${item.src ? '' : 'order-audit-image-slot--empty'}`}
-                          >
+                      <div className="order-audit-attachment-groups">
+                        {domesticAttachmentGroups.map((group) => (
+                          <div key={group.key} className="order-audit-attachment-group">
                             <div className={`order-audit-image-slot__meta ${isEditing ? 'order-audit-image-slot__meta--editable' : ''}`}>
-                              <span className="order-audit-image-slot__label">{item.label}</span>
+                              <span className="order-audit-image-slot__label">
+                                {group.label}<small>共 {group.images.length} 张</small>
+                              </span>
                               {isEditing && (
                                 <>
                                   <label
-                                    htmlFor={`order-audit-domestic-image-upload-${item.key}`}
-                                  className="order-audit-image-upload-btn order-audit-image-upload-btn--domestic"
-                                >
-                                  {'\u66f4\u6362\u56fe\u7247'}
-                                </label>
+                                    htmlFor={`order-audit-domestic-image-upload-${group.key}`}
+                                    className="order-audit-image-upload-btn order-audit-image-upload-btn--domestic"
+                                  >
+                                    选择多张图片
+                                  </label>
                                   <input
-                                    id={`order-audit-domestic-image-upload-${item.key}`}
+                                    id={`order-audit-domestic-image-upload-${group.key}`}
                                     type="file"
+                                    multiple
                                     accept="image/png,image/jpeg,image/jpg,image/webp"
                                     className="order-audit-image-upload-input"
                                     onChange={(event) => {
-                                      const editableImageField = getEditableDomesticImageField(item.key);
+                                      const editableImageField = getEditableDomesticImageField(group.key);
                                       if (editableImageField) {
-                                        handleDomesticImageUpload(editableImageField, event.target.files?.[0] || null);
+                                        handleDomesticImageUpload(editableImageField, Array.from(event.target.files || []));
                                       }
                                       event.target.value = '';
                                     }}
@@ -2629,20 +2684,26 @@ const OrderDetail: React.FC = () => {
                                 </>
                               )}
                             </div>
-                            <div className="order-audit-image-frame">
-                              {item.src ? (
-                                <button
-                                  type="button"
-                                  className="order-audit-image-trigger"
-                                  onClick={() => setPreviewImage(item)}
-                                  aria-label={`查看${item.label}大图`}
-                                >
-                                  <ResolvedImage className="order-audit-image" src={item.src} alt={`${item.label}预览`} />
-                                </button>
+                            <div className="order-audit-attachment-group__images">
+                              {group.images.length > 0 ? (
+                                group.images.map((item) => (
+                                  <div key={item.key} className="order-audit-image-frame">
+                                    <button
+                                      type="button"
+                                      className="order-audit-image-trigger"
+                                      onClick={() => setPreviewImage(item)}
+                                      aria-label={`查看${item.label}大图`}
+                                    >
+                                      <ResolvedImage className="order-audit-image" src={item.src || ''} alt={`${item.label}预览`} />
+                                    </button>
+                                  </div>
+                                ))
                               ) : (
-                                <div className="order-audit-image-placeholder" aria-hidden="true">
-                                  <strong>暂无图片</strong>
-                                  <span>等待上传</span>
+                                <div className="order-audit-image-frame order-audit-image-slot--empty">
+                                  <div className="order-audit-image-placeholder" aria-hidden="true">
+                                    <strong>暂无图片</strong>
+                                    <span>等待上传</span>
+                                  </div>
                                 </div>
                               )}
                             </div>

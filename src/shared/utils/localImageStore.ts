@@ -122,13 +122,20 @@ export const saveLocalImageSource = async (id: string, source?: string | null) =
 };
 
 export const saveDomesticLicenseImages = async (info: DomesticLicenseInfo, storageKey: string) => {
-  const [frontPhoto, backPhoto, passportPhoto, whiteBackgroundPhoto] = await Promise.all([
+  const saveImageList = (key: string, sources: string[] | undefined) =>
+    Promise.all((sources || []).filter(Boolean).map((source, index) => saveLocalImageSource(`${storageKey}-${key}-${index}`, source)));
+
+  const [frontPhoto, backPhoto, passportPhoto, whiteBackgroundPhoto, frontPhotos, backPhotos, passportPhotos, whiteBackgroundPhotos] = await Promise.all([
     saveLocalImageSource(`${storageKey}-front`, info.frontPhoto),
     saveLocalImageSource(`${storageKey}-back`, info.backPhoto),
     info.passportPhoto ? saveLocalImageSource(`${storageKey}-passport`, info.passportPhoto) : Promise.resolve(undefined),
     info.whiteBackgroundPhoto
       ? saveLocalImageSource(`${storageKey}-white-background`, info.whiteBackgroundPhoto)
       : Promise.resolve(undefined),
+    saveImageList('front', info.frontPhotos),
+    saveImageList('back', info.backPhotos),
+    saveImageList('passport', info.passportPhotos),
+    saveImageList('white-background', info.whiteBackgroundPhotos),
   ]);
 
   return {
@@ -137,6 +144,10 @@ export const saveDomesticLicenseImages = async (info: DomesticLicenseInfo, stora
     backPhoto,
     passportPhoto: passportPhoto || undefined,
     whiteBackgroundPhoto: whiteBackgroundPhoto || undefined,
+    frontPhotos,
+    backPhotos,
+    passportPhotos,
+    whiteBackgroundPhotos,
   };
 };
 
@@ -166,7 +177,11 @@ export const migrateDomesticLicenseOrderImages = async (orders: Order[]) => {
         nextDomesticInfo.frontPhoto !== domesticInfo.frontPhoto ||
         nextDomesticInfo.backPhoto !== domesticInfo.backPhoto ||
         nextDomesticInfo.passportPhoto !== domesticInfo.passportPhoto ||
-        nextDomesticInfo.whiteBackgroundPhoto !== domesticInfo.whiteBackgroundPhoto;
+        nextDomesticInfo.whiteBackgroundPhoto !== domesticInfo.whiteBackgroundPhoto ||
+        JSON.stringify(nextDomesticInfo.frontPhotos) !== JSON.stringify(domesticInfo.frontPhotos) ||
+        JSON.stringify(nextDomesticInfo.backPhotos) !== JSON.stringify(domesticInfo.backPhotos) ||
+        JSON.stringify(nextDomesticInfo.passportPhotos) !== JSON.stringify(domesticInfo.passportPhotos) ||
+        JSON.stringify(nextDomesticInfo.whiteBackgroundPhotos) !== JSON.stringify(domesticInfo.whiteBackgroundPhotos);
 
       if (!changed) {
         return order;

@@ -61,6 +61,10 @@ export interface DomesticLicenseInfo {
   backPhoto: string;
   passportPhoto?: string;
   whiteBackgroundPhoto?: string;
+  frontPhotos?: string[];
+  backPhotos?: string[];
+  passportPhotos?: string[];
+  whiteBackgroundPhotos?: string[];
 }
 
 export interface Order {

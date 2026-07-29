@@ -39,9 +39,9 @@ const getDomesticExchangeLocation = (order: Order) =>
   [order.domesticLicenseInfo?.exchangeProvince, order.domesticLicenseInfo?.exchangeCity].filter(Boolean).join(' ');
 
 const DOMESTIC_AGENT_SOURCE_LABELS: Record<Channel, string> = {
-  ctrip: '哈啰-H5',
-  fliggy: '哈啰-微信小程序',
-  private: '哈啰-支付宝小程序',
+  ctrip: '哈啰api',
+  fliggy: '德耀-微信小程序',
+  private: '德耀-支付宝小程序',
   offline: '自营录单',
 };
 
@@ -546,10 +546,16 @@ const DomesticLicenseOrderManagement: React.FC = () => {
                               </span>
                             </div>
                             {isCompanionOrder ? (
-                              <div>
-                                <span className="order-cell-label">联系电话：</span>
-                                <span className="order-cell-value">{order.customerPhone || '--'}</span>
-                              </div>
+                              <>
+                                <div>
+                                  <span className="order-cell-label">联系电话：</span>
+                                  <span className="order-cell-value">{order.customerPhone || '--'}</span>
+                                </div>
+                                <div>
+                                  <span className="order-cell-label">联系邮箱：</span>
+                                  <span className="order-cell-value">{order.customerEmail || '--'}</span>
+                                </div>
+                              </>
                             ) : (
                               <>
                                 <div>
