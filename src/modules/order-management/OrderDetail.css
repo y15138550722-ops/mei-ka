@@ -614,6 +614,50 @@
   padding: 8px 0 0;
 }
 
+.order-audit-attachment-groups {
+  display: grid;
+  gap: 16px;
+  padding-top: 10px;
+}
+
+.order-audit-attachment-group {
+  padding: 12px 14px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.order-audit-attachment-group .order-audit-image-slot__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.order-audit-attachment-group .order-audit-image-slot__label small {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.order-audit-attachment-group__images {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+
+@media (max-width: 900px) {
+  .order-audit-attachment-group__images {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .order-audit-attachment-group__images {
+    grid-template-columns: 1fr;
+  }
+}
+
 .notary-order-management-preview .order-audit-image-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
