@@ -210,7 +210,7 @@ await build({
   configFile: false,
   plugins: [localImageTextRecognitionPlugin(), typescriptTransformPlugin()],
   publicDir: '../docs',
-  esbuild: false,
+  oxc: false,
   build: {
     minify: false,
   },
