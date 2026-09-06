@@ -23,10 +23,14 @@ type ImageCropRect = {
   width: number;
   height: number;
 };
-type DomesticLicenseExtractedAssets = {
-  combinedPhoto?: string;
+export type DomesticLicenseExtractedAssets = {
   portraitPhoto?: string;
   signaturePhoto?: string;
+};
+type DomesticLicenseOcrRow = {
+  fieldKey?: unknown;
+  originalText?: unknown;
+  translatedText?: unknown;
 };
 type PixelCropRect = {
   x: number;
@@ -34,22 +38,14 @@ type PixelCropRect = {
   width: number;
   height: number;
 };
-type BrowserFaceDetector = {
-  detect: (image: HTMLImageElement | HTMLCanvasElement) => Promise<Array<{ boundingBox: DOMRectReadOnly }>>;
-};
-type BrowserFaceDetectorConstructor = new (options?: {
-  fastMode?: boolean;
-  maxDetectedFaces?: number;
-}) => BrowserFaceDetector;
 
 const INVALID_FILENAME_CHAR_PATTERN = /[\\/:*?"<>|]/g;
 const PRODUCTION_OPERATOR = '生产端';
 const MADE_ACTION = '已制作';
-const FRONT_LICENSE_PORTRAIT_CROP: ImageCropRect = { x: 0.1, y: 0.23, width: 0.27, height: 0.52 };
-const FRONT_LICENSE_SIGNATURE_CROP: ImageCropRect = { x: 0.08, y: 0.78, width: 0.34, height: 0.18 };
-const FRONT_LICENSE_SIGNATURE_SEARCH_RECT: ImageCropRect = { x: 0.02, y: 0.6, width: 0.48, height: 0.34 };
-const TEMPLATE_SIGNATURE_FALLBACK_CROP: ImageCropRect = { x: 0.06, y: 0.78, width: 0.78, height: 0.2 };
-const TEMPLATE_PORTRAIT_CROP: ImageCropRect = { x: 0, y: 0, width: 1, height: 0.82 };
+export const DOMESTIC_LICENSE_ASSET_EXTRACTION_VERSION = 2;
+const FRONT_LICENSE_PORTRAIT_CROP: ImageCropRect = { x: 0.04, y: 0.2, width: 0.38, height: 0.62 };
+const FRONT_LICENSE_SIGNATURE_CROP: ImageCropRect = { x: 0.07, y: 0.79, width: 0.34, height: 0.18 };
+const FRONT_LICENSE_SIGNATURE_SEARCH_RECT: ImageCropRect = { x: 0.04, y: 0.76, width: 0.38, height: 0.22 };
 
 const sanitizeFilenamePart = (value: string) => value.replace(INVALID_FILENAME_CHAR_PATTERN, '').trim();
 
@@ -87,8 +83,35 @@ const translateNoneValue = (value?: string | null) => {
   return normalizedValue;
 };
 
+const CHINESE_COMPOUND_SURNAMES = ['欧阳', '司马', '上官', '诸葛', '东方', '皇甫', '尉迟', '公孙'];
+
+const splitChineseName = (value?: string | null) => {
+  const normalizedValue = value?.replace(/\s+/g, '').trim() || '';
+  const compoundSurname = CHINESE_COMPOUND_SURNAMES.find((surname) => normalizedValue.startsWith(surname));
+  const surname = compoundSurname || normalizedValue.slice(0, 1);
+
+  return {
+    surname,
+    givenName: normalizedValue.slice(surname.length),
+  };
+};
+
+const getOcrRowText = (rows: DomesticLicenseOcrRow[], fieldKey: string, kind: 'originalText' | 'translatedText') => {
+  const value = rows.find((row) => row.fieldKey === fieldKey)?.[kind];
+  return typeof value === 'string' ? value.trim() : '';
+};
+
+const getTranslatedNamePart = (rows: DomesticLicenseOcrRow[], fieldKey: string) => {
+  const value = getOcrRowText(rows, fieldKey, 'translatedText');
+  return value.match(/[：:]\s*([^\s]+)/)?.[1]?.trim() || '';
+};
+
+const stripTranslatedFieldPrefix = (value: string, pattern: RegExp) => value.replace(pattern, '').trim();
+
 const buildFallbackDomesticLicenseTranslation = (order: Order | undefined) => {
   const info = order?.domesticLicenseInfo;
+  const chineseName = getFilledValue(info?.chineseName || order?.licenseName || order?.customerName, '');
+  const nameParts = splitChineseName(chineseName);
   const licenseNumber = getFilledValue(info?.licenseNumber || order?.licenseNo);
   const issueDate = formatChineseDate(info?.issueDate || order?.licenseFirstIssueDate);
   const expiryDate = formatChineseDate(info?.expiryDate || order?.licenseValidUntilDate);
@@ -98,6 +121,7 @@ const buildFallbackDomesticLicenseTranslation = (order: Order | undefined) => {
   const restrictions = translateNoneValue(info?.restrictions || info?.rstr);
 
   return {
+    address: '',
     birthDate,
     classDescription: `准驾车型：\n${classType}类：小型车辆`,
     country: getFilledValue(info?.foreignCountry || order?.useCountry, '美国'),
@@ -110,10 +134,12 @@ const buildFallbackDomesticLicenseTranslation = (order: Order | undefined) => {
     height: `身高：${getFilledValue(info?.height, '无')}`,
     issueDate,
     licenseNumber,
+    givenName: nameParts.givenName,
     restrictions: `限制条件：\n${restrictions}`,
     sex: `性别：${translateSex(info?.sex || order?.licenseGender)}`,
-    signature: `（\n签名\n）${getFilledValue(info?.chineseName || order?.licenseName || order?.customerName, '')}`,
+    signature: `（\n签名\n）${chineseName}`,
     state: getFilledValue(info?.foreignCity || info?.foreignCountry || order?.useCountry, '马萨诸塞州'),
+    surname: nameParts.surname,
   };
 };
 
@@ -135,6 +161,10 @@ const buildOcrRequestFallback = (order: Order | undefined) => {
     rstr: info?.rstr || '',
     sex: info?.sex || order?.licenseGender || '',
     signatureName: info?.chineseName || order?.licenseName || order?.customerName || '',
+    surname: info?.surname || '',
+    givenName: info?.givenName || '',
+    address: '',
+    revisionDate: '',
     state: info?.foreignCity || '',
   };
 };
@@ -142,6 +172,7 @@ const buildOcrRequestFallback = (order: Order | undefined) => {
 const buildTranslationFromOcrFields = (
   order: Order | undefined,
   fields: Record<string, unknown>,
+  rows: DomesticLicenseOcrRow[] = [],
 ): DomesticLicenseOcrTranslation => {
   const fallback = buildFallbackDomesticLicenseTranslation(order);
   const getField = (key: string) => {
@@ -151,23 +182,51 @@ const buildTranslationFromOcrFields = (
   const classType = getField('classType') || fallback.classDescription.match(/\n(.+?)类/)?.[1] || '';
   const issueDate = formatChineseDate(getField('issueDate')) || fallback.issueDate;
   const birthDate = formatChineseDate(getField('birthDate')) || fallback.birthDate;
+  const translatedState = getOcrRowText(rows, 'issuingRegion', 'translatedText');
+  const translatedCountry = rows.find(
+    (row) => row.fieldKey === 'other' && String(row.originalText || '').trim().toUpperCase() === 'USA',
+  )?.translatedText;
+  const translatedAddress = stripTranslatedFieldPrefix(
+    getOcrRowText(rows, 'address', 'translatedText'),
+    /^8\s*住址[：:]?\s*/,
+  );
+  const translatedEyeColor = getOcrRowText(rows, 'eyeColor', 'translatedText');
+  const translatedSex = getOcrRowText(rows, 'sex', 'translatedText');
+  const translatedHeight = getOcrRowText(rows, 'height', 'translatedText');
+  const translatedClassDescription = getOcrRowText(rows, 'classDescription', 'translatedText');
+  const translatedEndorsements = getOcrRowText(rows, 'endorsements', 'translatedText');
+  const translatedRestrictions = getOcrRowText(rows, 'restrictions', 'translatedText');
+  const revisionDate = formatChineseDate(getField('revisionDate')) || issueDate;
+  const translatedSurname = getTranslatedNamePart(rows, 'surname');
+  const translatedGivenName = getTranslatedNamePart(rows, 'givenName');
+  const orderChineseName = order?.domesticLicenseInfo?.chineseName || order?.licenseName || order?.customerName || '';
+  const orderNameParts = splitChineseName(orderChineseName);
+  const chineseName =
+    [translatedSurname || orderNameParts.surname, translatedGivenName || orderNameParts.givenName].filter(Boolean).join('') ||
+    getField('signatureName');
+  const nameParts = splitChineseName(chineseName);
 
   return {
     ...fallback,
+    address: translatedAddress || fallback.address,
     birthDate,
-    classDescription: `准驾车型：\n${classType || getFilledValue(order?.domesticLicenseInfo?.classType || order?.licenseCategory, 'D')}类：小型车辆`,
-    country: getField('country') || fallback.country,
-    endorsements: `附加准驾资格：\n${translateNoneValue(getField('endorsements'))}`,
+    classDescription:
+      translatedClassDescription ||
+      `准驾车型：\n${classType || getFilledValue(order?.domesticLicenseInfo?.classType || order?.licenseCategory, 'D')}类：小型车辆`,
+    country: typeof translatedCountry === 'string' && translatedCountry.trim() ? translatedCountry.trim() : fallback.country,
+    endorsements: translatedEndorsements || `附加准驾资格：\n${translateNoneValue(getField('endorsements'))}`,
     expiryDate: formatChineseDate(getField('expiryDate')) || fallback.expiryDate,
-    eyeColor: `瞳孔颜色：${getField('eyeColor') || fallback.eyeColor.replace(/^瞳孔颜色：/, '')}`,
-    fileAndIssueDate: `识别码：\n${getField('fileNumber') || getFilledValue(order?.domesticLicenseInfo?.fileNumber || order?.licenseArchiveNumber)}\n \n核发日期：${issueDate}`,
-    height: `身高：${getField('height') || fallback.height.replace(/^身高：/, '')}`,
+    eyeColor: translatedEyeColor || `瞳孔颜色：${getField('eyeColor') || fallback.eyeColor.replace(/^瞳孔颜色：/, '')}`,
+    fileAndIssueDate: `识别码：\n${formatChineseDate(getField('fileNumber')) || getFilledValue(order?.domesticLicenseInfo?.fileNumber || order?.licenseArchiveNumber)}\n \n核发日期：${revisionDate}`,
+    givenName: translatedGivenName || nameParts.givenName || fallback.givenName,
+    height: translatedHeight || `身高：${getField('height') || fallback.height.replace(/^身高：/, '')}`,
     issueDate,
     licenseNumber: getField('licenseNumber') || fallback.licenseNumber,
-    restrictions: `限制条件：\n${translateNoneValue(getField('restrictions') || getField('rstr'))}`,
-    sex: `性别：${translateSex(getField('sex'))}`,
-    signature: `（\n签名\n）${getField('signatureName') || fallback.signature.replace(/^（\n签名\n）/, '')}`,
-    state: getField('state') || fallback.state,
+    restrictions: translatedRestrictions || `限制条件：\n${translateNoneValue(getField('restrictions') || getField('rstr'))}`,
+    sex: translatedSex || `性别：${translateSex(getField('sex'))}`,
+    signature: `（\n签名\n）${chineseName || fallback.signature.replace(/^（\n签名\n）/, '')}`,
+    state: translatedState || fallback.state,
+    surname: translatedSurname || nameParts.surname || fallback.surname,
   };
 };
 
@@ -215,8 +274,13 @@ const recognizeDomesticLicenseTranslation = async (order: Order | undefined): Pr
       return resolveDomesticLicenseTranslationImages(fallback);
     }
 
-    const result = (await response.json()) as { fields?: Record<string, unknown> };
-    return resolveDomesticLicenseTranslationImages(buildTranslationFromOcrFields(order, result.fields || {}));
+    const result = (await response.json()) as {
+      fields?: Record<string, unknown>;
+      rows?: DomesticLicenseOcrRow[];
+    };
+    return resolveDomesticLicenseTranslationImages(
+      buildTranslationFromOcrFields(order, result.fields || {}, Array.isArray(result.rows) ? result.rows : []),
+    );
   } catch (error) {
     console.warn('Domestic license OCR failed, using order fallback fields.', error);
     return resolveDomesticLicenseTranslationImages(fallback);
@@ -329,25 +393,6 @@ const cropImageToCanvas = (image: HTMLImageElement, rect: ImageCropRect) => {
   return canvas;
 };
 
-const cropCanvasToCanvas = (sourceCanvas: HTMLCanvasElement, rect: ImageCropRect) => {
-  const normalizedRect = clampCropRect(rect);
-  const sourceX = Math.max(0, Math.round(sourceCanvas.width * normalizedRect.x));
-  const sourceY = Math.max(0, Math.round(sourceCanvas.height * normalizedRect.y));
-  const sourceWidth = Math.max(1, Math.min(sourceCanvas.width - sourceX, Math.round(sourceCanvas.width * normalizedRect.width)));
-  const sourceHeight = Math.max(1, Math.min(sourceCanvas.height - sourceY, Math.round(sourceCanvas.height * normalizedRect.height)));
-  const canvas = document.createElement('canvas');
-  canvas.width = sourceWidth;
-  canvas.height = sourceHeight;
-
-  const context = canvas.getContext('2d');
-  if (!context) {
-    throw new Error('Failed to create template crop canvas');
-  }
-
-  context.drawImage(sourceCanvas, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, sourceWidth, sourceHeight);
-  return canvas;
-};
-
 const getPixelMetrics = (data: Uint8ClampedArray, index: number) => {
   const red = data[index];
   const green = data[index + 1];
@@ -359,153 +404,6 @@ const getPixelMetrics = (data: Uint8ClampedArray, index: number) => {
   const saturation = maxChannel === 0 ? 0 : (maxChannel - minChannel) / maxChannel;
 
   return { alpha, luminance, saturation };
-};
-
-const buildIntegralMask = (mask: Uint8Array, width: number, height: number) => {
-  const integral = new Uint32Array((width + 1) * (height + 1));
-
-  for (let y = 1; y <= height; y += 1) {
-    let rowSum = 0;
-
-    for (let x = 1; x <= width; x += 1) {
-      rowSum += mask[(y - 1) * width + (x - 1)];
-      integral[y * (width + 1) + x] = integral[(y - 1) * (width + 1) + x] + rowSum;
-    }
-  }
-
-  return integral;
-};
-
-const sumIntegralRect = (
-  integral: Uint32Array,
-  width: number,
-  x: number,
-  y: number,
-  rectWidth: number,
-  rectHeight: number,
-) => {
-  const stride = width + 1;
-  const left = x;
-  const top = y;
-  const right = x + rectWidth;
-  const bottom = y + rectHeight;
-
-  return (
-    integral[bottom * stride + right] -
-    integral[top * stride + right] -
-    integral[bottom * stride + left] +
-    integral[top * stride + left]
-  );
-};
-
-const detectPortraitCropByFace = async (image: HTMLImageElement): Promise<ImageCropRect | null> => {
-  const FaceDetector = (window as Window & { FaceDetector?: BrowserFaceDetectorConstructor }).FaceDetector;
-
-  if (!FaceDetector) {
-    return null;
-  }
-
-  try {
-    const detector = new FaceDetector({ fastMode: true, maxDetectedFaces: 3 });
-    const faces = await detector.detect(image);
-    const face = faces
-      .map((item) => item.boundingBox)
-      .filter((box) => box.width > 0 && box.height > 0)
-      .sort((a, b) => b.width * b.height - a.width * a.height)[0];
-
-    if (!face) {
-      return null;
-    }
-
-    const imageWidth = image.naturalWidth || image.width;
-    const imageHeight = image.naturalHeight || image.height;
-    const cropWidth = Math.max(face.width * 2.1, imageWidth * 0.18);
-    const cropHeight = Math.max(face.height * 2.95, cropWidth * 1.42);
-    const cropRect = expandPixelRect(
-      {
-        x: face.x + face.width / 2 - cropWidth / 2,
-        y: face.y - face.height * 0.72,
-        width: cropWidth,
-        height: cropHeight,
-      },
-      0,
-      0,
-      imageWidth,
-      imageHeight,
-    );
-
-    return pixelRectToCropRect(cropRect, imageWidth, imageHeight);
-  } catch (error) {
-    console.warn('Face detection failed, using image-content portrait crop fallback.', error);
-    return null;
-  }
-};
-
-const detectPortraitCropByImageContent = (image: HTMLImageElement): ImageCropRect | null => {
-  const canvas = drawImageToCanvas(image, 520);
-  const context = canvas.getContext('2d');
-
-  if (!context) {
-    return null;
-  }
-
-  const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
-  const mask = new Uint8Array(canvas.width * canvas.height);
-
-  for (let index = 0; index < data.length; index += 4) {
-    const { alpha, luminance, saturation } = getPixelMetrics(data, index);
-    const isPortraitContent = alpha > 20 && (luminance < 125 || (saturation > 0.22 && luminance < 235));
-    mask[index / 4] = isPortraitContent ? 1 : 0;
-  }
-
-  const integral = buildIntegralMask(mask, canvas.width, canvas.height);
-  const step = Math.max(3, Math.round(canvas.width * 0.012));
-  const widthFractions = [0.2, 0.23, 0.26, 0.29, 0.32];
-  const heightFractions = [0.42, 0.48, 0.54, 0.6];
-  let bestRect: PixelCropRect | null = null;
-  let bestScore = 0;
-
-  for (const widthFraction of widthFractions) {
-    const rectWidth = Math.max(24, Math.round(canvas.width * widthFraction));
-
-    for (const heightFraction of heightFractions) {
-      const rectHeight = Math.max(40, Math.round(canvas.height * heightFraction));
-      const maxX = Math.min(Math.round(canvas.width * 0.38), canvas.width - rectWidth);
-      const maxY = Math.min(Math.round(canvas.height * 0.42), canvas.height - rectHeight);
-
-      for (let y = Math.round(canvas.height * 0.08); y <= maxY; y += step) {
-        for (let x = Math.round(canvas.width * 0.02); x <= maxX; x += step) {
-          const contentCount = sumIntegralRect(integral, canvas.width, x, y, rectWidth, rectHeight);
-          const density = contentCount / (rectWidth * rectHeight);
-          const aspect = rectWidth / rectHeight;
-          const centerX = x + rectWidth / 2;
-          const centerY = y + rectHeight / 2;
-          const positionPenalty =
-            Math.abs(centerX / canvas.width - 0.2) * 0.18 + Math.abs(centerY / canvas.height - 0.43) * 0.12;
-          const aspectPenalty = Math.abs(aspect - 0.58) * 0.18;
-          const score = density - positionPenalty - aspectPenalty;
-
-          if (score > bestScore) {
-            bestScore = score;
-            bestRect = { x, y, width: rectWidth, height: rectHeight };
-          }
-        }
-      }
-    }
-  }
-
-  if (!bestRect || bestScore < 0.12) {
-    return null;
-  }
-
-  return pixelRectToCropRect(bestRect, canvas.width, canvas.height);
-};
-
-const detectPortraitCropRect = async (image: HTMLImageElement): Promise<ImageCropRect> => {
-  const faceCropRect = await detectPortraitCropByFace(image);
-  const contentCropRect = faceCropRect || detectPortraitCropByImageContent(image);
-
-  return contentCropRect || FRONT_LICENSE_PORTRAIT_CROP;
 };
 
 const isSignatureInkPixel = (data: Uint8ClampedArray, index: number) => {
@@ -595,14 +493,21 @@ const detectSignatureCropRect = (image: HTMLImageElement): ImageCropRect | null 
 
     const rectWidth = maxX - minX + 1;
     const rectHeight = maxY - minY + 1;
+    const centerY = minY + rectHeight / 2;
 
-    if (inkCount < 20 || rectWidth < canvas.width * 0.08 || rectHeight < 3) {
+    if (
+      inkCount < 20 ||
+      rectWidth < canvas.width * 0.08 ||
+      rectHeight < 3 ||
+      rectHeight > canvas.height * 0.13 ||
+      centerY < canvas.height * 0.82
+    ) {
       return;
     }
 
     const aspectScore = rectWidth / Math.max(1, rectHeight);
     const lowerPositionBonus = (minY - searchY) / searchHeight;
-    const score = rectWidth + aspectScore * 8 + lowerPositionBonus * 24;
+    const score = rectWidth + aspectScore * 8 + lowerPositionBonus * canvas.width * 0.45;
 
     if (score > bestScore) {
       bestScore = score;
@@ -623,46 +528,6 @@ const detectSignatureCropRect = (image: HTMLImageElement): ImageCropRect | null 
   return pixelRectToCropRect(bestRect, canvas.width, canvas.height);
 };
 
-const getTemplateMediaSourceCrop = (sourceImage: HTMLImageElement, templateImage: HTMLImageElement): ImageCropRect => {
-  const sourceWidth = sourceImage.naturalWidth || sourceImage.width;
-  const sourceHeight = sourceImage.naturalHeight || sourceImage.height;
-  const templateWidth = templateImage.naturalWidth || templateImage.width;
-  const templateHeight = templateImage.naturalHeight || templateImage.height;
-  const sourceAspect = sourceWidth / Math.max(1, sourceHeight);
-  const templateAspect = templateWidth / Math.max(1, templateHeight);
-
-  if (sourceAspect <= templateAspect * 1.12) {
-    return { x: 0, y: 0, width: 1, height: 1 };
-  }
-
-  return clampCropRect({
-    x: 0,
-    y: 0,
-    width: templateAspect / sourceAspect,
-    height: 1,
-  });
-};
-
-const extractDomesticLicenseAssetsByTemplate = (
-  sourceImage: HTMLImageElement,
-  templateImage: HTMLImageElement,
-): DomesticLicenseExtractedAssets => {
-  const mediaCanvas = cropImageToCanvas(sourceImage, getTemplateMediaSourceCrop(sourceImage, templateImage));
-  const signatureCrop = detectSignatureCropRect(templateImage) || TEMPLATE_SIGNATURE_FALLBACK_CROP;
-  const portraitCrop = clampCropRect({
-    ...TEMPLATE_PORTRAIT_CROP,
-    height: Math.min(TEMPLATE_PORTRAIT_CROP.height, Math.max(0.58, signatureCrop.y - 0.02)),
-  });
-  const portraitCanvas = cropCanvasToCanvas(mediaCanvas, portraitCrop);
-  const signatureCanvas = makeSignatureCanvasTransparent(cropCanvasToCanvas(mediaCanvas, signatureCrop));
-
-  return {
-    combinedPhoto: mediaCanvas.toDataURL('image/jpeg', 0.94),
-    portraitPhoto: portraitCanvas.toDataURL('image/jpeg', 0.94),
-    signaturePhoto: signatureCanvas.toDataURL('image/png'),
-  };
-};
-
 const makeSignatureCanvasTransparent = (sourceCanvas: HTMLCanvasElement) => {
   const sourceContext = sourceCanvas.getContext('2d');
   if (!sourceContext) {
@@ -671,28 +536,92 @@ const makeSignatureCanvasTransparent = (sourceCanvas: HTMLCanvasElement) => {
 
   const imageData = sourceContext.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
   const { data } = imageData;
-  let minX = sourceCanvas.width;
-  let minY = sourceCanvas.height;
-  let maxX = 0;
-  let maxY = 0;
-  let hasInk = false;
-
   for (let index = 0; index < data.length; index += 4) {
     const red = data[index];
     const green = data[index + 1];
     const blue = data[index + 2];
     const alpha = data[index + 3];
     const luminance = red * 0.299 + green * 0.587 + blue * 0.114;
-    const hasDarkInk = alpha > 24 && luminance < 150;
+    const hasDarkInk = alpha > 24 && luminance < 125;
 
     if (luminance > 186 || !hasDarkInk) {
       data[index + 3] = 0;
       continue;
     }
 
-    const pixelIndex = index / 4;
-    const x = pixelIndex % sourceCanvas.width;
-    const y = Math.floor(pixelIndex / sourceCanvas.width);
+    const inkAlpha = clampValue(Math.round((150 - luminance) * 2.4), 48, 255);
+    data[index] = 0;
+    data[index + 1] = 0;
+    data[index + 2] = 0;
+    data[index + 3] = Math.min(alpha, inkAlpha);
+  }
+
+  const width = sourceCanvas.width;
+  const height = sourceCanvas.height;
+  const visited = new Uint8Array(width * height);
+  const minimumComponentSize = Math.max(6, Math.round(width * height * 0.0008));
+
+  for (let pixel = 0; pixel < visited.length; pixel += 1) {
+    if (visited[pixel] || data[pixel * 4 + 3] === 0) {
+      continue;
+    }
+
+    const stack = [pixel];
+    const component: number[] = [];
+    let componentMinX = width;
+    let componentMinY = height;
+    let componentMaxX = 0;
+    let componentMaxY = 0;
+    visited[pixel] = 1;
+
+    while (stack.length > 0) {
+      const currentPixel = stack.pop() as number;
+      const currentX = currentPixel % width;
+      const currentY = Math.floor(currentPixel / width);
+      component.push(currentPixel);
+      componentMinX = Math.min(componentMinX, currentX);
+      componentMinY = Math.min(componentMinY, currentY);
+      componentMaxX = Math.max(componentMaxX, currentX);
+      componentMaxY = Math.max(componentMaxY, currentY);
+
+      for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
+        for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
+          if (offsetX === 0 && offsetY === 0) continue;
+          const nextX = currentX + offsetX;
+          const nextY = currentY + offsetY;
+          if (nextX < 0 || nextY < 0 || nextX >= width || nextY >= height) continue;
+          const nextPixel = nextY * width + nextX;
+          if (visited[nextPixel] || data[nextPixel * 4 + 3] === 0) continue;
+          visited[nextPixel] = 1;
+          stack.push(nextPixel);
+        }
+      }
+    }
+
+    const componentWidth = componentMaxX - componentMinX + 1;
+    const componentHeight = componentMaxY - componentMinY + 1;
+    const touchesCropEdge =
+      componentMinX === 0 || componentMinY === 0 || componentMaxX === width - 1 || componentMaxY === height - 1;
+    const isLongThinArtifact = componentWidth > width * 0.72 && componentHeight < height * 0.15;
+    if (component.length >= minimumComponentSize && !touchesCropEdge && !isLongThinArtifact) {
+      continue;
+    }
+
+    component.forEach((componentPixel) => {
+      data[componentPixel * 4 + 3] = 0;
+    });
+  }
+
+  let minX = width;
+  let minY = height;
+  let maxX = 0;
+  let maxY = 0;
+  let hasInk = false;
+
+  for (let pixel = 0; pixel < width * height; pixel += 1) {
+    if (data[pixel * 4 + 3] === 0) continue;
+    const x = pixel % width;
+    const y = Math.floor(pixel / width);
     minX = Math.min(minX, x);
     minY = Math.min(minY, y);
     maxX = Math.max(maxX, x);
@@ -724,27 +653,17 @@ const makeSignatureCanvasTransparent = (sourceCanvas: HTMLCanvasElement) => {
   return trimmedCanvas;
 };
 
-const extractDomesticLicenseFrontAssets = async (
+export const extractDomesticLicenseFrontAssets = async (
   frontPhoto?: string,
-  templatePhoto = DOMESTIC_LICENSE_MEDIA_TEMPLATE_IMAGE,
 ): Promise<DomesticLicenseExtractedAssets> => {
-  const sourcePhoto = frontPhoto || templatePhoto;
-
-  if (!sourcePhoto) {
+  if (!frontPhoto) {
     return {};
   }
 
   try {
-    const image = await loadImageElement(sourcePhoto);
-    const templateImage = templatePhoto ? await loadImageElement(templatePhoto).catch(() => null) : null;
-
-    if (templateImage) {
-      return extractDomesticLicenseAssetsByTemplate(image, templateImage);
-    }
-
-    const portraitCropRect = await detectPortraitCropRect(image);
+    const image = await loadImageElement(frontPhoto);
     const signatureCropRect = detectSignatureCropRect(image) || FRONT_LICENSE_SIGNATURE_CROP;
-    const portraitCanvas = cropImageToCanvas(image, portraitCropRect);
+    const portraitCanvas = cropImageToCanvas(image, FRONT_LICENSE_PORTRAIT_CROP);
     const signatureCanvas = makeSignatureCanvasTransparent(cropImageToCanvas(image, signatureCropRect));
 
     return {
@@ -779,7 +698,7 @@ const ensureExtractedAssetStyles = (documentTree: Document) => {
     }
 
     .domestic-license-extracted-slot--portrait {
-      min-height: 72px;
+      min-height: 170px;
     }
 
     .domestic-license-extracted-slot--signature {
@@ -794,8 +713,8 @@ const ensureExtractedAssetStyles = (documentTree: Document) => {
 
     .domestic-license-extracted-slot--portrait img {
       width: 100%;
-      height: 72px;
-      object-fit: cover;
+      height: 164px;
+      object-fit: contain;
     }
 
     .domestic-license-extracted-slot--signature img {
@@ -804,74 +723,9 @@ const ensureExtractedAssetStyles = (documentTree: Document) => {
       object-fit: contain;
     }
 
-    .domestic-license-media-merged-cell {
+    .domestic-license-portrait-cell {
       padding: 0 !important;
-      vertical-align: top !important;
-    }
-
-    .domestic-license-media-merged-cell__layout {
-      min-height: 100%;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      gap: 10px;
-      box-sizing: border-box;
-      padding: 6px;
-    }
-
-    .domestic-license-media-merged-cell__portrait,
-    .domestic-license-media-merged-cell__signature {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-      box-sizing: border-box;
-    }
-
-    .domestic-license-media-merged-cell__portrait {
-      flex: 1 1 auto;
-      min-height: 220px;
-    }
-
-    .domestic-license-media-merged-cell__signature {
-      flex: 0 0 54px;
-    }
-
-    .domestic-license-media-merged-cell__portrait .domestic-license-extracted-slot {
-      height: 100%;
-      min-height: 220px;
-    }
-
-    .domestic-license-media-merged-cell__portrait .domestic-license-extracted-slot--portrait img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-    }
-
-    .domestic-license-media-merged-cell__signature .domestic-license-extracted-slot--signature img {
-      height: 48px;
-      object-fit: contain;
-    }
-
-    .domestic-license-media-merged-cell__combined {
-      width: 100%;
-      height: 100%;
-      min-height: 280px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-sizing: border-box;
-      padding: 4px;
-    }
-
-    .domestic-license-media-merged-cell__combined img {
-      display: block;
-      width: 100%;
-      height: 100%;
-      max-width: 100%;
-      max-height: 100%;
-      object-fit: contain;
+      vertical-align: middle !important;
     }
   `;
   documentTree.head.appendChild(styleElement);
@@ -928,21 +782,9 @@ const replacePlaceholderCellWithExtractedImage = (
   return placeholderCell;
 };
 
-const createMediaMergeSection = (documentTree: Document, sourceCell: HTMLTableCellElement, className: string) => {
-  const section = documentTree.createElement('div');
-  section.className = className;
-
-  while (sourceCell.firstChild) {
-    section.appendChild(sourceCell.firstChild);
-  }
-
-  return section;
-};
-
-const mergeDomesticLicenseMediaColumnCells = (
+const mergeDomesticLicensePortraitContinuationCells = (
   portraitCell: HTMLTableCellElement | null,
   signatureCell: HTMLTableCellElement | null,
-  combinedImageSrc?: string,
 ) => {
   if (!portraitCell || !signatureCell || portraitCell === signatureCell) {
     return;
@@ -972,53 +814,16 @@ const mergeDomesticLicenseMediaColumnCells = (
     return;
   }
 
-  const documentTree = portraitCell.ownerDocument;
   const targetColumnIndex = portraitCell.cellIndex;
-  portraitCell.classList.add('domestic-license-media-merged-cell');
-  portraitCell.rowSpan = endRowIndex - startRowIndex + 1;
+  portraitCell.classList.add('domestic-license-portrait-cell');
+  portraitCell.rowSpan = endRowIndex - startRowIndex;
   portraitCell.style.padding = '0';
-  portraitCell.style.verticalAlign = 'top';
+  portraitCell.style.verticalAlign = 'middle';
 
-  if (combinedImageSrc) {
-    portraitCell.innerHTML = '';
-    const combinedSlot = documentTree.createElement('div');
-    combinedSlot.className = 'domestic-license-media-merged-cell__combined';
-    const image = documentTree.createElement('img');
-    image.src = combinedImageSrc;
-    image.alt = '电子图片';
-    combinedSlot.appendChild(image);
-    portraitCell.appendChild(combinedSlot);
-
-    for (let rowIndex = startRowIndex + 1; rowIndex <= endRowIndex; rowIndex += 1) {
-      const cellToRemove = rows[rowIndex]?.cells[targetColumnIndex];
-
-      if (cellToRemove && cellToRemove !== portraitCell) {
-        cellToRemove.remove();
-      }
-    }
-
-    return;
-  }
-
-  const portraitSection = createMediaMergeSection(
-    documentTree,
-    portraitCell,
-    'domestic-license-media-merged-cell__portrait',
-  );
-  const signatureSection = createMediaMergeSection(
-    documentTree,
-    signatureCell,
-    'domestic-license-media-merged-cell__signature',
-  );
-  const layout = documentTree.createElement('div');
-  layout.className = 'domestic-license-media-merged-cell__layout';
-  layout.appendChild(portraitSection);
-  layout.appendChild(signatureSection);
-
-  portraitCell.innerHTML = '';
-  portraitCell.appendChild(layout);
-
-  for (let rowIndex = startRowIndex + 1; rowIndex <= endRowIndex; rowIndex += 1) {
+  // DOCX represents the photo area with w:vMerge. The HTML preview renderer
+  // emits those continuations as separate cells, so consolidate only the rows
+  // above the signature row and leave the signature cell/border untouched.
+  for (let rowIndex = startRowIndex + 1; rowIndex < endRowIndex; rowIndex += 1) {
     const cellToRemove = rows[rowIndex]?.cells[targetColumnIndex];
 
     if (cellToRemove && cellToRemove !== portraitCell) {
@@ -1056,6 +861,9 @@ const applyDomesticLicenseOcrTranslationToPreview = (
 
   const walker = documentTree.createTreeWalker(page, NodeFilter.SHOW_TEXT);
   const replacements: Array<[RegExp, string]> = [
+    [/马萨诸塞州切尔西市瓦尔街255号4611室，邮编02150-1585/g, translation.address || '马萨诸塞州切尔西市瓦尔街255号4611室，邮编02150-1585'],
+    [/姓\s*[：:]\s*李/g, `姓：${translation.surname}`],
+    [/名\s*[：:]\s*咏锦/g, `名：${translation.givenName}`],
     [/马萨诸塞州/g, translation.state],
     [/美国/g, translation.country],
     [/签发日期\s*2024年8月21日/g, `签发日期\n${translation.issueDate}`],
@@ -1078,16 +886,11 @@ const applyDomesticLicenseOcrTranslationToPreview = (
     currentNode = walker.nextNode();
   }
 
-  const hasCombinedMedia = Boolean(extractedAssets.combinedPhoto);
   const hasExtractedMedia = Boolean(extractedAssets.portraitPhoto || extractedAssets.signaturePhoto);
   let portraitCell: HTMLTableCellElement | null = null;
   let signatureCell: HTMLTableCellElement | null = null;
 
-  if (hasCombinedMedia) {
-    ensureExtractedAssetStyles(documentTree);
-    portraitCell = findPlaceholderCell(page, /[（(]?\s*照片\s*[）)]?/);
-    signatureCell = findPlaceholderCell(page, /[（(]?\s*签名\s*[）)]?/);
-  } else if (hasExtractedMedia) {
+  if (hasExtractedMedia) {
     ensureExtractedAssetStyles(documentTree);
     portraitCell = replacePlaceholderCellWithExtractedImage(
       page,
@@ -1108,7 +911,9 @@ const applyDomesticLicenseOcrTranslationToPreview = (
 
   if (portraitCell && signatureCell) {
     ensureExtractedAssetStyles(documentTree);
-    mergeDomesticLicenseMediaColumnCells(portraitCell, signatureCell, extractedAssets.combinedPhoto);
+    // Keep the portrait and signature as separate template assets. The full license image
+    // is already shown at the top of the document and must not replace this media column.
+    mergeDomesticLicensePortraitContinuationCells(portraitCell, signatureCell);
   }
 
   ensureDomesticLicensePreviewFontWeightStyle(documentTree);
@@ -1210,6 +1015,19 @@ const getOrderChineseName = (order: Order | undefined) =>
       ?.replace(/\s+/g, ' ') || '',
   );
 
+const getOrderLicenseIssuingLocation = (order: Order | undefined) =>
+  sanitizeFilenamePart(
+    [order?.domesticLicenseInfo?.foreignCountry, order?.domesticLicenseInfo?.foreignCity]
+      .map((value) => value?.trim() || '')
+      .filter(Boolean)
+      .join(''),
+  );
+
+const getOrderPdfBaseName = (order: Order | undefined, previewText = '') => {
+  const orderFieldName = `${getOrderChineseName(order)}${getOrderLicenseIssuingLocation(order)}`;
+  return orderFieldName || getExportBaseName(previewText);
+};
+
 const markOrderMadeAfterPdfExport = (order: Order | undefined) => {
   if (!order) {
     return;
@@ -1278,10 +1096,26 @@ const DomesticLicenseTranslationEditor: React.FC = () => {
         (await resolveLocalImageSource(order?.domesticLicenseInfo?.frontPhoto)) ||
         DOMESTIC_LICENSE_MEDIA_TEMPLATE_IMAGE ||
         getDocxPreviewFrontImageSource(nextHtml);
-      const [translation, extractedAssets] = await Promise.all([
+      const hasCurrentStoredAssets =
+        order?.domesticLicenseInfo?.translationAssetVersion === DOMESTIC_LICENSE_ASSET_EXTRACTION_VERSION;
+      const [translation, storedPortraitPhoto, storedSignaturePhoto] = await Promise.all([
         recognizeDomesticLicenseTranslation(order),
-        extractDomesticLicenseFrontAssets(frontImageSource, DOMESTIC_LICENSE_MEDIA_TEMPLATE_IMAGE),
+        hasCurrentStoredAssets
+          ? resolveLocalImageSource(order?.domesticLicenseInfo?.portraitPhoto)
+          : Promise.resolve(''),
+        hasCurrentStoredAssets
+          ? resolveLocalImageSource(order?.domesticLicenseInfo?.signaturePhoto)
+          : Promise.resolve(''),
       ]);
+      const detectedAssets =
+        !storedPortraitPhoto || !storedSignaturePhoto
+          ? await extractDomesticLicenseFrontAssets(frontImageSource)
+          : {};
+      const extractedAssets = {
+        ...detectedAssets,
+        portraitPhoto: storedPortraitPhoto || detectedAssets.portraitPhoto,
+        signaturePhoto: storedSignaturePhoto || detectedAssets.signaturePhoto,
+      };
       const translatedHtml = applyDomesticLicenseOcrTranslationToPreview(nextHtml, order, translation, extractedAssets);
 
       if (cancelledRef?.cancelled) {
@@ -1352,7 +1186,7 @@ const DomesticLicenseTranslationEditor: React.FC = () => {
     const rect = previewPage.getBoundingClientRect();
     const width = Math.max(1, Math.ceil(rect.width || previewPage.scrollWidth || previewPage.offsetWidth || 0));
     const height = Math.max(1, Math.ceil(rect.height || previewPage.scrollHeight || previewPage.offsetHeight || 0));
-    const name = getOrderChineseName(order) || getExportBaseName(previewPage.innerText || previewPage.textContent || '');
+    const name = getOrderPdfBaseName(order, previewPage.innerText || previewPage.textContent || '');
 
     const pageClone = previewPage.cloneNode(true) as HTMLElement;
     pageClone.contentEditable = 'false';
@@ -1474,7 +1308,7 @@ const DomesticLicenseTranslationEditor: React.FC = () => {
 
     try {
       const imageBlob = await renderHtmlToImageBlob(previewPage.html, previewPage.width, previewPage.height);
-      const fileName = `${previewPage.name}中文翻译件.pdf`;
+      const fileName = `${previewPage.name}.pdf`;
 
       await exportNotaryImageBlobsToPdf([{ blob: imageBlob }], fileName);
       markOrderMadeAfterPdfExport(order);
@@ -1483,7 +1317,7 @@ const DomesticLicenseTranslationEditor: React.FC = () => {
       console.error('Failed to export domestic license PDF', error);
 
       try {
-        openPrintablePdfFallback(previewPage.html, `${previewPage.name}正文翻译件`);
+        openPrintablePdfFallback(previewPage.html, previewPage.name);
         markOrderMadeAfterPdfExport(order);
         navigateBackToSourceList();
       } catch (fallbackError) {

@@ -10,6 +10,7 @@ const resources = {
     'menu.orderList': '翻译订单管理',
     'menu.domesticLicenseOrderManagement': '换国内驾照翻译件订单管理',
     'menu.notaryOrderManagement': '公证订单管理',
+    'menu.hongKongNotaryOrderManagement': '香港公证件订单管理',
     'menu.notaryOrderList': '公证订单',
     'menu.productManagement': '产品中心',
     'menu.productList': '在售产品',
@@ -142,6 +143,7 @@ const resources = {
     'product.category.translation': '翻译认证',
     'product.category.domestic_license': '换国内驾照翻译件',
     'product.category.notary': '公证',
+    'product.category.local_language_notary': '当地语言公证件',
     'product.category.idp': 'IDP',
 
     'product.processType.normal': '普通办理',
@@ -173,6 +175,7 @@ const resources = {
     'menu.orderList': 'Translation Orders',
     'menu.domesticLicenseOrderManagement': 'Domestic License Translation Orders',
     'menu.notaryOrderManagement': 'Notary Order Management',
+    'menu.hongKongNotaryOrderManagement': 'Hong Kong Notarized Document Orders',
     'menu.notaryOrderList': 'Notary Orders',
     'menu.productManagement': 'Product Center',
     'menu.productList': 'On-sale Products',
@@ -302,6 +305,7 @@ const resources = {
     'product.category.translation': 'Translation & Certification',
     'product.category.domestic_license': 'Domestic License Exchange Translation',
     'product.category.notary': 'Notarization',
+    'product.category.local_language_notary': 'Local-language Notarized Documents',
     'product.category.idp': 'IDP',
 
     'product.processType.normal': 'Standard',

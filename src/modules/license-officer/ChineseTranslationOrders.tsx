@@ -7,6 +7,7 @@ import type { Order } from '../../shared/types';
 import { getStoredAuthSession } from '../../shared/utils/auth';
 import { formatBeijingTimestamp } from '../../shared/utils/dateTime';
 import { exportTranslationOrders } from '../../shared/utils/exportTranslationOrders';
+import { resolveLocalImageSource, saveDomesticLicenseImages } from '../../shared/utils/localImageStore';
 import { getProcessTypeTone, getProductProcessTypeLabel } from '../../shared/utils/productProcessType';
 import { useTranslation } from '../../shared/i18n/config';
 import {
@@ -19,6 +20,11 @@ import {
 } from '../order-management/orderListShared';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
+  DOMESTIC_LICENSE_ASSET_EXTRACTION_VERSION,
+  extractDomesticLicenseFrontAssets,
+  type DomesticLicenseExtractedAssets,
+} from './DomesticLicenseTranslationEditor';
+import {
   CHINESE_TRANSLATION_PRODUCT_TITLE,
   PRODUCTION_OPERATOR,
   isProductionVisibleChineseTranslationOrder,
@@ -29,9 +35,16 @@ import './ChineseTranslationOrders.css';
 
 type ProductionOrderStatus = 'untranslated' | 'unmade' | 'unshipped' | 'shipped' | 'cancelled';
 type OcrCompareStatus = 'loading' | 'ready' | 'error';
-type OcrCompareRow = { label: string; original: string; translation: string };
+type OcrCompareRow = {
+  fieldKey: string;
+  label: string;
+  original: string;
+  side: 'back' | 'front' | 'unknown';
+  translation: string;
+};
 type OcrCompareState = {
   errorMessage?: string;
+  extractedAssets?: DomesticLicenseExtractedAssets;
   order: Order;
   rows: OcrCompareRow[];
   status: OcrCompareStatus;
@@ -58,35 +71,69 @@ const WAYBILL_PRINT_OPTIONS = [
   { label: '打印极兔', company: '极兔快递' },
 ];
 
-const IMAGE_TEXT_REFERENCE_ROWS: OcrCompareRow[] = [
-  { label: 'DL', original: 'DL', translation: '驾驶证编号' },
-  { label: 'EXP', original: 'EXP', translation: '有效期至' },
-  { label: 'LN', original: 'LN', translation: '姓' },
-  { label: 'FN', original: 'FN', translation: '名' },
-  { label: 'DOB', original: 'DOB', translation: '出生日期' },
-  { label: 'RSTR', original: 'RSTR', translation: '限制条件' },
-  { label: 'SEX', original: 'SEX', translation: '性别' },
-  { label: 'HAIR', original: 'HAIR', translation: '头发' },
-  { label: 'EYES', original: 'EYES', translation: '眼睛' },
-  { label: 'HGT', original: 'HGT', translation: '身高' },
-  { label: 'WGT', original: 'WGT', translation: '体重' },
-  { label: 'ISS', original: 'ISS', translation: '签发日期' },
-  { label: 'DD', original: 'DD', translation: '文件识别号' },
-  { label: 'CLASS', original: 'CLASS', translation: '准驾车型' },
-  { label: 'ENDORSEMENTS', original: 'ENDORSEMENTS', translation: '额外准驾类别' },
-  { label: 'RESTRICTIONS', original: 'RESTRICTIONS', translation: '限制条件' },
-  {
-    label: 'FEDERAL NOTICE',
-    original: 'FEDERAL LIMITS APPLY',
-    translation: '本驾驶证作为机动车驾驶验证发放。不得用作应聘、选民登记或公益活动。',
-  },
-  { label: 'LIMITED-TERM', original: 'LIMITED-TERM', translation: '非永久公民' },
-  { label: 'AGE', original: 'AGE xx, IN xx', translation: '于XX年年满XX周岁' },
-  { label: 'FEDERAL LIMITS APPLY', original: 'FEDERAL LIMITS APPLY', translation: '不作联邦身份证使用' },
-];
-
 const requestDomesticLicenseOcrRows = async (order: Order) => {
-  return IMAGE_TEXT_REFERENCE_ROWS;
+  const info = order.domesticLicenseInfo;
+  const [frontPhoto, backPhoto] = await Promise.all([
+    resolveLocalImageSource(info?.frontPhoto),
+    resolveLocalImageSource(info?.backPhoto),
+  ]);
+
+  if (!frontPhoto) {
+    throw new Error('该订单未上传驾照正面照片，无法提取头像和签名');
+  }
+
+  // Run the local crop while the text OCR request is in flight. These assets are
+  // images only and are intentionally kept out of the translatable row list.
+  const extractedAssetsPromise = extractDomesticLicenseFrontAssets(frontPhoto);
+
+  const response = await fetch('/api/ocr/domestic-license', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      backPhoto,
+      frontPhoto,
+      orderId: order.orderId,
+    }),
+  });
+  const result = (await response.json().catch(() => ({}))) as {
+    error?: string;
+    rows?: Array<{
+      label?: unknown;
+      fieldKey?: unknown;
+      originalText?: unknown;
+      side?: unknown;
+      translatedText?: unknown;
+    }>;
+  };
+
+  if (!response.ok) {
+    throw new Error(result.error || '图片文案识别失败，请稍后重试');
+  }
+
+  const rows = (Array.isArray(result.rows) ? result.rows : [])
+    .map((row): OcrCompareRow => {
+      const side = row.side === 'front' || row.side === 'back' ? row.side : 'unknown';
+
+      return {
+        fieldKey: typeof row.fieldKey === 'string' ? row.fieldKey.trim() : '',
+        label: typeof row.label === 'string' ? row.label.trim() : '',
+        original: typeof row.originalText === 'string' ? row.originalText.trim() : '',
+        side,
+        translation: typeof row.translatedText === 'string' ? row.translatedText.trim() : '',
+      };
+    })
+    .filter((row) => row.original || row.translation);
+
+  if (rows.length === 0) {
+    throw new Error('未从驾照正反面照片中识别到可翻译文案，请检查图片清晰度后重试');
+  }
+
+  return {
+    extractedAssets: await extractedAssetsPromise,
+    rows,
+  };
 };
 
 const hasProductionAction = (order: Order, action: string) => order.logs.some((log) => log.action === action);
@@ -417,10 +464,27 @@ const ChineseTranslationOrders: React.FC = () => {
     return { nextLogs, timestamp };
   };
 
-  const confirmTranslated = (order: Order) => {
+  const confirmTranslated = async (order: Order, extractedAssets?: DomesticLicenseExtractedAssets) => {
     if (hasProductionAction(order, TRANSLATED_ACTION)) {
       showToast(`订单 ${order.orderId} 已记录翻译`);
       return;
+    }
+
+    const domesticInfo = order.domesticLicenseInfo;
+    if (domesticInfo && (extractedAssets?.portraitPhoto || extractedAssets?.signaturePhoto)) {
+      const storedDomesticInfo = await saveDomesticLicenseImages(
+        {
+          ...domesticInfo,
+          portraitPhoto: extractedAssets.portraitPhoto || domesticInfo.portraitPhoto,
+          signaturePhoto: extractedAssets.signaturePhoto || domesticInfo.signaturePhoto,
+          translationAssetVersion: DOMESTIC_LICENSE_ASSET_EXTRACTION_VERSION,
+        },
+        `domestic-license-${order.orderId}`,
+      );
+      updateOrder(order.orderId, {
+        domesticLicenseInfo: storedDomesticInfo,
+        updatedAt: formatBeijingTimestamp(),
+      });
     }
 
     appendProductionLog(order, TRANSLATED_ACTION);
@@ -434,8 +498,8 @@ const ChineseTranslationOrders: React.FC = () => {
     setOcrCompare({ order, rows: [], status: 'loading' });
 
     try {
-      const rows = await requestDomesticLicenseOcrRows(order);
-      setOcrCompare({ order, rows, status: 'ready' });
+      const { extractedAssets, rows } = await requestDomesticLicenseOcrRows(order);
+      setOcrCompare({ extractedAssets, order, rows, status: 'ready' });
     } catch (error) {
       setOcrCompare({
         errorMessage: error instanceof Error ? error.message : '图片文案识别失败，请检查识别服务配置',
@@ -448,9 +512,15 @@ const ChineseTranslationOrders: React.FC = () => {
 
   const handleConfirmOcrCompare = () => {
     if (!ocrCompare) return;
+    if (ocrCompare.status !== 'ready' || ocrCompare.rows.length === 0) {
+      showToast('请先完成驾照正反面图片识别');
+      return;
+    }
 
-    confirmTranslated(ocrCompare.order);
-    setOcrCompare(null);
+    void (async () => {
+      await confirmTranslated(ocrCompare.order, ocrCompare.extractedAssets);
+      setOcrCompare(null);
+    })();
   };
 
   const handleOcrTranslationChange = (index: number, value: string) => {
@@ -461,6 +531,19 @@ const ChineseTranslationOrders: React.FC = () => {
         ...current,
         rows: current.rows.map((row, rowIndex) =>
           rowIndex === index ? { ...row, translation: value } : row,
+        ),
+      };
+    });
+  };
+
+  const handleOcrOriginalChange = (index: number, value: string) => {
+    setOcrCompare((current) => {
+      if (!current) return current;
+
+      return {
+        ...current,
+        rows: current.rows.map((row, rowIndex) =>
+          rowIndex === index ? { ...row, original: value } : row,
         ),
       };
     });
@@ -655,7 +738,7 @@ const ChineseTranslationOrders: React.FC = () => {
   const renderOcrCompareModal = () => {
     if (!ocrCompare) return null;
 
-    const { order, rows, status } = ocrCompare;
+    const { extractedAssets, order, rows, status } = ocrCompare;
     const photos = [
       { label: '驾照正面照片', src: order.domesticLicenseInfo?.frontPhoto },
       { label: '驾照反面照片', src: order.domesticLicenseInfo?.backPhoto },
@@ -688,6 +771,30 @@ const ChineseTranslationOrders: React.FC = () => {
                   {photo.src ? <ResolvedImage src={photo.src} alt={photo.label} /> : <span>暂无图片</span>}
                 </div>
               ))}
+              {status === 'ready' && (
+                <div className="license-translation-ocr-extracted-assets" aria-label="已提取模板图片">
+                  <strong>模板图片识别</strong>
+                  <div className="license-translation-ocr-extracted-assets__grid">
+                    <div className="license-translation-ocr-extracted-asset">
+                      <span>头像</span>
+                      {extractedAssets?.portraitPhoto ? (
+                        <img src={extractedAssets.portraitPhoto} alt="已提取头像" />
+                      ) : (
+                        <em>未识别</em>
+                      )}
+                    </div>
+                    <div className="license-translation-ocr-extracted-asset">
+                      <span>签名</span>
+                      {extractedAssets?.signaturePhoto ? (
+                        <img src={extractedAssets.signaturePhoto} alt="已提取签名" />
+                      ) : (
+                        <em>未识别</em>
+                      )}
+                    </div>
+                  </div>
+                  <small>头像和签名仅用于导出模板，不参与文字翻译</small>
+                </div>
+              )}
             </section>
 
             <section className="license-translation-ocr-compare" aria-label="图片原文与翻译文案对照">
@@ -703,9 +810,19 @@ const ChineseTranslationOrders: React.FC = () => {
                       <div className="license-translation-ocr-table__head">识别原文</div>
                       <div className="license-translation-ocr-table__head">翻译文案</div>
                       {rows.map((row, index) => (
-                        <React.Fragment key={`${row.label}-${row.original}`}>
+                        <React.Fragment key={`${row.side}-${row.fieldKey}-${index}`}>
                           <div>
-                            <span>{row.original || '--'}</span>
+                            <strong className="license-translation-ocr-table__label">
+                              {row.side === 'front' ? '正面' : row.side === 'back' ? '反面' : '未标注'}
+                              {row.label ? ` · ${row.label}` : ''}
+                            </strong>
+                            <textarea
+                              className="license-translation-ocr-table__textarea"
+                              value={row.original}
+                              onChange={(event) => handleOcrOriginalChange(index, event.target.value)}
+                              placeholder="请核对识别原文"
+                              rows={Math.max(2, Math.ceil(row.original.length / 18))}
+                            />
                           </div>
                           <div>
                             <textarea
@@ -731,10 +848,19 @@ const ChineseTranslationOrders: React.FC = () => {
             <button type="button" className="license-translation-button" onClick={() => setOcrCompare(null)}>
               取消
             </button>
+            {status === 'error' && (
+              <button
+                type="button"
+                className="license-translation-button"
+                onClick={() => handleOpenOcrCompare(order)}
+              >
+                重新识别
+              </button>
+            )}
             <button
               type="button"
               className="license-translation-button license-translation-button--primary"
-              disabled={status === 'loading'}
+              disabled={status !== 'ready' || rows.length === 0}
               onClick={handleConfirmOcrCompare}
             >
               确认翻译
@@ -768,18 +894,32 @@ const ChineseTranslationOrders: React.FC = () => {
     const order = detailOrder;
     const domesticInfo = order.domesticLicenseInfo;
     const companionOrder = isCompanionLicenseOrder(order);
+    const orderInfo = getOrderInfo(order);
     const productItems = [
       ['订单编号', order.orderId],
       ['产品名称', order.productName],
       ['办理类型', getProductProcessTypeLabel(order.processType || '正常办理', t)],
       ['价格', `¥${order.lockedPrice || 0}`],
     ];
+    const basicInfoItems = companionOrder
+      ? [
+          ['中文姓名', orderInfo.chineseName],
+          ['联系电话', order.customerPhone],
+          ['联系邮箱', order.customerEmail],
+          ['驾照签发地', orderInfo.foreignLocation],
+        ]
+      : [
+          ['中文姓名', orderInfo.chineseName],
+          ['联系邮箱', order.customerEmail],
+          ['换证城市', orderInfo.exchangeLocation],
+          ['驾照签发地', orderInfo.foreignLocation],
+        ];
     const supplementaryItems = companionOrder
       ? [
           ['联系人', order.customerName],
           ['到达城市', order.arrivalCity],
-          ['到达机场', order.arrivalAirport],
-          ['到达日期与时间', order.arrivalDateTime],
+          ['预约地点', order.arrivalAirport],
+          ['预约时间', order.arrivalDateTime],
           ['航班号', order.flightNumber],
         ]
       : [
@@ -830,7 +970,24 @@ const ChineseTranslationOrders: React.FC = () => {
                   <div
                     key={label}
                     className={`license-translation-detail-field ${
-                      label === '驾驶证发放国家及城市' ? 'license-translation-detail-field--wide' : ''
+                      label === '驾照签发地' ? 'license-translation-detail-field--wide' : ''
+                    }`}
+                  >
+                    <span>{label}</span>
+                    <strong>{getDisplayValue(value)}</strong>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="license-translation-detail-section">
+              <h3>基本信息</h3>
+              <div className="license-translation-detail-grid">
+                {basicInfoItems.map(([label, value]) => (
+                  <div
+                    key={label}
+                    className={`license-translation-detail-field ${
+                      label === '驾照签发地' ? 'license-translation-detail-field--wide' : ''
                     }`}
                   >
                     <span>{label}</span>
@@ -1024,7 +1181,7 @@ const ChineseTranslationOrders: React.FC = () => {
         </label>
 
         <label>
-          <span>驾驶证发放国家及城市</span>
+          <span>驾照签发地</span>
           <div className="license-translation-linked-selects">
             <select
               value={filterForeignCountry}
@@ -1161,7 +1318,7 @@ const ChineseTranslationOrders: React.FC = () => {
                                     <span>{`换证城市：${orderInfo.exchangeLocation || '--'}`}</span>
                                   </>
                                 )}
-                                <span>{`驾驶证发放国家及城市：${orderInfo.foreignLocation}`}</span>
+                                <span>{`驾照签发地：${orderInfo.foreignLocation}`}</span>
                               </>
                             );
                           })()}

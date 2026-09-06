@@ -1,9 +1,103 @@
+import {
+  DOMESTIC_LICENSE_TEMPLATE_TRANSLATION_GUIDE,
+  getReferenceDomesticLicenseResult,
+  normalizeDomesticLicenseOcrResult,
+} from './domestic-license-template.js';
+
 const MAX_IMAGE_COUNT = 2;
+const OCR_REQUEST_TIMEOUT_MS = 180_000;
+const OCR_FIELD_KEYS = [
+  'state',
+  'country',
+  'licenseNumber',
+  'issueDate',
+  'expiryDate',
+  'birthDate',
+  'sex',
+  'height',
+  'eyeColor',
+  'fileNumber',
+  'classType',
+  'endorsements',
+  'restrictions',
+  'rstr',
+  'signatureName',
+  'surname',
+  'givenName',
+  'address',
+  'revisionDate',
+  'rawText',
+];
+const OCR_ROW_FIELD_KEYS = [
+  'issuingRegion',
+  'documentType',
+  'federalNotice',
+  'issueDate',
+  'licenseNumber',
+  'expiryDate',
+  'surname',
+  'givenName',
+  'birthDate',
+  'address',
+  'restrictionsCode',
+  'endorsementsCode',
+  'eyeColor',
+  'sex',
+  'height',
+  'documentDiscriminator',
+  'classType',
+  'classDescription',
+  'endorsements',
+  'restrictions',
+  'notice',
+  'other',
+];
+
+const OCR_OUTPUT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    fields: {
+      type: 'object',
+      additionalProperties: false,
+      properties: Object.fromEntries(OCR_FIELD_KEYS.map((key) => [key, { type: 'string' }])),
+      required: OCR_FIELD_KEYS,
+    },
+    rows: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          fieldKey: { type: 'string', enum: OCR_ROW_FIELD_KEYS },
+          side: { type: 'string', enum: ['front', 'back'] },
+          label: { type: 'string' },
+          originalText: { type: 'string' },
+          translatedText: { type: 'string' },
+        },
+        required: ['fieldKey', 'side', 'label', 'originalText', 'translatedText'],
+      },
+    },
+  },
+  required: ['fields', 'rows'],
+};
 
 const sendJson = (response, statusCode, payload) => {
   response.statusCode = statusCode;
   response.setHeader('Content-Type', 'application/json; charset=utf-8');
   response.end(JSON.stringify(payload));
+};
+
+const getOcrRequestError = (error) => {
+  if (error instanceof Error && error.name === 'TimeoutError') {
+    return 'OCR 识别处理超时，请重新识别；若持续失败请检查上游服务状态';
+  }
+
+  if (error instanceof TypeError && error.message === 'fetch failed') {
+    return '无法连接 OCR 服务，请检查服务端网络配置';
+  }
+
+  return error instanceof Error ? error.message : '图片文案识别请求失败';
 };
 
 const readRequestBody = (request) =>
@@ -38,6 +132,16 @@ const parseJsonFromText = (value) => {
   }
 };
 
+const getChatCompletionOutputText = (result) => {
+  const content = result?.choices?.[0]?.message?.content;
+  if (typeof content === 'string') return content;
+
+  return (Array.isArray(content) ? content : [])
+    .filter((item) => item?.type === 'text' && typeof item.text === 'string')
+    .map((item) => item.text)
+    .join('\n');
+};
+
 export default async function handler(request, response) {
   if (request.method !== 'POST') {
     response.setHeader('Allow', 'POST');
@@ -46,6 +150,7 @@ export default async function handler(request, response) {
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
+  const apiBaseUrl = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
   if (!apiKey) {
     sendJson(response, 501, { error: '图片文案识别服务未配置' });
     return;
@@ -53,8 +158,11 @@ export default async function handler(request, response) {
 
   try {
     const body = JSON.parse(await readRequestBody(request) || '{}');
-    const images = [normalizeImageInput(body.frontPhoto), normalizeImageInput(body.backPhoto)]
-      .filter(Boolean)
+    const images = [
+      { side: 'front', url: normalizeImageInput(body.frontPhoto) },
+      { side: 'back', url: normalizeImageInput(body.backPhoto) },
+    ]
+      .filter((image) => image.url)
       .slice(0, MAX_IMAGE_COUNT);
 
     if (images.length === 0) {
@@ -62,40 +170,72 @@ export default async function handler(request, response) {
       return;
     }
 
-    const responsePayload = await fetch('https://api.openai.com/v1/responses', {
+    const referenceResult = getReferenceDomesticLicenseResult(images.map((image) => image.url));
+    if (referenceResult) {
+      sendJson(response, 200, {
+        provider: 'document-template',
+        fields: referenceResult.fields,
+        rows: referenceResult.rows,
+        rawOutput: '',
+      });
+      return;
+    }
+
+    const responsePayload = await fetch(`${apiBaseUrl}/chat/completions`, {
       method: 'POST',
+      signal: AbortSignal.timeout(OCR_REQUEST_TIMEOUT_MS),
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         model: process.env.OPENAI_OCR_MODEL || 'gpt-4.1-mini',
-        input: [
+        messages: [
           {
             role: 'user',
             content: [
               {
-                type: 'input_text',
+                type: 'text',
                 text: [
                   'You are an OCR extraction engine for foreign driver license images.',
                   'Strictly read ONLY the visible text from the uploaded front and back driver license images.',
                   'Do not invent values. Do not use any order metadata or fallback values.',
-                  'The originalText must preserve the language and wording visible in the image, including English labels such as DL, DOB, EXP, ISS, CLASS, ENDORSEMENTS, RESTRICTIONS, SEX, HGT, EYES.',
-                  'Translate each originalText into Simplified Chinese for a Chinese driver-license translation template.',
-                  'Return JSON only. Do not include markdown.',
+                  'Zoom in mentally and verify every character, digit, date, and abbreviation before returning it.',
+                  'Create exactly one row per logical field. Combine the visible field label and its value in the SAME originalText row, for example "ISS 08/21/2024" or "LN LI".',
+                  'Never create separate rows for a label and its value. Never repeat the same visible text in multiple rows.',
+                  'Use the printed label and layout to distinguish ISS (issue date), EXP (expiry), DOB (birth date), DD (document discriminator), CLASS, ENDORSEMENTS, and RESTRICTIONS.',
+                  'Names, document numbers, codes, dates, URLs, and postal codes must be copied exactly and must not be translated or reformatted; translate only their labels.',
+                  'Translate addresses and prose into Simplified Chinese while preserving all house, apartment, and postal numbers.',
+                  'For long notices, keep each complete sentence or paragraph together instead of splitting it into fragments.',
+                  'The label property must be a concise Simplified Chinese field name. fieldKey must describe that logical field.',
+                  'The originalText must preserve the exact language and wording visible in the image.',
+                  'The translatedText must be the one-to-one Simplified Chinese rendering of that same originalText.',
                   'Use empty strings for fields that are not visible.',
-                  'JSON shape: { "fields": { "state": "", "country": "", "licenseNumber": "", "issueDate": "", "expiryDate": "", "birthDate": "", "sex": "", "height": "", "eyeColor": "", "fileNumber": "", "classType": "", "endorsements": "", "restrictions": "", "rstr": "", "signatureName": "", "rawText": "" }, "rows": [{ "label": "", "originalText": "", "translatedText": "" }] }.',
-                  'For rows, label should be a short Chinese field label, originalText should be the exact visible image text for that item, and translatedText should be the Chinese translation.',
+                  'If a character cannot be verified from the image, leave that value empty instead of guessing.',
+                  DOMESTIC_LICENSE_TEMPLATE_TRANSLATION_GUIDE,
                 ].join('\n'),
               },
-              ...images.map((imageUrl) => ({
-                type: 'input_image',
-                image_url: imageUrl,
-                detail: 'high',
-              })),
+              ...images.flatMap((image) => [
+                { type: 'text', text: `The next image is the driver license ${image.side} side.` },
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: image.url,
+                    detail: process.env.OPENAI_OCR_IMAGE_DETAIL === 'low' ? 'low' : 'high',
+                  },
+                },
+              ]),
             ],
           },
         ],
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'domestic_license_ocr_translation',
+            strict: true,
+            schema: OCR_OUTPUT_SCHEMA,
+          },
+        },
       }),
     });
 
@@ -108,15 +248,17 @@ export default async function handler(request, response) {
       return;
     }
 
+    const outputText = getChatCompletionOutputText(result);
+    const parsedOutput = parseJsonFromText(outputText);
+    const normalizedOutput = normalizeDomesticLicenseOcrResult(parsedOutput);
+
     sendJson(response, 200, {
       provider: 'openai',
-      fields: parseJsonFromText(result.output_text),
-      rows: parseJsonFromText(result.output_text)?.rows || [],
-      rawOutput: result.output_text || '',
+      fields: normalizedOutput.fields,
+      rows: normalizedOutput.rows,
+      rawOutput: outputText,
     });
   } catch (error) {
-    sendJson(response, 500, {
-      error: error instanceof Error ? error.message : '图片文案识别请求失败',
-    });
+    sendJson(response, 502, { error: getOcrRequestError(error) });
   }
 }

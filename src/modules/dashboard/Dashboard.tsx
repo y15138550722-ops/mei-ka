@@ -11,7 +11,13 @@ const PENDING_SHIPMENT_STATUSES: OrderStatus[] = ['translating', 'pending_review
 const SHIPPED_STATUSES: OrderStatus[] = ['shipped', 'completed'];
 const ABNORMAL_STATUSES: OrderStatus[] = ['rejected', 'cancelled'];
 const CHANNELS: Channel[] = ['ctrip', 'fliggy', 'private', 'offline'];
-const PRODUCT_CATEGORIES: ProductCategory[] = ['translation', 'domestic_license', 'notary', 'idp'];
+const PRODUCT_CATEGORIES: ProductCategory[] = [
+  'translation',
+  'domestic_license',
+  'notary',
+  'local_language_notary',
+  'idp',
+];
 
 const currencyFormatter = new Intl.NumberFormat('zh-CN', {
   style: 'currency',
@@ -54,6 +60,10 @@ const getOrderDetailPath = (order: Order) => {
 
   if (order.productCategory === 'notary') {
     return `/order-management/notary-orders/${order.orderId}/preview?mode=view`;
+  }
+
+  if (order.productCategory === 'local_language_notary') {
+    return `/order-management/hong-kong-notary-orders/${order.orderId}?mode=view`;
   }
 
   return `/orders/${order.orderId}?mode=view`;

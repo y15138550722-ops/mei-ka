@@ -125,9 +125,15 @@ export const saveDomesticLicenseImages = async (info: DomesticLicenseInfo, stora
   const saveImageList = (key: string, sources: string[] | undefined) =>
     Promise.all((sources || []).filter(Boolean).map((source, index) => saveLocalImageSource(`${storageKey}-${key}-${index}`, source)));
 
-  const [frontPhoto, backPhoto, passportPhoto, whiteBackgroundPhoto, frontPhotos, backPhotos, passportPhotos, whiteBackgroundPhotos] = await Promise.all([
+  const [frontPhoto, backPhoto, portraitPhoto, signaturePhoto, passportPhoto, whiteBackgroundPhoto, frontPhotos, backPhotos, passportPhotos, whiteBackgroundPhotos] = await Promise.all([
     saveLocalImageSource(`${storageKey}-front`, info.frontPhoto),
     saveLocalImageSource(`${storageKey}-back`, info.backPhoto),
+    info.portraitPhoto
+      ? saveLocalImageSource(`${storageKey}-portrait`, info.portraitPhoto)
+      : Promise.resolve(undefined),
+    info.signaturePhoto
+      ? saveLocalImageSource(`${storageKey}-signature`, info.signaturePhoto)
+      : Promise.resolve(undefined),
     info.passportPhoto ? saveLocalImageSource(`${storageKey}-passport`, info.passportPhoto) : Promise.resolve(undefined),
     info.whiteBackgroundPhoto
       ? saveLocalImageSource(`${storageKey}-white-background`, info.whiteBackgroundPhoto)
@@ -142,6 +148,8 @@ export const saveDomesticLicenseImages = async (info: DomesticLicenseInfo, stora
     ...info,
     frontPhoto,
     backPhoto,
+    portraitPhoto: portraitPhoto || undefined,
+    signaturePhoto: signaturePhoto || undefined,
     passportPhoto: passportPhoto || undefined,
     whiteBackgroundPhoto: whiteBackgroundPhoto || undefined,
     frontPhotos,
@@ -176,6 +184,8 @@ export const migrateDomesticLicenseOrderImages = async (orders: Order[]) => {
       const changed =
         nextDomesticInfo.frontPhoto !== domesticInfo.frontPhoto ||
         nextDomesticInfo.backPhoto !== domesticInfo.backPhoto ||
+        nextDomesticInfo.portraitPhoto !== domesticInfo.portraitPhoto ||
+        nextDomesticInfo.signaturePhoto !== domesticInfo.signaturePhoto ||
         nextDomesticInfo.passportPhoto !== domesticInfo.passportPhoto ||
         nextDomesticInfo.whiteBackgroundPhoto !== domesticInfo.whiteBackgroundPhoto ||
         JSON.stringify(nextDomesticInfo.frontPhotos) !== JSON.stringify(domesticInfo.frontPhotos) ||

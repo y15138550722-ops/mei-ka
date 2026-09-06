@@ -616,6 +616,7 @@
 
 .order-audit-attachment-groups {
   display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
   padding-top: 10px;
 }
@@ -641,18 +642,26 @@
 
 .order-audit-attachment-group__images {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   margin-top: 8px;
 }
 
 @media (max-width: 900px) {
-  .order-audit-attachment-group__images {
+  .order-audit-attachment-groups {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .order-audit-attachment-group__images {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
 @media (max-width: 560px) {
+  .order-audit-attachment-groups {
+    grid-template-columns: 1fr;
+  }
+
   .order-audit-attachment-group__images {
     grid-template-columns: 1fr;
   }

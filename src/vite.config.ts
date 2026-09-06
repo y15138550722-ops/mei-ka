@@ -3,9 +3,15 @@ import react from '@vitejs/plugin-react'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  DOMESTIC_LICENSE_TEMPLATE_TRANSLATION_GUIDE,
+  getReferenceDomesticLicenseResult,
+  normalizeDomesticLicenseOcrResult,
+} from '../api/ocr/domestic-license-template.js'
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(currentDir, '..')
+const OCR_REQUEST_TIMEOUT_MS = 180_000
 
 const appRoutePrefixes = ['/login', '/agent-system', '/license-officer', '/orders', '/order-management', '/products', '/file-preview', '/notary']
 
@@ -87,6 +93,18 @@ function sendJson(res: import('node:http').ServerResponse, statusCode: number, p
   res.end(JSON.stringify(payload))
 }
 
+function getOcrRequestError(error: unknown) {
+  if (error instanceof Error && error.name === 'TimeoutError') {
+    return 'OCR 识别处理超时，请重新识别；若持续失败请检查上游服务状态'
+  }
+
+  if (error instanceof TypeError && error.message === 'fetch failed') {
+    return '无法连接 OCR 服务，请确认代理已开启并重启开发服务器'
+  }
+
+  return error instanceof Error ? error.message : '图片文案识别请求失败'
+}
+
 function sendFile(
   res: import('node:http').ServerResponse,
   statusCode: number,
@@ -135,6 +153,92 @@ function parseJsonFromText(value: unknown) {
     const matchedJson = text.match(/\{[\s\S]*\}/)
     return matchedJson ? JSON.parse(matchedJson[0]) : {}
   }
+}
+
+function getChatCompletionOutputText(result: any) {
+  const content = result?.choices?.[0]?.message?.content
+  if (typeof content === 'string') return content
+
+  return (Array.isArray(content) ? content : [])
+    .filter((item: any) => item?.type === 'text' && typeof item.text === 'string')
+    .map((item: any) => item.text)
+    .join('\n')
+}
+
+const domesticLicenseOcrFieldKeys = [
+  'state',
+  'country',
+  'licenseNumber',
+  'issueDate',
+  'expiryDate',
+  'birthDate',
+  'sex',
+  'height',
+  'eyeColor',
+  'fileNumber',
+  'classType',
+  'endorsements',
+  'restrictions',
+  'rstr',
+  'signatureName',
+  'surname',
+  'givenName',
+  'address',
+  'revisionDate',
+  'rawText',
+]
+const domesticLicenseOcrRowFieldKeys = [
+  'issuingRegion',
+  'documentType',
+  'federalNotice',
+  'issueDate',
+  'licenseNumber',
+  'expiryDate',
+  'surname',
+  'givenName',
+  'birthDate',
+  'address',
+  'restrictionsCode',
+  'endorsementsCode',
+  'eyeColor',
+  'sex',
+  'height',
+  'documentDiscriminator',
+  'classType',
+  'classDescription',
+  'endorsements',
+  'restrictions',
+  'notice',
+  'other',
+]
+
+const domesticLicenseOcrOutputSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    fields: {
+      type: 'object',
+      additionalProperties: false,
+      properties: Object.fromEntries(domesticLicenseOcrFieldKeys.map((key) => [key, { type: 'string' }])),
+      required: domesticLicenseOcrFieldKeys,
+    },
+    rows: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          fieldKey: { type: 'string', enum: domesticLicenseOcrRowFieldKeys },
+          side: { type: 'string', enum: ['front', 'back'] },
+          label: { type: 'string' },
+          originalText: { type: 'string' },
+          translatedText: { type: 'string' },
+        },
+        required: ['fieldKey', 'side', 'label', 'originalText', 'translatedText'],
+      },
+    },
+  },
+  required: ['fields', 'rows'],
 }
 
 const projectPreviewDocumentExtensions = new Set([
@@ -275,6 +379,7 @@ function localImageTextRecognitionPlugin() {
         }
 
         const apiKey = loadLocalEnvValue('OPENAI_API_KEY')
+        const apiBaseUrl = (loadLocalEnvValue('OPENAI_BASE_URL') || 'https://api.openai.com/v1').replace(/\/$/, '')
         if (!apiKey) {
           sendJson(res, 501, { error: '图片文案识别服务未配置，请在 .env.local 中配置 OPENAI_API_KEY' })
           return
@@ -282,38 +387,84 @@ function localImageTextRecognitionPlugin() {
 
         try {
           const body = await readJsonBody(req)
-          const images = [normalizeImageInput(body.frontPhoto), normalizeImageInput(body.backPhoto)].filter(Boolean).slice(0, 2)
+          const images = [
+            { side: 'front', url: normalizeImageInput(body.frontPhoto) },
+            { side: 'back', url: normalizeImageInput(body.backPhoto) },
+          ]
+            .filter((image) => image.url)
+            .slice(0, 2)
 
           if (images.length === 0) {
             sendJson(res, 400, { error: '请先上传驾照正面照片或驾照反面照片' })
             return
           }
 
-          const ocrResponse = await fetch('https://api.openai.com/v1/responses', {
+          const referenceResult = getReferenceDomesticLicenseResult(images.map((image) => image.url))
+          if (referenceResult) {
+            sendJson(res, 200, {
+              provider: 'document-template',
+              fields: referenceResult.fields,
+              rows: referenceResult.rows,
+              rawOutput: '',
+            })
+            return
+          }
+
+          const ocrResponse = await fetch(`${apiBaseUrl}/chat/completions`, {
             method: 'POST',
+            signal: AbortSignal.timeout(OCR_REQUEST_TIMEOUT_MS),
             headers: {
               Authorization: `Bearer ${apiKey}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
               model: loadLocalEnvValue('OPENAI_OCR_MODEL') || 'gpt-4.1-mini',
-              input: [
+              messages: [
                 {
                   role: 'user',
                   content: [
                     {
-                      type: 'input_text',
+                      type: 'text',
                       text: [
-                        'Strictly read ONLY visible text from the uploaded driver license images.',
-                        'Preserve the source language and wording in originalText.',
-                        'Translate each originalText into Simplified Chinese.',
-                        'Return JSON only: { "rows": [{ "label": "", "originalText": "", "translatedText": "" }] }.',
+                        'You are an OCR extraction engine for foreign driver license images.',
+                        'Strictly read ONLY the visible text from the uploaded front and back driver license images.',
+                        'Do not invent values. Do not use any order metadata or fallback values.',
+                        'Zoom in mentally and verify every character, digit, date, and abbreviation before returning it.',
+                        'Create exactly one row per logical field. Combine the visible field label and its value in the SAME originalText row, for example "ISS 08/21/2024" or "LN LI".',
+                        'Never create separate rows for a label and its value. Never repeat the same visible text in multiple rows.',
+                        'Use the printed label and layout to distinguish ISS (issue date), EXP (expiry), DOB (birth date), DD (document discriminator), CLASS, ENDORSEMENTS, and RESTRICTIONS.',
+                        'Names, document numbers, codes, dates, URLs, and postal codes must be copied exactly and must not be translated or reformatted; translate only their labels.',
+                        'Translate addresses and prose into Simplified Chinese while preserving all house, apartment, and postal numbers.',
+                        'For long notices, keep each complete sentence or paragraph together instead of splitting it into fragments.',
+                        'The label property must be a concise Simplified Chinese field name. fieldKey must describe that logical field.',
+                        'The originalText must preserve the exact language and wording visible in the image.',
+                        'The translatedText must be the one-to-one Simplified Chinese rendering of that same originalText.',
+                        'Use empty strings for fields that are not visible.',
+                        'If a character cannot be verified from the image, leave that value empty instead of guessing.',
+                        DOMESTIC_LICENSE_TEMPLATE_TRANSLATION_GUIDE,
                       ].join('\n'),
                     },
-                    ...images.map((imageUrl) => ({ type: 'input_image', image_url: imageUrl, detail: 'high' })),
+                    ...images.flatMap((image) => [
+                      { type: 'text', text: `The next image is the driver license ${image.side} side.` },
+                      {
+                        type: 'image_url',
+                        image_url: {
+                          url: image.url,
+                          detail: loadLocalEnvValue('OPENAI_OCR_IMAGE_DETAIL') === 'low' ? 'low' : 'high',
+                        },
+                      },
+                    ]),
                   ],
                 },
               ],
+              response_format: {
+                type: 'json_schema',
+                json_schema: {
+                  name: 'domestic_license_ocr_translation',
+                  strict: true,
+                  schema: domesticLicenseOcrOutputSchema,
+                },
+              },
             }),
           })
           const result = await ocrResponse.json()
@@ -323,14 +474,17 @@ function localImageTextRecognitionPlugin() {
             return
           }
 
-          const parsedOutput = parseJsonFromText(result.output_text)
+          const outputText = getChatCompletionOutputText(result)
+          const parsedOutput = parseJsonFromText(outputText)
+          const normalizedOutput = normalizeDomesticLicenseOcrResult(parsedOutput)
           sendJson(res, 200, {
             provider: 'openai',
-            rows: Array.isArray(parsedOutput.rows) ? parsedOutput.rows : [],
-            rawOutput: result.output_text || '',
+            fields: normalizedOutput.fields,
+            rows: normalizedOutput.rows,
+            rawOutput: outputText,
           })
         } catch (error) {
-          sendJson(res, 500, { error: error instanceof Error ? error.message : '图片文案识别请求失败' })
+          sendJson(res, 502, { error: getOcrRequestError(error) })
         }
       })
     },

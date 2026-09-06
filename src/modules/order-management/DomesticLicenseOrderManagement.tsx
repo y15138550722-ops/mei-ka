@@ -1,28 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ORDER_DATA_CHANGED_EVENT, getOrders, getProducts, updateOrder } from '../../services/mockDataService';
+import { ORDER_DATA_CHANGED_EVENT, getOrders, getProducts } from '../../services/mockDataService';
 import ListUnifiedPagination from '../../shared/components/list/ListUnifiedPagination';
 import { useTranslation } from '../../shared/i18n/config';
-import { formatBeijingTimestamp } from '../../shared/utils/dateTime';
 import { getProcessTypeTone, getProductProcessTypeLabel } from '../../shared/utils/productProcessType';
-import type { Channel, Order } from '../../shared/types';
+import type { Channel, Order, Product } from '../../shared/types';
 import { getAgentName, getLicenseName, statusTagClass } from './orderListShared';
 
 const DOMESTIC_LICENSE_PRODUCT_TITLE = '换国内驾照翻译件';
 const DOMESTIC_LICENSE_COMPANION_PRODUCT_TITLE = '陪同换证';
-const LOGISTICS_COMPANY_OPTIONS = ['顺丰速运', '京东物流', '邮政EMS', '圆通速递', '中通快递', '申通快递'];
-
-type LogisticsForm = {
-  logisticsCompany: string;
-  trackingNumber: string;
-};
-
-type DomesticOrderVisibleStatus = 'pending_review' | 'reviewed' | 'shipped' | 'cancelled';
+type DomesticOrderVisibleStatus = 'pending_review' | 'in_production' | 'shipped' | 'cancelled';
 
 const DOMESTIC_ORDER_STATUS_TABS: Array<{ label: string; value: DomesticOrderVisibleStatus | '' }> = [
   { label: '全部订单', value: '' },
   { label: '待审核', value: 'pending_review' },
-  { label: '已审核', value: 'reviewed' },
+  { label: '制作中', value: 'in_production' },
   { label: '已发货', value: 'shipped' },
   { label: '已取消', value: 'cancelled' },
 ];
@@ -60,30 +52,29 @@ const getDomesticOrderStatusValue = (order: Order): DomesticOrderVisibleStatus =
     return 'shipped';
   }
 
-  return 'reviewed';
+  return 'in_production';
 };
 
 const getDomesticOrderStatusLabel = (order: Order) => {
   const visibleStatus = getDomesticOrderStatusValue(order);
   if (visibleStatus === 'cancelled') return '已取消';
   if (visibleStatus === 'pending_review') return '待审核';
-  if (visibleStatus === 'shipped') return '已发货';
-  return '已审核';
+  if (visibleStatus === 'in_production') return '制作中';
+  return '已发货';
 };
 
 const FILTER_CONTROL_STYLE = { width: '100%' };
+
+const getDomesticLicenseProducts = () =>
+  getProducts()
+    .filter((product) => product.category === 'domestic_license' || product.title === DOMESTIC_LICENSE_PRODUCT_TITLE)
+    .sort((a, b) => b.weight - a.weight);
 
 const DomesticLicenseOrderManagement: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
 
-  const domesticLicenseProducts = useMemo(
-    () =>
-      getProducts()
-        .filter((product) => product.category === 'domestic_license' || product.title === DOMESTIC_LICENSE_PRODUCT_TITLE)
-        .sort((a, b) => b.weight - a.weight),
-    [],
-  );
+  const [domesticLicenseProducts, setDomesticLicenseProducts] = useState<Product[]>(getDomesticLicenseProducts);
 
   const productsById = useMemo(
     () => new Map(domesticLicenseProducts.map((product) => [product.productId, product] as const)),
@@ -92,21 +83,21 @@ const DomesticLicenseOrderManagement: React.FC = () => {
 
   const [allOrders, setAllOrders] = useState<Order[]>(() => getOrders().filter(isDomesticLicenseOrder));
   const [filterAgent, setFilterAgent] = useState('');
+  const [filterProduct, setFilterProduct] = useState('');
   const [filterProcessType, setFilterProcessType] = useState('');
   const [filterForeignCountry, setFilterForeignCountry] = useState('');
-  const [filterForeignCity, setFilterForeignCity] = useState('');
   const [filterStatus, setFilterStatus] = useState<DomesticOrderVisibleStatus | ''>('');
   const [filterKeyword, setFilterKeyword] = useState('');
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
-  const [shippingOrder, setShippingOrder] = useState<Order | null>(null);
-  const [shippingForm, setShippingForm] = useState<LogisticsForm>({ logisticsCompany: '', trackingNumber: '' });
-  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
-    const refreshOrders = () => setAllOrders(getOrders().filter(isDomesticLicenseOrder));
+    const refreshOrders = () => {
+      setDomesticLicenseProducts(getDomesticLicenseProducts());
+      setAllOrders(getOrders().filter(isDomesticLicenseOrder));
+    };
     window.addEventListener(ORDER_DATA_CHANGED_EVENT, refreshOrders);
     window.addEventListener('storage', refreshOrders);
 
@@ -118,8 +109,11 @@ const DomesticLicenseOrderManagement: React.FC = () => {
 
   const processTypeOptions = useMemo(() => {
     const processTypeMap = new Map<string, string>();
+    const sourceProducts = filterProduct
+      ? domesticLicenseProducts.filter((product) => product.title === filterProduct)
+      : domesticLicenseProducts;
 
-    domesticLicenseProducts.forEach((product) => {
+    sourceProducts.forEach((product) => {
       product.processTypes.forEach((processType) => {
         if (!processTypeMap.has(processType.name)) {
           processTypeMap.set(processType.name, getProductProcessTypeLabel(processType.name, t));
@@ -127,10 +121,21 @@ const DomesticLicenseOrderManagement: React.FC = () => {
       });
     });
 
+    // Keep existing order values available when a product has no configured
+    // process types yet (for example, migrated orders using 普通办理).
+    allOrders
+      .filter((order) => !filterProduct || productsById.get(order.productId)?.title === filterProduct || order.productName === filterProduct)
+      .forEach((order) => {
+      const value = order.processType?.trim();
+      if (value && !processTypeMap.has(value)) {
+        processTypeMap.set(value, getProductProcessTypeLabel(value, t));
+      }
+      });
+
     return Array.from(processTypeMap, ([value, label]) => ({ value, label })).sort((a, b) =>
       a.label.localeCompare(b.label, 'zh-CN'),
     );
-  }, [domesticLicenseProducts, t]);
+  }, [allOrders, domesticLicenseProducts, filterProduct, productsById, t]);
 
   const domesticOrders = useMemo(() => allOrders.filter((order) => order.domesticLicenseInfo), [allOrders]);
 
@@ -142,21 +147,12 @@ const DomesticLicenseOrderManagement: React.FC = () => {
     [domesticOrders],
   );
 
-  const foreignCityOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          domesticOrders
-            .filter((order) => !filterForeignCountry || order.domesticLicenseInfo?.foreignCountry === filterForeignCountry)
-            .map((order) => order.domesticLicenseInfo?.foreignCity?.trim())
-            .filter(Boolean) as string[],
-        ),
-      ).sort((a, b) => a.localeCompare(b, 'zh-CN')),
-    [domesticOrders, filterForeignCountry],
-  );
+  const getOrderProduct = (order: Order) => productsById.get(order.productId);
+
+  const getOrderProductTitle = (order: Order) => getOrderProduct(order)?.title || order.productName;
 
   const getOrderProcessType = (order: Order) => {
-    const product = productsById.get(order.productId);
+    const product = getOrderProduct(order);
     if (!product) {
       return null;
     }
@@ -170,6 +166,8 @@ const DomesticLicenseOrderManagement: React.FC = () => {
 
     return product.processTypes.find((processType) => processType.name === order.processType) || null;
   };
+
+  const getOrderProcessTypeValue = (order: Order) => getOrderProcessType(order)?.name || order.processType;
 
   const getOrderProcessTypeLabel = (order: Order) => {
     const matchedProcessType = getOrderProcessType(order);
@@ -187,11 +185,21 @@ const DomesticLicenseOrderManagement: React.FC = () => {
 
     return allOrders.filter((order) => {
       const createdDate = order.createdAt.slice(0, 10);
+      const processTypeValue = getOrderProcessTypeValue(order);
+      const processTypeLabel = getOrderProcessTypeLabel(order);
+      const foreignCountry = order.domesticLicenseInfo?.foreignCountry?.trim();
 
       if (agentKeyword && !getDomesticAgentSource(order).toLowerCase().includes(agentKeyword)) return false;
-      if (filterProcessType && order.processType !== filterProcessType) return false;
-      if (filterForeignCountry && order.domesticLicenseInfo?.foreignCountry !== filterForeignCountry) return false;
-      if (filterForeignCity && order.domesticLicenseInfo?.foreignCity !== filterForeignCity) return false;
+      if (filterProduct && getOrderProductTitle(order) !== filterProduct) return false;
+      if (
+        filterProcessType &&
+        processTypeValue !== filterProcessType &&
+        processTypeLabel !== filterProcessType &&
+        processTypeLabel !== getProductProcessTypeLabel(filterProcessType, t)
+      ) {
+        return false;
+      }
+      if (filterForeignCountry && foreignCountry !== filterForeignCountry) return false;
       if (filterStartDate && createdDate < filterStartDate) return false;
       if (filterEndDate && createdDate > filterEndDate) return false;
 
@@ -202,8 +210,9 @@ const DomesticLicenseOrderManagement: React.FC = () => {
           order.customerName,
           order.customerPhone,
           order.customerEmail,
-          order.productName,
-          order.processType,
+          getOrderProductTitle(order),
+          getOrderProcessTypeLabel(order),
+          processTypeValue,
           domesticInfo?.chineseName,
           domesticInfo?.licenseNumber,
           domesticInfo?.foreignCountry,
@@ -227,9 +236,9 @@ const DomesticLicenseOrderManagement: React.FC = () => {
     allOrders,
     filterAgent,
     filterEndDate,
-    filterForeignCity,
     filterForeignCountry,
     filterKeyword,
+    filterProduct,
     filterProcessType,
     filterStartDate,
   ]);
@@ -246,7 +255,7 @@ const DomesticLicenseOrderManagement: React.FC = () => {
     const counts: Record<DomesticOrderVisibleStatus | '', number> = {
       '': ordersMatchingNonStatusFilters.length,
       pending_review: 0,
-      reviewed: 0,
+      in_production: 0,
       shipped: 0,
       cancelled: 0,
     };
@@ -265,9 +274,9 @@ const DomesticLicenseOrderManagement: React.FC = () => {
 
   const handleReset = () => {
     setFilterAgent('');
+    setFilterProduct('');
     setFilterProcessType('');
     setFilterForeignCountry('');
-    setFilterForeignCity('');
     setFilterStatus('');
     setFilterKeyword('');
     setFilterStartDate('');
@@ -275,63 +284,8 @@ const DomesticLicenseOrderManagement: React.FC = () => {
     setCurrentPage(1);
   };
 
-  const showToast = (type: 'success' | 'error', message: string) => {
-    setToast({ type, message });
-    window.setTimeout(() => setToast(null), 3000);
-  };
-
-  const handleOpenShippingModal = (order: Order) => {
-    setShippingOrder(order);
-    setShippingForm({
-      logisticsCompany: order.logisticsCompany?.trim() || '',
-      trackingNumber: order.trackingNumber?.trim() || '',
-    });
-  };
-
-  const handleCloseShippingModal = () => {
-    setShippingOrder(null);
-    setShippingForm({ logisticsCompany: '', trackingNumber: '' });
-  };
-
-  const handleSubmitShipping = () => {
-    if (!shippingOrder) return;
-
-    const logisticsCompany = shippingForm.logisticsCompany.trim();
-    const trackingNumber = shippingForm.trackingNumber.trim();
-    if (!logisticsCompany || !trackingNumber) {
-      showToast('error', '请完整填写物流公司和物流单号');
-      return;
-    }
-
-    const shippedAt = formatBeijingTimestamp();
-    updateOrder(shippingOrder.orderId, {
-      status: 'shipped',
-      logisticsCompany,
-      trackingNumber,
-      shippedAt,
-      updatedAt: shippedAt,
-      logs: [
-        ...shippingOrder.logs,
-        {
-          time: shippedAt,
-          operator: '运营-物流',
-          action: `填写物流并发货：${logisticsCompany} ${trackingNumber}`,
-        },
-      ],
-    });
-
-    setAllOrders(getOrders().filter(isDomesticLicenseOrder));
-    handleCloseShippingModal();
-    showToast('success', '发货成功，物流信息已保存');
-  };
-
   return (
     <div className="app-main animate-fadeIn order-list-page">
-      {toast && (
-        <div className="toast-container">
-          <div className={`toast toast--${toast.type}`}>{toast.message}</div>
-        </div>
-      )}
       <div className="app-topbar">
         <div className="order-list-topbar">
           <div className="app-topbar__breadcrumb">
@@ -353,9 +307,33 @@ const DomesticLicenseOrderManagement: React.FC = () => {
                   className="form-input"
                   style={FILTER_CONTROL_STYLE}
                   value={filterAgent}
-                  onChange={(event) => setFilterAgent(event.target.value)}
+                  onChange={(event) => {
+                    setFilterAgent(event.target.value);
+                    setCurrentPage(1);
+                  }}
                   placeholder="请输入代理商名称"
                 />
+              </div>
+
+              <div className="form-group order-filter-field domestic-license-filter-field domestic-license-filter-field--product">
+                <label className="form-label">选择产品</label>
+                <select
+                  className={`form-select ${!filterProduct ? 'domestic-license-filter-control--placeholder' : ''}`}
+                  style={FILTER_CONTROL_STYLE}
+                  value={filterProduct}
+                  onChange={(event) => {
+                    setFilterProduct(event.target.value);
+                    setFilterProcessType('');
+                    setCurrentPage(1);
+                  }}
+                >
+                  <option value="">全部产品</option>
+                  {domesticLicenseProducts.map((product) => (
+                    <option key={product.productId} value={product.title}>
+                      {product.title}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="form-group order-filter-field domestic-license-filter-field domestic-license-filter-field--process">
@@ -364,12 +342,13 @@ const DomesticLicenseOrderManagement: React.FC = () => {
                   className={`form-select ${!filterProcessType ? 'domestic-license-filter-control--placeholder' : ''}`}
                   style={FILTER_CONTROL_STYLE}
                   value={filterProcessType}
+                  disabled={!filterProduct}
                   onChange={(event) => {
                     setFilterProcessType(event.target.value);
                     setCurrentPage(1);
                   }}
                 >
-                  <option value="">全部办理类型</option>
+                  <option value="">{filterProduct ? '全部办理类型' : '请先选择产品'}</option>
                   {processTypeOptions.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
@@ -378,55 +357,38 @@ const DomesticLicenseOrderManagement: React.FC = () => {
                 </select>
               </div>
 
-              <div className="form-group order-filter-field order-filter-field--span-2 domestic-license-filter-field domestic-license-filter-field--location">
-                <label className="form-label">驾照发放国家及城市</label>
-                <div className="order-filter-linked-selects">
-                  <select
-                    className={`form-select ${!filterForeignCountry ? 'domestic-license-filter-control--placeholder' : ''}`}
-                    style={FILTER_CONTROL_STYLE}
-                    value={filterForeignCountry}
-                    onChange={(event) => {
-                      setFilterForeignCountry(event.target.value);
-                      setFilterForeignCity('');
-                      setCurrentPage(1);
-                    }}
-                  >
-                    <option value="">全部国家</option>
-                    {foreignCountryOptions.map((country) => (
-                      <option key={country} value={country}>
-                        {country}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    className={`form-select ${!filterForeignCity ? 'domestic-license-filter-control--placeholder' : ''}`}
-                    style={FILTER_CONTROL_STYLE}
-                    value={filterForeignCity}
-                    disabled={!filterForeignCountry}
-                    onChange={(event) => {
-                      setFilterForeignCity(event.target.value);
-                      setCurrentPage(1);
-                    }}
-                  >
-                    <option value="">全部城市</option>
-                    {foreignCityOptions.map((city) => (
-                      <option key={city} value={city}>
-                        {city}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div className="form-group order-filter-field domestic-license-filter-field domestic-license-filter-field--location">
+                <label className="form-label">驾照签发地</label>
+                <select
+                  className={`form-select ${!filterForeignCountry ? 'domestic-license-filter-control--placeholder' : ''}`}
+                  style={FILTER_CONTROL_STYLE}
+                  value={filterForeignCountry}
+                  onChange={(event) => {
+                    setFilterForeignCountry(event.target.value);
+                    setCurrentPage(1);
+                  }}
+                >
+                  <option value="">全部国家</option>
+                  {foreignCountryOptions.map((country) => (
+                    <option key={country} value={country}>
+                      {country}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="form-group order-filter-field order-filter-field--span-2 domestic-license-filter-field domestic-license-filter-field--time">
-                <label className="form-label">时间</label>
+                <label className="form-label">下单时间</label>
                 <div className="order-filter-range">
                   <input
                     className={`form-input ${!filterStartDate ? 'domestic-license-filter-control--placeholder' : ''}`}
                     style={FILTER_CONTROL_STYLE}
                     type="date"
                     value={filterStartDate}
-                    onChange={(event) => setFilterStartDate(event.target.value)}
+                    onChange={(event) => {
+                      setFilterStartDate(event.target.value);
+                      setCurrentPage(1);
+                    }}
                   />
                   <span className="order-filter-range__divider">至</span>
                   <input
@@ -434,7 +396,10 @@ const DomesticLicenseOrderManagement: React.FC = () => {
                     style={FILTER_CONTROL_STYLE}
                     type="date"
                     value={filterEndDate}
-                    onChange={(event) => setFilterEndDate(event.target.value)}
+                    onChange={(event) => {
+                      setFilterEndDate(event.target.value);
+                      setCurrentPage(1);
+                    }}
                   />
                 </div>
               </div>
@@ -445,7 +410,10 @@ const DomesticLicenseOrderManagement: React.FC = () => {
                   className="form-input"
                   style={FILTER_CONTROL_STYLE}
                   value={filterKeyword}
-                  onChange={(event) => setFilterKeyword(event.target.value)}
+                  onChange={(event) => {
+                    setFilterKeyword(event.target.value);
+                    setCurrentPage(1);
+                  }}
                   placeholder="订单号、姓名、手机号、邮箱、收货地址、快递单号"
                 />
               </div>
@@ -510,7 +478,7 @@ const DomesticLicenseOrderManagement: React.FC = () => {
                     };
                     const viewPath = `/order-management/domestic-license-orders/${order.orderId}?mode=view`;
                     const auditPath = `/order-management/domestic-license-orders/${order.orderId}?mode=audit`;
-                    const isCompanionOrder = order.productName === DOMESTIC_LICENSE_COMPANION_PRODUCT_TITLE;
+                    const isCompanionOrder = getOrderProductTitle(order) === DOMESTIC_LICENSE_COMPANION_PRODUCT_TITLE;
 
                     return (
                       <tr key={order.orderId} className="order-list-row">
@@ -527,7 +495,7 @@ const DomesticLicenseOrderManagement: React.FC = () => {
                         <td className="order-time-cell">{order.createdAt}</td>
                         <td>
                           <div className="order-cell-stack">
-                            <div className="order-cell-primary">{order.productName}</div>
+                            <div className="order-cell-primary">{getOrderProductTitle(order)}</div>
                             <div className={`order-process-line order-process-line--${getOrderProcessTypeTone(order)}`}>
                               <span className="order-process-line__dot" />
                               <span>{getOrderProcessTypeLabel(order)}</span>
@@ -569,7 +537,7 @@ const DomesticLicenseOrderManagement: React.FC = () => {
                               </>
                             )}
                             <div>
-                              <span className="order-cell-label">驾驶证发放国家及城市：</span>
+                              <span className="order-cell-label">驾照签发地：</span>
                               <span className="order-cell-value">{getDomesticForeignLocation(order) || '--'}</span>
                             </div>
                           </div>
@@ -587,11 +555,11 @@ const DomesticLicenseOrderManagement: React.FC = () => {
                                   <span className="order-cell-value">{order.arrivalCity || '--'}</span>
                                 </div>
                                 <div>
-                                  <span className="order-cell-label">到达机场：</span>
+                                  <span className="order-cell-label">预约地点：</span>
                                   <span className="order-cell-value">{order.arrivalAirport || '--'}</span>
                                 </div>
                                 <div>
-                                  <span className="order-cell-label">到达日期与时间：</span>
+                                  <span className="order-cell-label">预约时间：</span>
                                   <span className="order-cell-value">{order.arrivalDateTime || '--'}</span>
                                 </div>
                                 <div>
@@ -619,7 +587,9 @@ const DomesticLicenseOrderManagement: React.FC = () => {
                         </td>
                         <td>
                           <div className="order-status-cell">
-                            <span className={`${statusTagClass(order.status)} order-list-status-tag`}>
+                            <span
+                              className={`${statusTagClass(getDomesticOrderStatusValue(order))} order-list-status-tag`}
+                            >
                               {getDomesticOrderStatusLabel(order)}
                             </span>
                             {order.logisticsCompany && order.trackingNumber && (
@@ -670,75 +640,6 @@ const DomesticLicenseOrderManagement: React.FC = () => {
           </div>
         </div>
 
-        {shippingOrder && (
-          <div className="modal-overlay" onClick={handleCloseShippingModal}>
-            <div className="modal domestic-license-logistics-modal" onClick={(event) => event.stopPropagation()}>
-              <div className="modal__header">
-                <h3 className="modal__title">物流发货</h3>
-                <button type="button" className="btn btn--ghost btn--sm" onClick={handleCloseShippingModal}>
-                  关闭
-                </button>
-              </div>
-
-              <div className="modal__body domestic-license-logistics-modal__body">
-                <div className="domestic-license-logistics-modal__summary">
-                  <span>订单号：{shippingOrder.orderId}</span>
-                  <span>收件人：{shippingOrder.customerName}</span>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="domestic-license-logistics-company">
-                    物流公司
-                  </label>
-                  <select
-                    id="domestic-license-logistics-company"
-                    className="form-select"
-                    value={shippingForm.logisticsCompany}
-                    onChange={(event) =>
-                      setShippingForm((currentForm) => ({ ...currentForm, logisticsCompany: event.target.value }))
-                    }
-                  >
-                    <option value="">请选择物流公司</option>
-                    {LOGISTICS_COMPANY_OPTIONS.map((company) => (
-                      <option key={company} value={company}>
-                        {company}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="domestic-license-tracking-number">
-                    物流单号
-                  </label>
-                  <input
-                    id="domestic-license-tracking-number"
-                    className="form-input"
-                    value={shippingForm.trackingNumber}
-                    placeholder="请输入物流单号"
-                    onChange={(event) =>
-                      setShippingForm((currentForm) => ({ ...currentForm, trackingNumber: event.target.value }))
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="modal__footer">
-                <button type="button" className="btn btn--secondary" onClick={handleCloseShippingModal}>
-                  取消
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--primary"
-                  disabled={!shippingForm.logisticsCompany.trim() || !shippingForm.trackingNumber.trim()}
-                  onClick={handleSubmitShipping}
-                >
-                  确认发货
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

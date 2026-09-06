@@ -460,28 +460,37 @@ const ProductProcessTypeManagement: React.FC = () => {
             </div>
           </div>
 
-          <div className="table-wrapper process-type-table-wrapper">
-            <table className="data-table process-type-table">
-              <thead>
-                <tr>
-                  <th style={{ width: 120 }}>权重</th>
-                  <th style={{ minWidth: 220 }}>办理类型名称</th>
-                  <th style={{ minWidth: 320 }}>描述</th>
-                  <th style={{ width: 160 }}>推送时效</th>
-                  <th style={{ width: 160 }}>默认价格</th>
-                  <th style={{ width: 140 }}>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedProcessTypes.length === 0 ? (
+          {filteredProcessTypes.length === 0 ? (
+            <div className="process-type-empty">
+              <div className="process-type-empty__icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 4h8l4 4v12H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" />
+                  <path d="M14 4v5h4M8 14h8M12 10v8" />
+                </svg>
+              </div>
+              <h2>{filterKeyword ? '未找到匹配的办理类型' : '暂未配置办理类型'}</h2>
+              <p>{filterKeyword ? '请调整搜索条件后重试。' : '可根据产品实际交付方式，添加不同的办理类型和价格。'}</p>
+              {!filterKeyword && (
+                <button type="button" className="btn btn--primary process-type-empty__action" onClick={handleOpenCreate}>
+                  + 新增办理类型
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="table-wrapper process-type-table-wrapper">
+              <table className="data-table process-type-table">
+                <thead>
                   <tr>
-                    <td colSpan={6} className="empty-state">
-                      <div className="empty-state__icon">暂无</div>
-                      <div className="empty-state__text">{t('common.noData')}</div>
-                    </td>
+                    <th style={{ width: 120 }}>权重</th>
+                    <th style={{ minWidth: 220 }}>办理类型名称</th>
+                    <th style={{ minWidth: 320 }}>描述</th>
+                    <th style={{ width: 160 }}>推送时效</th>
+                    <th style={{ width: 160 }}>默认价格</th>
+                    <th style={{ width: 140 }}>操作</th>
                   </tr>
-                ) : (
-                  paginatedProcessTypes.map((processType) => (
+                </thead>
+                <tbody>
+                  {paginatedProcessTypes.map((processType) => (
                     <tr key={processType.typeId}>
                       <td className="process-type-table__weight">{processType.weight ?? 0}</td>
                       <td>{getProductProcessTypeLabel(processType.name, t)}</td>
@@ -503,24 +512,26 @@ const ProductProcessTypeManagement: React.FC = () => {
                         </div>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
-          <div className="process-type-pagination">
-            <ListUnifiedPagination
-              total={filteredProcessTypes.length}
-              currentPage={currentPage}
-              pageSize={pageSize}
-              onPageChange={setCurrentPage}
-              onPageSizeChange={(size) => {
-                setPageSize(size);
-                setCurrentPage(1);
-              }}
-            />
-          </div>
+          {filteredProcessTypes.length > 0 && (
+            <div className="process-type-pagination">
+              <ListUnifiedPagination
+                total={filteredProcessTypes.length}
+                currentPage={currentPage}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={(size) => {
+                  setPageSize(size);
+                  setCurrentPage(1);
+                }}
+              />
+            </div>
+          )}
         </section>
       </div>
 

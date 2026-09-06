@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node ./dev-server.mjs",
+    "dev": "node --env-file-if-exists=../.env.local --use-env-proxy ./dev-server.mjs",
     "build": "tsc && node ./build-vite-inline.mjs",
     "preview": "vite preview"
   },

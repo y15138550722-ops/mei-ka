@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react';
 import './ChineseTranslationOrders.css';
 
 type UserIdentityFilter = '全部' | '普通会员' | '管理员' | '运营人员';
+type UserStatusFilter = '全部' | '启用' | '停用';
+type UserPermission = '订单管理' | '携程标准翻译件' | '报表' | '用户管理';
 
 interface UserListItem {
   id: string;
@@ -17,6 +19,13 @@ interface UserListItem {
 }
 
 const USER_IDENTITY_OPTIONS: UserIdentityFilter[] = ['全部', '普通会员', '管理员', '运营人员'];
+const USER_STATUS_OPTIONS: UserStatusFilter[] = ['全部', '启用', '停用'];
+const USER_PERMISSION_OPTIONS: Array<{ value: UserPermission; description: string }> = [
+  { value: '订单管理', description: '查看和处理生产端订单' },
+  { value: '携程标准翻译件', description: '处理携程标准翻译件业务' },
+  { value: '报表', description: '查看生产数据报表' },
+  { value: '用户管理', description: '维护用户信息和管理员权限' },
+];
 const USER_LIST_PAGE_SIZE = 10;
 
 export const USER_LIST: UserListItem[] = [
@@ -204,18 +213,25 @@ export const USER_LIST: UserListItem[] = [
 
 const UserListPage: React.FC = () => {
   const [identity, setIdentity] = useState<UserIdentityFilter>('全部');
+  const [status, setStatus] = useState<UserStatusFilter>('全部');
   const [keywordInput, setKeywordInput] = useState('');
   const [keyword, setKeyword] = useState('');
   const [identityInput, setIdentityInput] = useState<UserIdentityFilter>('全部');
+  const [statusInput, setStatusInput] = useState<UserStatusFilter>('全部');
   const [currentPage, setCurrentPage] = useState(1);
   const [users, setUsers] = useState<UserListItem[]>(USER_LIST);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserListItem | null>(null);
+  const [permissionUser, setPermissionUser] = useState<UserListItem | null>(null);
+  const [userPermissions, setUserPermissions] = useState<Record<string, UserPermission[]>>({});
+  const [permissionDraft, setPermissionDraft] = useState<UserPermission[]>([]);
 
   const filteredUsers = useMemo(
     () =>
       users.filter((user) => {
         if (identity !== '全部' && user.identity !== identity) return false;
+        if (status === '启用' && !user.enabled) return false;
+        if (status === '停用' && user.enabled) return false;
 
         const normalizedKeyword = keyword.trim().toLowerCase();
         if (!normalizedKeyword) return true;
@@ -225,7 +241,7 @@ const UserListPage: React.FC = () => {
           .toLowerCase()
           .includes(normalizedKeyword);
       }),
-    [identity, keyword, users],
+    [identity, keyword, status, users],
   );
 
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / USER_LIST_PAGE_SIZE));
@@ -238,11 +254,35 @@ const UserListPage: React.FC = () => {
   const closeModals = () => {
     setIsAddModalOpen(false);
     setEditingUser(null);
+    setPermissionUser(null);
+  };
+
+  const openPermissionModal = (user: UserListItem) => {
+    setPermissionUser(user);
+    setPermissionDraft(userPermissions[user.id] || USER_PERMISSION_OPTIONS.map((option) => option.value));
+  };
+
+  const togglePermission = (permission: UserPermission) => {
+    setPermissionDraft((currentPermissions) => (
+      currentPermissions.includes(permission)
+        ? currentPermissions.filter((item) => item !== permission)
+        : [...currentPermissions, permission]
+    ));
+  };
+
+  const savePermissions = () => {
+    if (!permissionUser) return;
+    setUserPermissions((currentPermissions) => ({
+      ...currentPermissions,
+      [permissionUser.id]: permissionDraft,
+    }));
+    closeModals();
   };
 
   const handleSearch = () => {
     setKeyword(keywordInput);
     setIdentity(identityInput);
+    setStatus(statusInput);
     setCurrentPage(1);
   };
 
@@ -251,6 +291,8 @@ const UserListPage: React.FC = () => {
     setKeyword('');
     setIdentityInput('全部');
     setIdentity('全部');
+    setStatusInput('全部');
+    setStatus('全部');
     setCurrentPage(1);
   };
 
@@ -326,7 +368,7 @@ const UserListPage: React.FC = () => {
             <span>/</span>
             用户列表
           </div>
-          <h1>用户列表</h1>
+          <h1 className="user-list-page-title">用户列表</h1>
         </div>
       </header>
 
@@ -340,12 +382,20 @@ const UserListPage: React.FC = () => {
           />
         </label>
         <label>
-          <span>用户身份</span>
+          <span>权限组</span>
           <select value={identityInput} onChange={(event) => setIdentityInput(event.target.value as UserIdentityFilter)}>
             {USER_IDENTITY_OPTIONS.map((option) => (
               <option key={option} value={option}>
                 {option}
               </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>状态</span>
+          <select value={statusInput} onChange={(event) => setStatusInput(event.target.value as UserStatusFilter)}>
+            {USER_STATUS_OPTIONS.map((option) => (
+              <option key={option} value={option}>{option === '全部' ? '请选择状态' : option}</option>
             ))}
           </select>
         </label>
@@ -374,24 +424,27 @@ const UserListPage: React.FC = () => {
             <thead>
               <tr>
                 <th>ID</th>
+                <th>头像</th>
+                <th>用户名</th>
                 <th>昵称</th>
-                <th>真实姓名</th>
-                <th>用户身份</th>
-                <th>停用/启用</th>
+                <th>权限组</th>
+                <th>状态</th>
                 <th>邮箱</th>
                 <th>手机</th>
-                <th>加入IP</th>
                 <th>加入时间</th>
                 <th>最后登录时间</th>
                 <th>操作</th>
               </tr>
             </thead>
             <tbody>
-              {paginatedUsers.map((user) => (
+              {paginatedUsers.map((user, index) => (
                 <tr key={user.id}>
-                  <td>{user.id}</td>
-                  <td>{user.nickname}</td>
+                  <td>{(currentSafePage - 1) * USER_LIST_PAGE_SIZE + index + 1}</td>
+                  <td>
+                    <span className="user-avatar" aria-hidden="true">{(user.realName || user.nickname).slice(0, 1)}</span>
+                  </td>
                   <td>{user.realName}</td>
+                  <td>{user.nickname}</td>
                   <td>{user.identity}</td>
                   <td>
                     <button
@@ -408,7 +461,6 @@ const UserListPage: React.FC = () => {
                   </td>
                   <td>{user.email}</td>
                   <td>{user.phone}</td>
-                  <td>{user.joinIp}</td>
                   <td className="license-translation-time-cell">{user.joinedAt}</td>
                   <td className="license-translation-time-cell">{user.lastLoginAt}</td>
                   <td>
@@ -424,6 +476,7 @@ const UserListPage: React.FC = () => {
                         <button
                           type="button"
                           className="license-translation-action-button license-translation-action-button--orange"
+                          onClick={() => openPermissionModal(user)}
                         >
                           设置权限
                         </button>
@@ -512,6 +565,53 @@ const UserListPage: React.FC = () => {
               <button type="button" aria-label="关闭" onClick={closeModals}>×</button>
             </header>
             {renderMemberForm('edit', editingUser)}
+          </section>
+        </div>
+      ) : null}
+
+      {permissionUser ? (
+        <div className="license-translation-modal-backdrop" role="presentation" onMouseDown={closeModals}>
+          <section
+            className="user-member-modal user-permission-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="设置权限"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header>
+              <div>
+                <strong>设置权限</strong>
+                <span>{permissionUser.realName}（{permissionUser.nickname}）</span>
+              </div>
+              <button type="button" aria-label="关闭" onClick={closeModals}>×</button>
+            </header>
+            <div className="user-permission-form">
+              <div className="user-permission-list">
+                {USER_PERMISSION_OPTIONS.map((option) => (
+                  <label key={option.value} className="user-permission-option">
+                    <input
+                      type="checkbox"
+                      checked={permissionDraft.includes(option.value)}
+                      onChange={() => togglePermission(option.value)}
+                    />
+                    <span>
+                      <strong>{option.value}</strong>
+                      <small>{option.description}</small>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <footer>
+                <button type="button" className="license-translation-button" onClick={closeModals}>取消</button>
+                <button
+                  type="button"
+                  className="license-translation-button license-translation-button--primary"
+                  onClick={savePermissions}
+                >
+                  保存权限
+                </button>
+              </footer>
+            </div>
           </section>
         </div>
       ) : null}

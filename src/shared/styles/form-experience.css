@@ -400,7 +400,7 @@
   gap: 16px;
 }
 .domestic-license-filter-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   column-gap: 24px;
   row-gap: 18px;
   align-items: end;
@@ -425,16 +425,20 @@
   grid-column: 1;
   grid-row: 1;
 }
+.domestic-license-filter-field--product {
+  grid-column: 2;
+  grid-row: 1;
+}
 .domestic-license-filter-field--time {
-  grid-column: 2 / span 2;
+  grid-column: 4 / span 2;
   grid-row: 1;
 }
 .domestic-license-filter-field--process {
-  grid-column: 4;
+  grid-column: 3;
   grid-row: 1;
 }
 .domestic-license-filter-field--location {
-  grid-column: 1 / span 2;
+  grid-column: 1;
   grid-row: 2;
 }
 .domestic-license-filter-field--status {
@@ -442,7 +446,7 @@
   grid-row: 2;
 }
 .domestic-license-filter-field--keyword {
-  grid-column: 3;
+  grid-column: 2 / span 2;
   grid-row: 2;
 }
 .domestic-license-filter-grid .order-filter-linked-selects {
@@ -465,6 +469,10 @@
   gap: 12px;
   padding-top: 0;
   border-top: none;
+}
+.order-filter-actions.translation-order-filter-actions.domestic-license-filter-actions {
+  grid-column: 4;
+  grid-row: 2;
 }
 .order-list-card {
   overflow: hidden;
@@ -589,6 +597,11 @@
 .order-list-table td {
   padding-top: 18px;
   padding-bottom: 18px;
+}
+.hong-kong-notary-order-page .order-list-table th,
+.hong-kong-notary-order-page .order-list-table td {
+  padding-left: 10px;
+  padding-right: 10px;
 }
 .order-list-row {
   transition: background var(--transition-fast);
@@ -1598,19 +1611,27 @@
     padding-top: 0;
     border-top: none;
   }
+  .order-filter-actions.translation-order-filter-actions.domestic-license-filter-actions {
+    grid-column: auto;
+    grid-row: auto;
+  }
   .domestic-license-filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .domestic-license-filter-field--agent,
+  .domestic-license-filter-field--product,
   .domestic-license-filter-field--process,
   .domestic-license-filter-field--status,
   .domestic-license-filter-field--keyword {
     grid-column: span 1;
     grid-row: auto;
   }
-  .domestic-license-filter-field--time,
-  .domestic-license-filter-field--location {
+  .domestic-license-filter-field--time {
     grid-column: span 2;
+    grid-row: auto;
+  }
+  .domestic-license-filter-field--location {
+    grid-column: span 1;
     grid-row: auto;
   }
   .domestic-license-filter-grid .order-filter-linked-selects {
@@ -1673,10 +1694,15 @@
     padding-top: 0;
     border-top: none;
   }
+  .order-filter-actions.translation-order-filter-actions.domestic-license-filter-actions {
+    grid-column: auto;
+    grid-row: auto;
+  }
   .domestic-license-filter-grid {
     grid-template-columns: 1fr;
   }
   .domestic-license-filter-field--agent,
+  .domestic-license-filter-field--product,
   .domestic-license-filter-field--process,
   .domestic-license-filter-field--status,
   .domestic-license-filter-field--keyword,

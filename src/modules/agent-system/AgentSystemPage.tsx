@@ -40,6 +40,7 @@ type DomesticLicenseFormState = {
   exchangeCity: string;
   foreignCountry: string;
   foreignCity: string;
+  email: string;
   chineseName: string;
   licenseNumber: string;
   expiryDate: string;
@@ -61,12 +62,21 @@ type DomesticLicenseFormState = {
   frontPhoto: string;
   backPhoto: string;
   passportPhoto: string;
+  whiteBackgroundPhoto: string;
   frontPhotoName: string;
   backPhotoName: string;
   passportPhotoName: string;
+  whiteBackgroundPhotoName: string;
 };
 
 const DOMESTIC_LICENSE_PRODUCT_TITLE = '换国内驾照翻译件';
+const DOMESTIC_LICENSE_COMPANION_PRODUCT_TITLE = '陪同换证';
+const COMPANION_APPOINTMENT_LOCATIONS: Record<string, string[]> = {
+  北京市: ['北京首都国际机场（PEK）', '北京大兴国际机场（PKX）', '北京市车辆管理所'],
+  上海市: ['上海浦东国际机场（PVG）', '上海虹桥国际机场（SHA）', '车辆管理所一分所', '车辆管理所二分所'],
+  广州市: ['广州白云国际机场（CAN）', '广州市车辆管理所（岑村总部）', '广州市车辆管理所番禺分所'],
+  乌鲁木齐市: ['乌鲁木齐地窝堡国际机场（URC）', '乌鲁木齐车管所', '水磨沟区车管所'],
+};
 
 const domesticLicenseForeignLocationOptions = [
   { country: '美国', cities: ['加利福尼亚州', '纽约州', '德克萨斯州', '华盛顿州', '佛罗里达州'] },
@@ -83,11 +93,19 @@ const domesticLicenseAttachmentFields = [
   { key: 'passportPhoto', nameKey: 'passportPhotoName', label: '护照', required: false },
 ] as const;
 
+const companionDomesticLicenseAttachmentFields = [
+  domesticLicenseAttachmentFields[0],
+  domesticLicenseAttachmentFields[1],
+  { ...domesticLicenseAttachmentFields[2], required: true },
+  { key: 'whiteBackgroundPhoto', nameKey: 'whiteBackgroundPhotoName', label: '白底证件图片', required: true },
+] as const;
+
 const createDomesticLicenseFormState = (): DomesticLicenseFormState => ({
   exchangeProvince: '',
   exchangeCity: '',
   foreignCountry: '',
   foreignCity: '',
+  email: '',
   chineseName: '',
   licenseNumber: '',
   expiryDate: '',
@@ -109,9 +127,11 @@ const createDomesticLicenseFormState = (): DomesticLicenseFormState => ({
   frontPhoto: '',
   backPhoto: '',
   passportPhoto: '',
+  whiteBackgroundPhoto: '',
   frontPhotoName: '',
   backPhotoName: '',
   passportPhotoName: '',
+  whiteBackgroundPhotoName: '',
 });
 
 const MAX_ORDER_IMAGE_DATA_URL_LENGTH = 360_000;
@@ -471,6 +491,7 @@ const AgentSystemPage: React.FC = () => {
     () => activeProducts.find((product) => product.productId === selectedProductId) || null,
     [activeProducts, selectedProductId],
   );
+  const isCompanionExchangeProduct = selectedProduct?.title === DOMESTIC_LICENSE_COMPANION_PRODUCT_TITLE;
   const languageOptions = useMemo(() => getLanguageOptionsForProduct(selectedProduct?.title), [selectedProduct?.title]);
   const [selectedLanguage, setSelectedLanguage] = useState(() => languageOptions[0] || '');
   const [useCountry, setUseCountry] = useState('');
@@ -487,6 +508,8 @@ const AgentSystemPage: React.FC = () => {
   const [deliveryProvince, setDeliveryProvince] = useState('');
   const [deliveryCity, setDeliveryCity] = useState('');
   const [deliveryDistrict, setDeliveryDistrict] = useState('');
+  const [companionArrivalCity, setCompanionArrivalCity] = useState('');
+  const [companionAppointmentLocation, setCompanionAppointmentLocation] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [initialIssueDate, setInitialIssueDate] = useState('');
   const [validStartDate, setValidStartDate] = useState('');
@@ -514,6 +537,12 @@ const AgentSystemPage: React.FC = () => {
     () => deliveryCityOptions.find((item) => item.city === deliveryCity)?.districts ?? [],
     [deliveryCity, deliveryCityOptions],
   );
+  const companionAppointmentLocationOptions = COMPANION_APPOINTMENT_LOCATIONS[companionArrivalCity] || [];
+  const earliestAppointmentDate = useMemo(() => {
+    const date = new Date();
+    date.setDate(date.getDate() + 5);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  }, []);
   const selectedOrderListProductNames = useMemo(
     () =>
       orderListProducts
@@ -775,8 +804,8 @@ const AgentSystemPage: React.FC = () => {
   };
 
   const handleDomesticLicenseFileChange = async (
-    field: 'frontPhoto' | 'backPhoto' | 'passportPhoto',
-    nameField: 'frontPhotoName' | 'backPhotoName' | 'passportPhotoName',
+    field: 'frontPhoto' | 'backPhoto' | 'passportPhoto' | 'whiteBackgroundPhoto',
+    nameField: 'frontPhotoName' | 'backPhotoName' | 'passportPhotoName' | 'whiteBackgroundPhotoName',
     file: File | null,
   ) => {
     if (!file) {
@@ -826,6 +855,11 @@ const AgentSystemPage: React.FC = () => {
     const nextProduct = activeProducts.find((product) => product.productId === value) || null;
 
     setSelectedProductId(value);
+    if (nextProduct?.title === DOMESTIC_LICENSE_COMPANION_PRODUCT_TITLE) {
+      updateDomesticLicenseForm({ exchangeProvince: '', exchangeCity: '' });
+    } else {
+      updateDomesticLicenseForm({ whiteBackgroundPhoto: '', whiteBackgroundPhotoName: '' });
+    }
     setSelectedLanguage(getLanguageOptionsForProduct(nextProduct?.title)[0] || '');
     setSelectedProcessTypeId(nextProduct?.processTypes[0]?.typeId || '');
   };
@@ -878,6 +912,8 @@ const AgentSystemPage: React.FC = () => {
     setDeliveryProvince('');
     setDeliveryCity('');
     setDeliveryDistrict('');
+    setCompanionArrivalCity('');
+    setCompanionAppointmentLocation('');
     setAddressRecognitionText('');
     setAddressRecognitionError('');
     setUseCountry('');
@@ -909,11 +945,17 @@ const AgentSystemPage: React.FC = () => {
 
     if (isDomesticLicenseEntry) {
       const missingMessage = (() => {
-        if (!domesticLicenseForm.exchangeProvince || !domesticLicenseForm.exchangeCity) return '请选择换证城市';
-        if (!domesticLicenseForm.foreignCountry || !domesticLicenseForm.foreignCity) return '请选择驾驶证发放国家及城市';
+        if (
+          !isCompanionExchangeProduct &&
+          (!domesticLicenseForm.exchangeProvince || !domesticLicenseForm.exchangeCity)
+        ) return '请选择换证城市';
+        if (!domesticLicenseForm.foreignCountry || !domesticLicenseForm.foreignCity) return '请选择驾照签发地';
+        if (!domesticLicenseForm.email.trim()) return '请填写邮箱地址';
         if (!domesticLicenseForm.chineseName.trim()) return '请填写中文姓名';
         if (!domesticLicenseForm.frontPhoto) return '请上传驾照正面照片';
         if (!domesticLicenseForm.backPhoto) return '请上传驾照反面照片';
+        if (isCompanionExchangeProduct && !domesticLicenseForm.passportPhoto) return '请上传护照';
+        if (isCompanionExchangeProduct && !domesticLicenseForm.whiteBackgroundPhoto) return '请上传白底证件图片';
         return '';
       })();
 
@@ -923,15 +965,29 @@ const AgentSystemPage: React.FC = () => {
       }
 
       const deliveryData = deliveryFormRef.current ? new FormData(deliveryFormRef.current) : new FormData();
+      if (isCompanionExchangeProduct) {
+        const appointmentDateTime = readFormValue(deliveryData, 'arrivalDateTime');
+        const companionMissingMessage =
+          !readFormValue(deliveryData, 'customerName') ? '请填写联系人姓名' :
+          !readFormValue(deliveryData, 'customerPhone') ? '请填写联系电话' :
+          !companionArrivalCity ? '请选择到达城市' :
+          !companionAppointmentLocation ? '请选择约定地点' :
+          !appointmentDateTime ? '请选择预约时间' :
+          appointmentDateTime.slice(0, 10) < earliestAppointmentDate ? `最早可预约 ${earliestAppointmentDate}` : '';
+        if (companionMissingMessage) {
+          showToast(companionMissingMessage);
+          return;
+        }
+      }
       const deliveryAddress =
-        joinAddressSegments([
-          deliveryProvince,
-          deliveryCity,
-          deliveryDistrict,
-          readFormValue(deliveryData, 'deliveryAddress'),
-        ]) ||
-        addressRecognitionText.trim() ||
-        '待补充';
+        isCompanionExchangeProduct
+          ? joinAddressSegments([companionArrivalCity, companionAppointmentLocation])
+          : joinAddressSegments([
+              deliveryProvince,
+              deliveryCity,
+              deliveryDistrict,
+              readFormValue(deliveryData, 'deliveryAddress'),
+            ]) || addressRecognitionText.trim() || '待补充';
       const currentTimestamp = formatBeijingTimestamp();
       const customerName = readFormValue(deliveryData, 'customerName') || domesticLicenseForm.chineseName.trim();
       setIsSubmittingOrder(true);
@@ -963,6 +1019,7 @@ const AgentSystemPage: React.FC = () => {
         frontPhoto: domesticLicenseForm.frontPhoto,
         backPhoto: domesticLicenseForm.backPhoto,
         passportPhoto: domesticLicenseForm.passportPhoto || undefined,
+        whiteBackgroundPhoto: isCompanionExchangeProduct ? domesticLicenseForm.whiteBackgroundPhoto || undefined : undefined,
       };
       const storedDomesticLicenseInfo = await saveDomesticLicenseImages(
         domesticLicenseInfo,
@@ -972,7 +1029,7 @@ const AgentSystemPage: React.FC = () => {
         customerName,
         customerPhone: readFormValue(deliveryData, 'customerPhone') || '13800138000',
         customerPassport: licenseNumber,
-        customerEmail: `agent-${Date.now()}@example.com`,
+        customerEmail: domesticLicenseForm.email.trim(),
         productId: product.productId,
         productName: product.title,
         productCategory: product.category,
@@ -984,6 +1041,12 @@ const AgentSystemPage: React.FC = () => {
         lockedPrice: getProcessTypePrice(processType),
         status: 'pending_review',
         deliveryAddress,
+        arrivalCity: isCompanionExchangeProduct ? companionArrivalCity : undefined,
+        arrivalAirport: isCompanionExchangeProduct ? companionAppointmentLocation : undefined,
+        arrivalDateTime: isCompanionExchangeProduct
+          ? readFormValue(deliveryData, 'arrivalDateTime').replace('T', ' ')
+          : undefined,
+        flightNumber: isCompanionExchangeProduct ? readFormValue(deliveryData, 'flightNumber') : undefined,
         logisticsCompany: '',
         trackingNumber: '',
         remark: '用户端提交',
@@ -1284,7 +1347,7 @@ const AgentSystemPage: React.FC = () => {
                       <strong>{getDomesticExchangeCity(order) || '-'}</strong>
                     </div>
                     <div className="agent-modal__detail-item agent-modal__detail-item--wide">
-                      <span>驾驶证发放国家及城市：</span>
+                      <span>驾照签发地：</span>
                       <strong>{getDomesticForeignLocation(order) || '-'}</strong>
                     </div>
                     <div className="agent-modal__detail-item">
@@ -1354,7 +1417,7 @@ const AgentSystemPage: React.FC = () => {
       ? [
           ['中文姓名', domesticInfo.chineseName || order.licenseName || order.customerName],
           ['换证城市', getDomesticExchangeCity(order)],
-          ['驾驶证发放国家及城市', getDomesticForeignLocation(order)],
+          ['驾照签发地', getDomesticForeignLocation(order)],
           ['DL/驾驶证编号', domesticInfo.licenseNumber || order.licenseNo || order.customerPassport],
           ['EXP/有效期至', domesticInfo.expiryDate],
           ['LN/姓', domesticInfo.surname],
@@ -1636,7 +1699,7 @@ const AgentSystemPage: React.FC = () => {
                               <strong>{getDomesticExchangeCity(order) || '-'}</strong>
                             </div>
                             <div>
-                              <span>驾驶证发放国家及城市</span>
+                              <span>驾照签发地</span>
                               <strong>{getDomesticForeignLocation(order) || '-'}</strong>
                             </div>
                           </>
@@ -1833,7 +1896,11 @@ const AgentSystemPage: React.FC = () => {
                 aria-current={activeSectionIndex === index ? 'true' : undefined}
                 onClick={() => handleSideMenuClick(index)}
               >
-                {item}
+                {isDomesticLicenseEntry && index === 1
+                  ? '确认证件信息'
+                  : isCompanionExchangeProduct && index === 2
+                    ? '现场陪同信息'
+                    : item}
               </button>
             ))}
           </aside>
@@ -1863,7 +1930,7 @@ const AgentSystemPage: React.FC = () => {
               </label>
               {isDomesticLicenseEntry ? (
                 <>
-                  <div className="agent-field agent-field--wide">
+                  {!isCompanionExchangeProduct && <div className="agent-field agent-field--wide">
                     <span>换证城市 <em className="agent-required">*</em></span>
                     <div className="agent-region-selects">
                       <select
@@ -1892,9 +1959,9 @@ const AgentSystemPage: React.FC = () => {
                         ))}
                       </select>
                     </div>
-                  </div>
+                  </div>}
                   <div className="agent-field agent-field--wide">
-                    <span>驾驶证发放国家及城市 <em className="agent-required">*</em></span>
+                    <span>驾照签发地 <em className="agent-required">*</em></span>
                     <div className="agent-region-selects">
                       <select
                         value={domesticLicenseForm.foreignCountry}
@@ -1923,6 +1990,15 @@ const AgentSystemPage: React.FC = () => {
                       </select>
                     </div>
                   </div>
+                  <label className="agent-field agent-field--wide">
+                    <span>邮箱地址 <em className="agent-required">*</em></span>
+                    <input
+                      type="email"
+                      value={domesticLicenseForm.email}
+                      placeholder="请输入邮箱地址"
+                      onChange={(event) => updateDomesticLicenseForm({ email: event.target.value })}
+                    />
+                  </label>
                   <label className="agent-field agent-field--wide">
                     <span>中文姓名 <em className="agent-required">*</em></span>
                     <input
@@ -1969,213 +2045,52 @@ const AgentSystemPage: React.FC = () => {
           </section>
 
           <section ref={(node) => assignSectionRef(1, node)} className="agent-panel">
-            <div className="agent-panel__title">确认驾照信息</div>
-            <div className="agent-certificate-layout">
+            <div className="agent-panel__title">
+              {isDomesticLicenseEntry ? '确认证件信息' : '确认驾照信息'}
+            </div>
+            <div className={`agent-certificate-layout ${isDomesticLicenseEntry ? 'agent-certificate-layout--uploads-only' : ''} ${isCompanionExchangeProduct ? 'agent-certificate-layout--companion' : ''}`}>
               {isDomesticLicenseEntry ? (
-                <>
-                  <form className="agent-form-grid agent-form-grid--domestic">
-                    <label className="agent-field">
-                      <span>DL/驾驶证编号</span>
-                      <input
-                        value={domesticLicenseForm.licenseNumber}
-                        placeholder="请输入驾驶证编号"
-                        onChange={(event) => updateDomesticLicenseForm({ licenseNumber: event.target.value })}
-                      />
-                    </label>
-                    <label className="agent-field">
-                      <span>EXP/有效期至</span>
-                      <DatePickerInput
-                        ariaLabel="有效期至"
-                        placeholder="请选择有效期"
-                        value={domesticLicenseForm.expiryDate}
-                        onChange={(value) => updateDomesticLicenseForm({ expiryDate: value })}
-                      />
-                    </label>
-                    <label className="agent-field">
-                      <span>LN/姓</span>
-                      <input
-                        value={domesticLicenseForm.surname}
-                        placeholder="请输入姓"
-                        onChange={(event) => updateDomesticLicenseForm({ surname: event.target.value })}
-                      />
-                    </label>
-                    <label className="agent-field">
-                      <span>FN/名</span>
-                      <input
-                        value={domesticLicenseForm.givenName}
-                        placeholder="请输入名"
-                        onChange={(event) => updateDomesticLicenseForm({ givenName: event.target.value })}
-                      />
-                    </label>
-                    <label className="agent-field">
-                      <span>DOB/出生日期</span>
-                      <DatePickerInput
-                        ariaLabel="出生日期"
-                        placeholder="请选择出生日期"
-                        value={domesticLicenseForm.birthDate}
-                        onChange={(value) => updateDomesticLicenseForm({ birthDate: value })}
-                      />
-                    </label>
-                    <label className="agent-field">
-                      <span>RSTR/限制条件</span>
-                      <input
-                        value={domesticLicenseForm.rstr}
-                        placeholder="请输入限制条件"
-                        onChange={(event) => updateDomesticLicenseForm({ rstr: event.target.value })}
-                      />
-                    </label>
-                    <div className="agent-field agent-field--radio">
-                      <span>SEX/性别</span>
-                      <div className="agent-radio-group">
-                        {['男', '女'].map((sex) => (
-                          <label key={sex}>
-                            <input
-                              type="radio"
-                              name="domestic-sex"
-                              value={sex}
-                              checked={domesticLicenseForm.sex === sex}
-                              onChange={(event) => updateDomesticLicenseForm({ sex: event.target.value })}
-                            />
-                            {sex}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                    <label className="agent-field">
-                      <span>HAIR/头发颜色</span>
-                      <select
-                        value={domesticLicenseForm.hairColor}
-                        onChange={(event) => updateDomesticLicenseForm({ hairColor: event.target.value })}
-                      >
-                        <option value="">请选择头发颜色</option>
-                        {['黑色', '棕色', '金色', '灰色', '红色', '其他'].map((color) => (
-                          <option key={color} value={color}>{color}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="agent-field">
-                      <span>EYES/眼睛</span>
-                      <select
-                        value={domesticLicenseForm.eyeColor}
-                        onChange={(event) => updateDomesticLicenseForm({ eyeColor: event.target.value })}
-                      >
-                        <option value="">请选择眼睛颜色</option>
-                        {['黑色', '棕色', '蓝色', '绿色', '灰色', '其他'].map((color) => (
-                          <option key={color} value={color}>{color}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="agent-field">
-                      <span>HGT/身高</span>
-                      <input
-                        value={domesticLicenseForm.height}
-                        placeholder="例如 170cm / 5-08"
-                        onChange={(event) => updateDomesticLicenseForm({ height: event.target.value })}
-                      />
-                    </label>
-                    <label className="agent-field">
-                      <span>WGT/体重</span>
-                      <input
-                        value={domesticLicenseForm.weight}
-                        placeholder="例如 65kg / 145lb"
-                        onChange={(event) => updateDomesticLicenseForm({ weight: event.target.value })}
-                      />
-                    </label>
-                    <label className="agent-field">
-                      <span>ISS/签发日期</span>
-                      <DatePickerInput
-                        ariaLabel="签发日期"
-                        placeholder="请选择签发日期"
-                        value={domesticLicenseForm.issueDate}
-                        onChange={(value) => updateDomesticLicenseForm({ issueDate: value })}
-                      />
-                    </label>
-                    <label className="agent-field">
-                      <span>DD/文件识别号</span>
-                      <input
-                        value={domesticLicenseForm.fileNumber}
-                        placeholder="请输入文件识别号"
-                        onChange={(event) => updateDomesticLicenseForm({ fileNumber: event.target.value })}
-                      />
-                    </label>
-                    <label className="agent-field">
-                      <span>CLASS/准驾车型</span>
-                      <input
-                        value={domesticLicenseForm.classType}
-                        placeholder="请输入准驾车型"
-                        onChange={(event) => updateDomesticLicenseForm({ classType: event.target.value })}
-                      />
-                    </label>
-                    <label className="agent-field">
-                      <span>ENDORSEMENTS/额外准驾车型</span>
-                      <input
-                        value={domesticLicenseForm.endorsements}
-                        placeholder="请输入额外准驾车型"
-                        onChange={(event) => updateDomesticLicenseForm({ endorsements: event.target.value })}
-                      />
-                    </label>
-                    <label className="agent-field">
-                      <span>RESTRICTIONS/限制条件</span>
-                      <input
-                        value={domesticLicenseForm.restrictions}
-                        placeholder="请输入限制条件"
-                        onChange={(event) => updateDomesticLicenseForm({ restrictions: event.target.value })}
-                      />
-                    </label>
-                    <label className="agent-field agent-field--textarea">
-                      <span>其他</span>
-                      <textarea
-                        value={domesticLicenseForm.other}
-                        placeholder="请输入其他需要体现在翻译件中的信息"
-                        onChange={(event) => updateDomesticLicenseForm({ other: event.target.value })}
-                      />
-                    </label>
-                    <div className="agent-form-actions agent-form-actions--compact">
-                      <button type="button" className="agent-button agent-button--primary" onClick={() => showToast('驾照信息已确认')}>
-                        确认驾照信息
-                      </button>
-                    </div>
-                  </form>
+                <div className="agent-upload-board" aria-label="上传附件">
+                  <div className="agent-upload-board__title">上传相关证件</div>
+                  <div className="agent-upload-grid">
+                    {(isCompanionExchangeProduct
+                      ? companionDomesticLicenseAttachmentFields
+                      : domesticLicenseAttachmentFields
+                    ).map((item) => {
+                      const previewSrc = domesticLicenseForm[item.key];
+                      const fileName = domesticLicenseForm[item.nameKey];
 
-                  <div className="agent-upload-board" aria-label="上传附件">
-                    <div className="agent-upload-board__title">上传相关证件</div>
-                    <div className="agent-upload-grid">
-                      {domesticLicenseAttachmentFields.map((item) => {
-                        const previewSrc = domesticLicenseForm[item.key];
-                        const fileName = domesticLicenseForm[item.nameKey];
-
-                        return (
-                          <label
-                            key={item.key}
-                            className={`agent-upload-card agent-upload-card--green ${previewSrc ? 'agent-upload-card--filled' : ''}`}
-                          >
-                            {previewSrc ? (
-                              <span className="agent-upload-card__preview">
-                                <img src={previewSrc} alt={`${item.label}预览`} />
-                              </span>
-                            ) : (
-                              <span className="agent-upload-card__icon">+</span>
-                            )}
-                            <span className="agent-upload-card__label">
-                              {item.label}
-                              {item.required && <em className="agent-required">*</em>}
+                      return (
+                        <label
+                          key={item.key}
+                          className={`agent-upload-card agent-upload-card--green ${previewSrc ? 'agent-upload-card--filled' : ''}`}
+                        >
+                          {previewSrc ? (
+                            <span className="agent-upload-card__preview">
+                              <img src={previewSrc} alt={`${item.label}预览`} />
                             </span>
-                            <small>{fileName || (previewSrc ? '点击更换图片' : '点击上传图片')}</small>
-                            <input
-                              type="file"
-                              accept="image/png,image/jpeg,image/jpg,image/webp"
-                              className="agent-upload-card__input"
-                              onChange={(event) => {
-                                void handleDomesticLicenseFileChange(item.key, item.nameKey, event.target.files?.[0] || null);
-                                event.target.value = '';
-                              }}
-                            />
-                          </label>
-                        );
-                      })}
-                    </div>
+                          ) : (
+                            <span className="agent-upload-card__icon">+</span>
+                          )}
+                          <span className="agent-upload-card__label">
+                            {item.label}
+                            {item.required && <em className="agent-required">*</em>}
+                          </span>
+                          <small>{fileName || (previewSrc ? '点击更换图片' : '点击上传图片')}</small>
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/jpg,image/webp"
+                            className="agent-upload-card__input"
+                            onChange={(event) => {
+                              void handleDomesticLicenseFileChange(item.key, item.nameKey, event.target.files?.[0] || null);
+                              event.target.value = '';
+                            }}
+                          />
+                        </label>
+                      );
+                    })}
                   </div>
-                </>
+                </div>
               ) : (
                 <>
               <form ref={certificateFormRef} className="agent-form-grid">
@@ -2362,11 +2277,63 @@ const AgentSystemPage: React.FC = () => {
           </section>
 
           <section ref={(node) => assignSectionRef(2, node)} className="agent-panel agent-delivery-panel">
-            <div className="agent-panel__title">确认收货信息</div>
+            <div className="agent-panel__title">
+              {isCompanionExchangeProduct ? '现场陪同信息' : '确认收货信息'}
+            </div>
             <form ref={deliveryFormRef} className="agent-delivery-form">
-              <div className="agent-field">
-                <span>地址信息</span>
-                <div className="agent-delivery-region-selects">
+              {isCompanionExchangeProduct ? (
+                <>
+                  <label className="agent-field">
+                    <span>联系人 <em className="agent-required">*</em></span>
+                    <input name="customerName" placeholder="请输入联系人姓名" />
+                  </label>
+                  <label className="agent-field">
+                    <span>联系电话 <em className="agent-required">*</em></span>
+                    <input name="customerPhone" type="tel" placeholder="请输入联系电话" />
+                  </label>
+                  <label className="agent-field">
+                    <span>到达城市 <em className="agent-required">*</em></span>
+                    <select
+                      name="arrivalCity"
+                      value={companionArrivalCity}
+                      onChange={(event) => {
+                        setCompanionArrivalCity(event.target.value);
+                        setCompanionAppointmentLocation('');
+                      }}
+                    >
+                      <option value="" disabled>请选择到达城市</option>
+                      {Object.keys(COMPANION_APPOINTMENT_LOCATIONS).map((city) => <option key={city} value={city}>{city}</option>)}
+                    </select>
+                  </label>
+                  <label className="agent-field">
+                    <span>约定地点 <em className="agent-required">*</em></span>
+                    <select
+                      name="arrivalAirport"
+                      value={companionAppointmentLocation}
+                      disabled={!companionArrivalCity}
+                      onChange={(event) => setCompanionAppointmentLocation(event.target.value)}
+                    >
+                      <option value="" disabled>{companionArrivalCity ? '请选择约定地点' : '请先选择到达城市'}</option>
+                      {companionAppointmentLocationOptions.map((location) => <option key={location} value={location}>{location}</option>)}
+                    </select>
+                  </label>
+                  <label className="agent-field agent-companion-time-field">
+                    <span>预约时间 <em className="agent-required">*</em></span>
+                    <span className="agent-companion-time-field__control">
+                      <input name="arrivalDateTime" type="datetime-local" min={`${earliestAppointmentDate}T00:00`} />
+                      <small>最早可预约 {earliestAppointmentDate}</small>
+                    </span>
+                  </label>
+                  <label className="agent-field">
+                    <span>航班号 <em className="agent-optional">（选填）</em></span>
+                    <input name="flightNumber" placeholder="例如：CA1234" />
+                  </label>
+                </>
+              ) : (
+                <>
+                <div className="agent-field">
+                  <span>地址信息</span>
+                  <div className="agent-delivery-region-selects">
                   <select value={deliveryProvince} onChange={(event) => setDeliveryProvince(event.target.value)}>
                     <option value="" disabled>请选择省份</option>
                     {deliveryRegionOptions.map((item) => (
@@ -2400,27 +2367,29 @@ const AgentSystemPage: React.FC = () => {
                     ))}
                   </select>
                 </div>
-              </div>
-              <label className="agent-field agent-field--textarea">
+                </div>
+                <label className="agent-field agent-field--textarea">
                 <span>详细地址</span>
                 <textarea name="deliveryAddress" placeholder="请填写详细地址" />
-              </label>
-              <label className="agent-field">
+                </label>
+                <label className="agent-field">
                 <span>收货人姓名</span>
                 <input name="customerName" placeholder="请填写收货人姓名" />
-              </label>
-              <label className="agent-field">
+                </label>
+                <label className="agent-field">
                 <span>手机号码</span>
                 <input name="customerPhone" placeholder="请填写手机号" />
-              </label>
+                </label>
+                </>
+              )}
               <div className="agent-form-actions agent-form-actions--compact">
-                <button type="button" className="agent-button agent-button--primary" onClick={() => showToast('收货信息已确认')}>
-                  确认收货信息
+                <button type="button" className="agent-button agent-button--primary" onClick={() => showToast(isCompanionExchangeProduct ? '现场陪同信息已确认' : '收货信息已确认')}>
+                  {isCompanionExchangeProduct ? '确认现场陪同信息' : '确认收货信息'}
                 </button>
               </div>
             </form>
 
-            <div className="agent-address-recognition">
+            {!isCompanionExchangeProduct && <div className="agent-address-recognition">
               <div className="agent-address-recognition__inner">
                 <label className="agent-field agent-field--textarea">
                   <span>地址识别</span>
@@ -2440,7 +2409,7 @@ const AgentSystemPage: React.FC = () => {
               <button type="button" className="agent-button agent-button--primary" onClick={handleAddressRecognition}>
                 地址识别
               </button>
-            </div>
+            </div>}
           </section>
 
           <section ref={(node) => assignSectionRef(3, node)} className="agent-panel">

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { menuConfig, type MenuItem } from '../config/menuConfig';
+import { SidebarMenuIcon } from '../components/icons/SidebarMenuIcon';
 import { useTranslation } from '../i18n/config';
 import type { AuthSession } from '../utils/auth';
 import './MainLayout.css';
@@ -181,7 +182,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, currentUser, onLogout
                 .join(' ')}
               style={{ paddingLeft: `${itemPaddingLeft}px` }}
             >
-              <span className="sidebar-flyout__icon">{item.icon}</span>
+              <span className="sidebar-flyout__icon"><SidebarMenuIcon name={item.icon} /></span>
               <span className="sidebar-flyout__text">{itemLabel}</span>
             </div>
 
@@ -207,7 +208,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, currentUser, onLogout
           role="menuitem"
           style={{ paddingLeft: `${itemPaddingLeft}px` }}
         >
-          <span className="sidebar-flyout__icon">{item.icon}</span>
+          <span className="sidebar-flyout__icon"><SidebarMenuIcon name={item.icon} /></span>
           <span className="sidebar-flyout__text">{itemLabel}</span>
         </button>
       );
@@ -291,7 +292,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, currentUser, onLogout
           aria-haspopup={hasChildren ? 'menu' : undefined}
         >
           <span className="sidebar-item__indicator" aria-hidden="true" />
-          <span className="sidebar-item__icon">{item.icon}</span>
+          <span className="sidebar-item__icon"><SidebarMenuIcon name={item.icon} /></span>
           <span className="sidebar-item__label">{itemLabel}</span>
           {hasChildren && (
             <span className={`sidebar-item__arrow ${expanded ? 'sidebar-item__arrow--open' : ''}`}>›</span>

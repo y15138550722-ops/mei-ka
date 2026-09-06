@@ -121,6 +121,7 @@ const ProductForm: React.FC = () => {
               <option value="translation">{t('product.category.translation')}</option>
               <option value="domestic_license">{t('product.category.domestic_license')}</option>
               <option value="notary">{t('product.category.notary')}</option>
+              <option value="local_language_notary">{t('product.category.local_language_notary')}</option>
               <option value="idp">{t('product.category.idp')}</option>
             </select>
           </div>
