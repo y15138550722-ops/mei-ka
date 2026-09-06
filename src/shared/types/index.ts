@@ -16,7 +16,12 @@ export type ProcessType = 'normal' | 'priority' | 'urgent';
 export type PushTimeliness = 'instant' | 'within_2h' | 'same_day' | 'next_day';
 export type AgentLevel = 'self' | 'l1' | 'l2' | 'l3';
 export type Channel = 'ctrip' | 'fliggy' | 'private' | 'offline';
-export type ProductCategory = 'translation' | 'notary' | 'idp' | 'domestic_license';
+export type ProductCategory =
+  | 'translation'
+  | 'notary'
+  | 'local_language_notary'
+  | 'idp'
+  | 'domestic_license';
 
 export interface NotarySubmissionFile {
   key: string;
@@ -59,6 +64,11 @@ export interface DomesticLicenseInfo {
   other: string;
   frontPhoto: string;
   backPhoto: string;
+  /** Cropped from the front license for the Chinese translation template. */
+  portraitPhoto?: string;
+  /** Cropped/transparent signature from the front license for the Chinese translation template. */
+  signaturePhoto?: string;
+  translationAssetVersion?: number;
   passportPhoto?: string;
   whiteBackgroundPhoto?: string;
   frontPhotos?: string[];
@@ -100,6 +110,7 @@ export interface Order {
   productionDisplayNotaryOfficeId?: string;
   productionDisplayNotaryOfficeName?: string;
   managementOrderId?: string;
+  channelOrderId?: string;
   notarySubmissionSequence?: number;
   notarySubmissionFiles?: NotarySubmissionFile[];
   notarySubmissionImages?: NotarySubmissionImage[];

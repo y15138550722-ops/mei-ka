@@ -1,3 +1,5 @@
+import type { SidebarMenuIconName } from '../components/icons/SidebarMenuIcon';
+
 // ============================================
 // Menu Configuration
 // ============================================
@@ -5,7 +7,7 @@
 export interface MenuItem {
   key: string;
   labelKey: string;
-  icon: string;
+  icon: SidebarMenuIconName;
   path?: string;
   children?: MenuItem[];
 }
@@ -14,59 +16,65 @@ export const menuConfig: MenuItem[] = [
   {
     key: 'dashboard',
     labelKey: 'menu.dashboard',
-    icon: 'D',
+    icon: 'dashboard',
     path: '/',
   },
   {
     key: 'order-management',
     labelKey: 'menu.orderManagement',
-    icon: 'O',
+    icon: 'orders',
     children: [
       {
         key: 'order-list',
         labelKey: 'menu.orderList',
-        icon: 'T',
+        icon: 'translation',
         path: '/orders',
       },
       {
         key: 'order-domestic-license-order-management',
         labelKey: 'menu.domesticLicenseOrderManagement',
-        icon: 'DL',
+        icon: 'license',
         path: '/order-management/domestic-license-orders',
       },
       {
         key: 'order-notary-order-management',
         labelKey: 'menu.notaryOrderManagement',
-        icon: 'N',
+        icon: 'notary',
         path: '/order-management/notary-orders',
+      },
+      {
+        key: 'order-hong-kong-notary-order-management',
+        labelKey: 'menu.hongKongNotaryOrderManagement',
+        icon: 'notary',
+        path: '/order-management/hong-kong-notary-orders',
       },
       {
         key: 'order-external-notary-order-management',
         labelKey: 'menu.externalNotaryOrderManagement',
-        icon: 'EN',
+        icon: 'external-orders',
         path: '/order-management/external-notary-orders',
       },
       {
         key: 'order-idp-order-management',
         labelKey: 'menu.idpOrderManagement',
-        icon: 'IDP',
+        icon: 'idp',
         path: '/order-management/idp-orders',
       },
       {
         key: 'order-api-order-management',
         labelKey: 'menu.apiOrderManagement',
-        icon: 'API',
+        icon: 'api',
         children: [
           {
             key: 'order-klook-order-management',
             labelKey: 'menu.klookOrderManagement',
-            icon: 'K',
+            icon: 'klook',
             path: '/order-management/api-orders/klook',
           },
           {
             key: 'order-hello-order-management',
             labelKey: 'menu.helloOrderManagement',
-            icon: 'H',
+            icon: 'hello',
             path: '/order-management/api-orders/hello',
           },
         ],
@@ -76,12 +84,12 @@ export const menuConfig: MenuItem[] = [
   {
     key: 'product-management',
     labelKey: 'menu.productManagement',
-    icon: 'P',
+    icon: 'products',
     children: [
       {
         key: 'product-list',
         labelKey: 'menu.productList',
-        icon: 'PL',
+        icon: 'products',
         path: '/products',
       },
     ],
@@ -89,18 +97,18 @@ export const menuConfig: MenuItem[] = [
   {
     key: 'file-preview',
     labelKey: 'menu.filePreview',
-    icon: 'F',
+    icon: 'file-preview',
     path: '/file-preview',
   },
   {
     key: 'notary-office',
     labelKey: 'menu.notaryOffice',
-    icon: 'NO',
+    icon: 'notary',
     children: [
       {
         key: 'notary-order-list',
         labelKey: 'menu.notaryOrderList',
-        icon: 'N',
+        icon: 'notary',
         path: '/notary/orders',
       },
     ],

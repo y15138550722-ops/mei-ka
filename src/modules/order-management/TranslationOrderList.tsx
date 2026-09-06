@@ -5,7 +5,7 @@ import { useTranslation } from '../../shared/i18n/config';
 import ListUnifiedPagination from '../../shared/components/list/ListUnifiedPagination';
 import { exportTranslationOrders } from '../../shared/utils/exportTranslationOrders';
 import { getProcessTypeTone, getProductProcessTypeLabel } from '../../shared/utils/productProcessType';
-import type { Order } from '../../shared/types';
+import type { Order, ProductCategory } from '../../shared/types';
 import {
   TRANSLATION_STATUS_TABS,
   type TranslationOrderStatus,
@@ -26,11 +26,6 @@ import {
 } from './orderListShared';
 
 const DOMESTIC_LICENSE_PRODUCT_TITLE = '换国内驾照翻译件';
-const isDomesticLicenseProduct = (productTitle: string) => productTitle === DOMESTIC_LICENSE_PRODUCT_TITLE;
-const isDomesticLicenseOrder = (order: Order) =>
-  order.productCategory === 'domestic_license' ||
-  order.productName === DOMESTIC_LICENSE_PRODUCT_TITLE ||
-  Boolean(order.domesticLicenseInfo);
 
 const getDomesticExchangeCity = (order: Order) =>
   [order.domesticLicenseInfo?.exchangeProvince, order.domesticLicenseInfo?.exchangeCity].filter(Boolean).join(' ');
@@ -38,15 +33,28 @@ const getDomesticExchangeCity = (order: Order) =>
 const getDomesticForeignLocation = (order: Order) =>
   [order.domesticLicenseInfo?.foreignCountry, order.domesticLicenseInfo?.foreignCity].filter(Boolean).join(' ');
 
-const TranslationOrderList: React.FC = () => {
+interface TranslationOrderListProps {
+  productCategory?: ProductCategory;
+  pageTitle?: string;
+  basePath?: string;
+}
+
+const TranslationOrderList: React.FC<TranslationOrderListProps> = ({
+  productCategory = 'translation',
+  pageTitle = '翻译订单管理',
+  basePath = '/orders',
+}) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const isHongKongNotaryList = productCategory === 'local_language_notary';
 
   const translationProducts = useMemo(
-    () => getProducts().filter((product) => isDomesticLicenseProduct(product.title)).sort((a, b) => b.weight - a.weight),
-    [],
+    () => getProducts().filter((product) => product.category === productCategory).sort((a, b) => b.weight - a.weight),
+    [productCategory],
   );
-  const [allOrders, setAllOrders] = useState<Order[]>(() => getOrders().filter(isDomesticLicenseOrder));
+  const [allOrders, setAllOrders] = useState<Order[]>(() =>
+    getOrders().filter((order) => order.productCategory === productCategory),
+  );
 
   const [activeStatus, setActiveStatus] = useState<TranslationOrderStatus | ''>('');
   const [filterAgent, setFilterAgent] = useState('');
@@ -249,7 +257,7 @@ const TranslationOrderList: React.FC = () => {
 
   useEffect(() => {
     const refreshOrders = () => {
-      setAllOrders(getOrders().filter(isDomesticLicenseOrder));
+      setAllOrders(getOrders().filter((order) => order.productCategory === productCategory));
     };
 
     window.addEventListener(ORDER_DATA_CHANGED_EVENT, refreshOrders);
@@ -259,7 +267,7 @@ const TranslationOrderList: React.FC = () => {
       window.removeEventListener(ORDER_DATA_CHANGED_EVENT, refreshOrders);
       window.removeEventListener('storage', refreshOrders);
     };
-  }, []);
+  }, [productCategory]);
 
   const handleReset = () => {
     setFilterAgent('');
@@ -291,7 +299,7 @@ const TranslationOrderList: React.FC = () => {
           price: order.lockedPrice,
           primaryAccount: '',
         })),
-        getOrderListExportFileName('翻译订单列表'),
+        getOrderListExportFileName(pageTitle),
       );
 
       showToast('success', '导出成功');
@@ -304,7 +312,11 @@ const TranslationOrderList: React.FC = () => {
   };
 
   return (
-    <div className="app-main animate-fadeIn order-list-page">
+    <div
+      className={`app-main animate-fadeIn order-list-page ${
+        isHongKongNotaryList ? 'hong-kong-notary-order-page' : ''
+      }`}
+    >
       {toast && (
         <div className="toast-container">
           <div className={`toast toast--${toast.type}`}>{toast.message}</div>
@@ -316,7 +328,7 @@ const TranslationOrderList: React.FC = () => {
           <div className="app-topbar__breadcrumb">
             后台管理
             <span>/</span>
-            翻译订单管理
+            {pageTitle}
           </div>
           <div className="order-list-topbar__accent" />
         </div>
@@ -489,16 +501,16 @@ const TranslationOrderList: React.FC = () => {
             <table className="data-table order-list-table">
               <thead>
                 <tr>
-                  <th style={{ width: 120 }}>订单号</th>
-                  <th style={{ minWidth: 160 }}>下单时间</th>
-                  <th style={{ minWidth: 240 }}>产品及办理类型</th>
-                  <th style={{ minWidth: 170 }}>代理商</th>
-                  <th style={{ minWidth: 240 }}>驾照信息</th>
-                  <th style={{ minWidth: 260 }}>收货地址</th>
-                  <th style={{ minWidth: 220 }}>订单记录</th>
-                  {showRejectReasonColumn && <th style={{ minWidth: 220 }}>驳回原因</th>}
-                  <th style={{ minWidth: 170 }}>订单状态</th>
-                  <th style={{ minWidth: 168 }}>操作</th>
+                  <th style={{ width: isHongKongNotaryList ? 116 : 120 }}>订单号</th>
+                  <th style={{ minWidth: isHongKongNotaryList ? 145 : 160 }}>下单时间</th>
+                  <th style={{ minWidth: isHongKongNotaryList ? 200 : 240 }}>产品及办理类型</th>
+                  <th style={{ minWidth: isHongKongNotaryList ? 130 : 170 }}>代理商</th>
+                  <th style={{ minWidth: isHongKongNotaryList ? 190 : 240 }}>驾照信息</th>
+                  <th style={{ minWidth: isHongKongNotaryList ? 220 : 260 }}>收货地址</th>
+                  <th style={{ minWidth: isHongKongNotaryList ? 180 : 220 }}>订单记录</th>
+                  {showRejectReasonColumn && <th style={{ minWidth: isHongKongNotaryList ? 180 : 220 }}>驳回原因</th>}
+                  <th style={{ minWidth: isHongKongNotaryList ? 130 : 170 }}>订单状态</th>
+                  <th style={{ minWidth: isHongKongNotaryList ? 145 : 168 }}>操作</th>
                 </tr>
               </thead>
 
@@ -514,11 +526,11 @@ const TranslationOrderList: React.FC = () => {
                   paginatedOrders.map((order) => {
                     const translationStatus = getTranslationOrderStatus(order.status);
                     const detailNavigationState = {
-                      from: '/orders',
-                      listLabel: '翻译订单管理',
+                      from: basePath,
+                      listLabel: pageTitle,
                     };
-                    const viewPath = `/orders/${order.orderId}?mode=view`;
-                    const auditPath = `/orders/${order.orderId}?mode=audit`;
+                    const viewPath = `${basePath}/${order.orderId}?mode=view`;
+                    const auditPath = `${basePath}/${order.orderId}?mode=audit`;
 
                     return (
                       <tr key={order.orderId} className="order-list-row">

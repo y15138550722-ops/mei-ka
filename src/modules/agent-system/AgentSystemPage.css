@@ -1401,6 +1401,27 @@
   align-items: start;
 }
 
+.agent-certificate-layout--uploads-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.agent-certificate-layout--uploads-only .agent-upload-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.agent-certificate-layout--companion .agent-upload-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.agent-certificate-layout--uploads-only .agent-upload-card {
+  aspect-ratio: auto;
+  height: 180px;
+}
+
+.agent-certificate-layout--uploads-only .agent-upload-board {
+  width: 100%;
+}
+
 .agent-form-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -1682,6 +1703,19 @@
 
 .agent-delivery-form .agent-field {
   grid-template-columns: 142px minmax(0, 390px);
+}
+
+.agent-companion-time-field__control {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  white-space: normal !important;
+}
+
+.agent-companion-time-field__control small {
+  color: #94a3b8;
+  font-size: 12px;
+  text-align: right;
 }
 
 .agent-address-recognition {
@@ -2017,6 +2051,14 @@
 
   .agent-upload-grid {
     grid-template-columns: 1fr;
+  }
+
+  .agent-certificate-layout--uploads-only .agent-upload-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .agent-certificate-layout--uploads-only .agent-upload-card {
+    height: 150px;
   }
 
   .agent-license-modal__attachment-grid {

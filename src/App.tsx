@@ -10,6 +10,7 @@ const DomesticLicenseOrderManagement = lazy(() => import('./modules/order-manage
 const IddTemplatePreview = lazy(() => import('./modules/order-management/IddTemplatePreview'));
 const OrderDetail = lazy(() => import('./modules/order-management/OrderDetail'));
 const NotaryOrderManagementList = lazy(() => import('./modules/order-management/NotaryOrderManagementList'));
+const HongKongNotaryOrderManagement = lazy(() => import('./modules/order-management/HongKongNotaryOrderManagement'));
 const NotaryOrderManagementPreview = lazy(() => import('./modules/order-management/NotaryOrderManagementPreview'));
 const NotaryItineraryExport = lazy(() => import('./modules/order-management/NotaryItineraryExport'));
 const ExternalNotaryOrderManagement = lazy(() => import('./modules/order-management/ExternalNotaryOrderManagement'));
@@ -165,6 +166,8 @@ const App: React.FC = () => {
           <Route path="/order-management/idp-orders/:id" element={<OrderDetail />} />
           <Route path="/order-management/idp-orders/:id/templates" element={<IddTemplatePreview />} />
           <Route path="/order-management/notary-orders" element={<NotaryOrderManagementList />} />
+          <Route path="/order-management/hong-kong-notary-orders" element={<HongKongNotaryOrderManagement />} />
+          <Route path="/order-management/hong-kong-notary-orders/:id" element={<OrderDetail />} />
           <Route path="/order-management/notary-orders/:id/preview" element={<NotaryOrderManagementPreview />} />
           <Route path="/order-management/notary-orders/:id/itinerary-export" element={<NotaryItineraryExport />} />
           <Route path="/order-management/external-notary-orders" element={<ExternalNotaryOrderManagement />} />

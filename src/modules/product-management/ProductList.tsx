@@ -119,7 +119,7 @@ const getCoverVariant = (product: Product) => {
   if (product.title.includes('\u5fb7\u8bed')) return 'germany';
   if (product.title.includes('\u6cd5\u8bed')) return 'france';
   if (product.category === 'domestic_license') return 'domestic-license';
-  if (product.category === 'notary') return 'notary';
+  if (product.category === 'notary' || product.category === 'local_language_notary') return 'notary';
   if (product.category === 'idp') return 'idp';
   return 'translation';
 };
@@ -132,6 +132,7 @@ const getCoverMeta = (product: Product) => {
   if (product.title.includes('\u5fb7\u8bed')) return { code: 'DE', sub: '\u7535\u5b50\u4ef6' };
   if (product.title.includes('\u6cd5\u8bed')) return { code: 'FR', sub: '\u7535\u5b50\u4ef6' };
   if (product.category === 'domestic_license') return { code: 'CN-DL', sub: '\u6362\u8bc1\u7ffb\u8bd1' };
+  if (product.category === 'local_language_notary') return { code: 'LOCAL', sub: '\u5f53\u5730\u8bed\u8a00\u516c\u8bc1\u4ef6' };
   if (product.category === 'notary') return { code: 'NOTARY', sub: '\u516c\u8bc1\u4ef6' };
   if (product.category === 'idp') return { code: 'IDP', sub: '\u56fd\u9645\u9a7e\u7167' };
   return { code: 'TR', sub: '\u7ffb\u8bd1\u8ba4\u8bc1' };
@@ -657,6 +658,7 @@ const ProductList: React.FC = () => {
                     <option value="translation">{t('product.category.translation')}</option>
                     <option value="domestic_license">{t('product.category.domestic_license')}</option>
                     <option value="notary">{t('product.category.notary')}</option>
+                    <option value="local_language_notary">{t('product.category.local_language_notary')}</option>
                     <option value="idp">{t('product.category.idp')}</option>
                   </select>
                 </div>
