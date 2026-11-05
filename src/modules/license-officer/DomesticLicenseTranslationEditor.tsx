@@ -10,7 +10,7 @@ import {
 import { buildDocxPreviewHtmlFromUrl } from '../../shared/utils/docxPreview';
 import { exportNotaryImageBlobsToPdf } from '../../shared/utils/notaryPreviewExport';
 import { formatBeijingTimestamp } from '../../shared/utils/dateTime';
-import { getStoredAuthSession } from '../../shared/utils/auth';
+import { createProductionLog } from './productionActivity';
 import { resolveLocalImageSource } from '../../shared/utils/localImageStore';
 import { isProductionVisibleChineseTranslationOrder } from './productionOrderVisibility';
 import './ChineseTranslationOrders.css';
@@ -40,7 +40,6 @@ type PixelCropRect = {
 };
 
 const INVALID_FILENAME_CHAR_PATTERN = /[\\/:*?"<>|]/g;
-const PRODUCTION_OPERATOR = '生产端';
 const MADE_ACTION = '已制作';
 export const DOMESTIC_LICENSE_ASSET_EXTRACTION_VERSION = 2;
 const FRONT_LICENSE_PORTRAIT_CROP: ImageCropRect = { x: 0.04, y: 0.2, width: 0.38, height: 0.62 };
@@ -48,11 +47,6 @@ const FRONT_LICENSE_SIGNATURE_CROP: ImageCropRect = { x: 0.07, y: 0.79, width: 0
 const FRONT_LICENSE_SIGNATURE_SEARCH_RECT: ImageCropRect = { x: 0.04, y: 0.76, width: 0.38, height: 0.22 };
 
 const sanitizeFilenamePart = (value: string) => value.replace(INVALID_FILENAME_CHAR_PATTERN, '').trim();
-
-const getCurrentProductionOperatorName = () => {
-  const session = getStoredAuthSession();
-  return session?.displayName?.trim() || session?.username?.trim() || PRODUCTION_OPERATOR;
-};
 
 const serializeElementAsXhtml = (element: Element) => new XMLSerializer().serializeToString(element);
 
@@ -1029,21 +1023,13 @@ const getOrderPdfBaseName = (order: Order | undefined, previewText = '') => {
 };
 
 const markOrderMadeAfterPdfExport = (order: Order | undefined) => {
-  if (!order) {
-    return;
-  }
+  if (!order) return;
+  const latestOrder = getOrderById(order.orderId);
+  if (!latestOrder || !['pending_production', 'in_production'].includes(latestOrder.status)) return;
+  if (latestOrder.logs.some((log) => log.action === MADE_ACTION)) return;
 
   const timestamp = formatBeijingTimestamp();
-  const nextLogs = order.logs.some((log) => log.action === MADE_ACTION)
-    ? order.logs
-    : [
-        ...order.logs,
-        {
-          time: timestamp,
-          operator: getCurrentProductionOperatorName(),
-          action: MADE_ACTION,
-        },
-      ];
+  const nextLogs = [...latestOrder.logs, createProductionLog(MADE_ACTION, timestamp)];
 
   updateOrder(order.orderId, {
     status: 'in_production',

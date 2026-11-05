@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { getOrders, updateOrder } from '../../services/mockDataService';
+import { getOrderById, getOrders, updateOrder } from '../../services/mockDataService';
 import ResolvedImage from '../../shared/components/ResolvedImage';
 import { orderPreviewAssets } from '../../shared/config/orderPreviewAssets';
 import ListUnifiedPagination from '../../shared/components/list/ListUnifiedPagination';
 import type { Order } from '../../shared/types';
-import { getStoredAuthSession } from '../../shared/utils/auth';
+import { createProductionLog, getProductionOperatorLabel } from './productionActivity';
 import { formatBeijingTimestamp } from '../../shared/utils/dateTime';
 import { exportTranslationOrders } from '../../shared/utils/exportTranslationOrders';
 import { resolveLocalImageSource, saveDomesticLicenseImages } from '../../shared/utils/localImageStore';
@@ -204,7 +204,6 @@ const getShippingInfo = (order: Order) => [
 const getProductionFlowInfoRows = (
   order: Order,
   productionStatus: ProductionOrderStatus,
-  currentOperatorName: string,
 ): ProductionFlowInfoRow[] => {
   const translatedLog = getProductionActionLog(order, TRANSLATED_ACTION);
   const madeLog = getProductionActionLog(order, MADE_ACTION);
@@ -212,14 +211,14 @@ const getProductionFlowInfoRows = (
 
   if (translatedLog) {
     rows.push(
-      { label: '翻译人', value: currentOperatorName || translatedLog.operator },
+      { label: '翻译人', value: getProductionOperatorLabel(translatedLog) },
       { label: '翻译时间', value: translatedLog.time },
     );
   }
 
   if ((productionStatus === 'unshipped' || productionStatus === 'shipped') && madeLog) {
     rows.push(
-      { label: '制作人', value: madeLog.operator },
+      { label: '制作人', value: getProductionOperatorLabel(madeLog) },
       { label: '制作时间', value: madeLog.time },
     );
   }
@@ -257,10 +256,6 @@ const ChineseTranslationOrders: React.FC = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [ocrCompare, setOcrCompare] = useState<OcrCompareState | null>(null);
   const [activeProductionFlowOrderId, setActiveProductionFlowOrderId] = useState<string | null>(null);
-  const currentOperatorName = useMemo(() => {
-    const session = getStoredAuthSession();
-    return session?.displayName?.trim() || session?.username?.trim() || PRODUCTION_OPERATOR;
-  }, []);
 
   useEffect(() => {
     const statusParam = searchParams.get('status') as ProductionOrderStatus | null;
@@ -447,13 +442,11 @@ const ChineseTranslationOrders: React.FC = () => {
   };
 
   const appendProductionLog = (order: Order, action: string, timestamp = formatBeijingTimestamp()) => {
+    const latestOrder = getOrderById(order.orderId) || order;
+    if (hasProductionAction(latestOrder, action)) return;
     const nextLogs = [
-      ...order.logs,
-      {
-        time: timestamp,
-        operator: currentOperatorName,
-        action,
-      },
+      ...latestOrder.logs,
+      createProductionLog(action, timestamp),
     ];
 
     updateOrder(order.orderId, {
@@ -872,7 +865,7 @@ const ChineseTranslationOrders: React.FC = () => {
   };
 
   const renderProductionFlowPopover = (order: Order, productionStatus: ProductionOrderStatus) => {
-    const rows = getProductionFlowInfoRows(order, productionStatus, currentOperatorName);
+    const rows = getProductionFlowInfoRows(order, productionStatus);
 
     if (rows.length === 0) return null;
 

@@ -5,17 +5,30 @@ import DatePickerInput from '../../shared/components/form/DatePickerInput';
 import { getStoredAuthSession } from '../../shared/utils/auth';
 import { formatBeijingTimestamp } from '../../shared/utils/dateTime';
 import { exportTranslationOrders } from '../../shared/utils/exportTranslationOrders';
-import { getOrders, updateOrder } from '../../services/mockDataService';
+import { ORDER_DATA_CHANGED_EVENT, getOrderById, getOrders, getProducts, updateOrder } from '../../services/mockDataService';
+import { getProductProcessTypeLabel } from '../../shared/utils/productProcessType';
+import { createProductionLog, getProductionOperatorLabel } from './productionActivity';
 import type { Order } from '../../shared/types';
 import './ChineseTranslationOrders.css';
+import './CtripStandardTranslationPage.css';
 
 type CtripStandardStatus = 'untranslated' | 'unmade' | 'unshipped' | 'shipped' | 'recycle' | 'cancelled';
-type OrderTypeFilter = '全部' | '携程普通订单' | '携程加急订单' | '去哪儿普通订单' | '去哪儿加急订单';
+type OrderSourceLabel = '携程' | '去哪儿' | '飞猪' | '私域' | '线下代理';
+type OrderTypeFilter = '全部' | `${OrderSourceLabel}${'普通订单' | '加急订单'}`;
 type CertificateTypeFilter = '全部' | '五证标准翻译件' | '新版标准翻译件' | '国际驾照';
 type RegionFilter = '全部区域' | '江浙沪皖' | '非江浙沪皖' | '北京' | '新疆西藏';
-type PaymentMethod = '携程API';
+type PaymentMethod = string;
 type PaymentStatus = '未翻译' | '未制作' | '未发货' | '已发货' | '回收站' | '已取消';
-type ProductionFlowInfoRow = { label: string; value: string };
+type OrderRecord = {
+  label: string;
+  personLabel: string;
+  timeLabel: string;
+  log?: Order['logs'][number];
+  translatedLog?: Order['logs'][number];
+  time?: string;
+};
+
+type ProductLookup = ReturnType<typeof getProducts>;
 
 interface DecoratedOrder {
   certificateType: Exclude<CertificateTypeFilter, '全部'>;
@@ -29,7 +42,10 @@ interface DecoratedOrder {
 }
 
 const CERTIFICATE_TYPE_OPTIONS: CertificateTypeFilter[] = ['全部', '五证标准翻译件', '新版标准翻译件', '国际驾照'];
-const ORDER_TYPE_OPTIONS: OrderTypeFilter[] = ['全部', '携程普通订单', '携程加急订单', '去哪儿普通订单', '去哪儿加急订单'];
+const ORDER_TYPE_OPTIONS: OrderTypeFilter[] = [
+  '全部', '携程普通订单', '携程加急订单', '去哪儿普通订单', '去哪儿加急订单',
+  '飞猪普通订单', '飞猪加急订单', '私域普通订单', '私域加急订单', '线下代理普通订单', '线下代理加急订单',
+];
 const REGION_OPTIONS: RegionFilter[] = ['全部区域', '江浙沪皖', '非江浙沪皖', '北京', '新疆西藏'];
 const STATUS_TABS: Array<{ label: string; value: '' | CtripStandardStatus }> = [
   { label: '全部订单', value: '' },
@@ -56,7 +72,7 @@ const SHIPPING_BATCH_OPTIONS = [
   { label: '一键发货（JD）', company: '京东快递', prefix: 'JD' },
   { label: '一键发货（空订单）', company: '空订单', prefix: 'EMPTY' },
 ] as const;
-const CHANNEL_LABELS: Record<Order['channel'], string> = {
+const CHANNEL_LABELS: Record<Order['channel'], OrderSourceLabel> = {
   ctrip: '携程',
   fliggy: '飞猪',
   private: '私域',
@@ -115,27 +131,31 @@ const hasAction = (order: Order, action: string) => order.logs.some((log) => log
 const getActionLog = (order: Order, action: string) =>
   [...order.logs].reverse().find((log) => log.action.includes(action));
 
-const getProductionFlowInfoRows = (order: Order, status: CtripStandardStatus): ProductionFlowInfoRow[] => {
-  const translatedLog = getActionLog(order, TRANSLATED_ACTION);
-  const madeLog = getActionLog(order, MADE_ACTION);
-  const translationRows = [
-    { label: '翻译人', value: translatedLog?.operator || '--' },
-    { label: '翻译时间', value: translatedLog?.time || '--' },
-  ];
+const getOrderRecords = (order: Order): OrderRecord[] => [
+  { label: '已推送', personLabel: '推送人', timeLabel: '推送时间', log: getActionLog(order, '已推送') },
+  { label: '已翻译', personLabel: '翻译人', timeLabel: '翻译时间', log: getActionLog(order, TRANSLATED_ACTION) },
+  {
+    label: '已制作',
+    personLabel: '制作人',
+    timeLabel: '制作时间',
+    log: getActionLog(order, MADE_ACTION),
+    translatedLog: getActionLog(order, TRANSLATED_ACTION),
+  },
+  { label: '已发货', personLabel: '发货人', timeLabel: '发货时间', log: getActionLog(order, SHIPPED_ACTION), time: order.shippedAt },
+];
 
-  if (status === 'unmade') {
-    return translationRows;
-  }
-
-  if (status === 'unshipped' || status === 'shipped') {
-    return [
-      ...translationRows,
-      { label: '制作人', value: madeLog?.operator || '--' },
-      { label: '制作时间', value: madeLog?.time || '--' },
-    ];
-  }
-
-  return [];
+const getProcessTypeLabel = (order: Order, products: ProductLookup) => {
+  const product = products.find((item) => item.productId === order.productId);
+  const configuredProcessType = product?.processTypes.find(
+    (item) => item.typeId === order.processTypeId || item.name === order.processType,
+  );
+  const processType = configuredProcessType?.name || order.processType;
+  const builtInLabels: Record<string, string> = {
+    normal: '正常办理-普通配送',
+    priority: '优先办理-加急配送',
+    urgent: '加急办理-加急配送',
+  };
+  return builtInLabels[processType] || getProductProcessTypeLabel(processType, (key) => key) || '--';
 };
 
 const getOrderStatus = (order: Order): CtripStandardStatus => {
@@ -148,12 +168,16 @@ const getOrderStatus = (order: Order): CtripStandardStatus => {
 };
 
 const getCertificateType = (order: Order): Exclude<CertificateTypeFilter, '全部'> => {
-  const serial = getOrderSerial(order.orderId);
-  const options: Array<Exclude<CertificateTypeFilter, '全部'>> = ['五证标准翻译件', '新版标准翻译件', '国际驾照'];
-  return options[serial % options.length];
+  const declaredType = (order as Order & { standardTranslationType?: string }).standardTranslationType?.trim();
+  if (declaredType && CERTIFICATE_TYPE_OPTIONS.includes(declaredType as CertificateTypeFilter)) {
+    return declaredType as Exclude<CertificateTypeFilter, '全部'>;
+  }
+  if (order.productName.includes('国际驾照') || order.productCategory === 'idp') return '国际驾照';
+  if (order.productName.includes('新版')) return '新版标准翻译件';
+  return '五证标准翻译件';
 };
 
-const getSourceChannelLabel = (order: Order) => (getOrderSerial(order.orderId) % 2 === 0 ? '携程' : '去哪儿');
+const getSourceChannelLabel = (order: Order) => CHANNEL_LABELS[order.channel];
 
 const getUrgentLabel = (order: Order) =>
   URGENT_ORDER_IDS.has(order.orderId) || order.processType.includes('urgent') || order.processType.includes('加急') ? '是' : '否';
@@ -162,7 +186,7 @@ const getOrderType = (order: Order): Exclude<OrderTypeFilter, '全部'> => {
   const source = getSourceChannelLabel(order);
   const urgency = getUrgentLabel(order) === '是' ? '加急订单' : '普通订单';
 
-  return `${source}${urgency}` as Exclude<OrderTypeFilter, '全部'>;
+  return `${source}${urgency}`;
 };
 
 const getRegion = (order: Order): Exclude<RegionFilter, '全部区域'> => {
@@ -190,9 +214,8 @@ const getLegacyRegion = (order: Order): Exclude<RegionFilter, '全部区域'> =>
   return options[serial % options.length];
 };
 
-const getPaymentMethod = (_order: Order): PaymentMethod => {
-  return CTRIP_API_PAYMENT_METHOD;
-};
+const getPaymentMethod = (order: Order): PaymentMethod =>
+  order.channel === 'ctrip' ? CTRIP_API_PAYMENT_METHOD : getSourceChannelLabel(order);
 
 const getNormalLicenseNumber = (order: Order) => {
   const rawValue = order.licenseNo || order.domesticLicenseInfo?.licenseNumber || '';
@@ -234,17 +257,22 @@ const getLicenseDetailRows = (order: Order) => {
   ];
 };
 
-const getContentRows = (order: Order) =>
-  CONTENT_OVERRIDES[order.orderId] || [
+const getContentRows = (order: Order) => {
+  const rows = [...(CONTENT_OVERRIDES[order.orderId] || [
     ['驾照号', getNormalLicenseNumber(order)],
     ['中文姓名', getNormalChineseName(order)],
     ['准驾车型', getNormalLicenseCategory(order)],
-  ];
+  ])];
+
+  rows.push(['宣誓公证', order.notarizationRequirement?.trim() || '未填写']);
+  rows.push(['副页记录', order.licenseSupplementRecord?.trim() || '未填写']);
+  return rows;
+};
 
 const buildContent = (order: Order, _certificateType: DecoratedOrder['certificateType']) =>
   getContentRows(order).map(([label, value]) => `${label}：${value}`).join('，');
 
-const getCtripApiOrderNo = (order: Order) => order.managementOrderId || String(1128148090749058 + getOrderSerial(order.orderId));
+const getChannelOrderNo = (order: Order) => order.channelOrderId || order.managementOrderId || '--';
 
 const getDepartureDate = (order: Order) => order.licenseBirthDate || order.domesticLicenseInfo?.birthDate || '1970-01-01';
 
@@ -297,105 +325,6 @@ const getStatusClassName = (status: CtripStandardStatus) => {
   return `license-translation-status license-translation-status--${toneMap[status]}`;
 };
 
-const API_STANDARD_SAMPLE_CONFIGS: Array<{
-  customerName: string;
-  orderId: string;
-  status: CtripStandardStatus;
-  statusLabel: PaymentStatus;
-}> = [
-  { orderId: 'MKAPI260001', customerName: '王晓晨', status: 'untranslated', statusLabel: '未翻译' },
-  { orderId: 'MKAPI260002', customerName: '李思雨', status: 'unmade', statusLabel: '未制作' },
-  { orderId: 'MKAPI260003', customerName: '周明轩', status: 'unshipped', statusLabel: '未发货' },
-  { orderId: 'MKAPI260004', customerName: '陈佳宁', status: 'shipped', statusLabel: '已发货' },
-  { orderId: 'MKAPI260005', customerName: '赵予安', status: 'recycle', statusLabel: '回收站' },
-  { orderId: 'MKAPI260006', customerName: '孙若涵', status: 'cancelled', statusLabel: '已取消' },
-];
-
-const buildSampleLogs = (status: CtripStandardStatus, createdAt: string): Order['logs'] => {
-  const logs: Order['logs'] = [{ time: createdAt, operator: '携程API', action: '订单创建' }];
-
-  if (status === 'unmade' || status === 'unshipped' || status === 'shipped') {
-    logs.push({ time: '2026-06-12 10:20:00', operator: '生产端', action: TRANSLATED_ACTION });
-  }
-
-  if (status === 'unshipped' || status === 'shipped') {
-    logs.push({ time: '2026-06-12 11:35:00', operator: '生产端', action: MADE_ACTION });
-  }
-
-  if (status === 'shipped') {
-    logs.push({ time: '2026-06-12 15:18:00', operator: '生产端', action: SHIPPED_ACTION });
-  }
-
-  if (status === 'recycle') {
-    logs.push({ time: '2026-06-12 16:05:00', operator: '生产端', action: RECYCLE_ACTION });
-  }
-
-  return logs;
-};
-
-const getSampleOrderBaseStatus = (status: CtripStandardStatus): Order['status'] => {
-  if (status === 'shipped') return 'shipped';
-  if (status === 'cancelled') return 'cancelled';
-  if (status === 'unshipped') return 'in_production';
-  return 'pending_production';
-};
-
-const createApiStandardSampleOrders = (): DecoratedOrder[] =>
-  API_STANDARD_SAMPLE_CONFIGS.map((config, index) => {
-    const createdAt = `2026-06-12 ${String(9 + index).padStart(2, '0')}:10:00`;
-    const licenseNumber = `310101199${index}06120${index + 1}X`;
-    const order: Order = {
-      orderId: config.orderId,
-      customerName: config.customerName,
-      customerPhone: `13800006${String(index + 1).padStart(4, '0')}`,
-      customerPassport: `E${String(90000000 + index)}`,
-      customerEmail: `ctrip-api-${index + 1}@example.com`,
-      productId: 'api-standard-sample',
-      productName: '驾照翻译国际认证件-携程',
-      productCategory: 'domestic_license',
-      processType: index % 2 === 0 ? 'normal' : 'urgent',
-      processTypeId: index % 2 === 0 ? 'normal' : 'urgent',
-      pushTimeliness: index % 2 === 0 ? 'same_day' : 'within_2h',
-      channel: 'ctrip',
-      agentLevel: 'self',
-      lockedPrice: 129,
-      status: getSampleOrderBaseStatus(config.status),
-      deliveryAddress: ['上海市浦东新区世纪大道88号', '北京市朝阳区建国路99号', '浙江省杭州市西湖区文三路18号', '江苏省南京市建邺区江东中路66号', '广东省深圳市南山区科技园1号', '四川省成都市锦江区春熙路26号'][index],
-      logisticsCompany: config.status === 'shipped' ? '顺丰速运' : '',
-      trackingNumber: config.status === 'shipped' ? `SF260612000${index + 1}` : '',
-      shippedAt: config.status === 'shipped' ? '2026-06-12 15:18:00' : undefined,
-      remark: config.status === 'recycle' ? '[回收站] 用户资料待补充' : '',
-      licenseName: config.customerName,
-      licenseNo: licenseNumber,
-      licenseCategory: 'C1',
-      licenseGender: index % 2 === 0 ? '男' : '女',
-      licenseNationality: 'China',
-      licenseBirthDate: `199${index}-06-12`,
-      licenseAddress: ['上海市浦东新区世纪大道88号', '北京市朝阳区建国路99号', '浙江省杭州市西湖区文三路18号', '江苏省南京市建邺区江东中路66号', '广东省深圳市南山区科技园1号', '四川省成都市锦江区春熙路26号'][index],
-      licenseFirstIssueDate: `201${index}-05-20`,
-      licenseValidFromDate: `202${index}-05-20`,
-      licenseValidYears: '10年',
-      licenseIssuingRegion: ['上海市', '北京市', '浙江省 杭州市', '江苏省 南京市', '广东省 深圳市', '四川省 成都市'][index],
-      licenseIssuingAuthority: '公安局交通警察支队',
-      managementOrderId: `11281480907490${58 + index}`,
-      useCountry: ['日本', '泰国', '澳大利亚', '新西兰', '德国', '法国'][index],
-      createdAt,
-      updatedAt: createdAt,
-      logs: buildSampleLogs(config.status, createdAt),
-    };
-
-    return {
-      certificateType: index % 3 === 0 ? '国际驾照' : index % 3 === 1 ? '新版标准翻译件' : '五证标准翻译件',
-      content: buildContent(order, '国际驾照'),
-      order,
-      orderType: index % 2 === 0 ? '携程普通订单' : '携程加急订单',
-      paymentMethod: CTRIP_API_PAYMENT_METHOD,
-      paymentStatus: config.statusLabel,
-      region: getRegion(order),
-      status: config.status,
-    };
-  });
-
 const isCtripStandardVisibleOrder = (order: Order) => order.productCategory === 'domestic_license';
 
 const CtripStandardTranslationPage: React.FC = () => {
@@ -405,7 +334,6 @@ const CtripStandardTranslationPage: React.FC = () => {
   const [pageSize, setPageSize] = useState(20);
   const [toast, setToast] = useState<string | null>(null);
   const [detailOrder, setDetailOrder] = useState<DecoratedOrder | null>(null);
-  const [activeProductionFlowOrderId, setActiveProductionFlowOrderId] = useState<string | null>(null);
 
   const [certificateType, setCertificateType] = useState<CertificateTypeFilter>(() => {
     const value = searchParams.get('certificateType');
@@ -423,9 +351,17 @@ const CtripStandardTranslationPage: React.FC = () => {
   const [endDate, setEndDate] = useState(searchParams.get('endDate') || '');
   const [keyword, setKeyword] = useState(searchParams.get('keyword') || '');
 
+  const products = useMemo(() => getProducts(), [orderVersion]);
+
   const currentOperatorName = useMemo(() => {
     const session = getStoredAuthSession();
     return session?.displayName?.trim() || session?.username?.trim() || '生产端';
+  }, []);
+
+  useEffect(() => {
+    const refreshOrders = () => setOrderVersion((version) => version + 1);
+    window.addEventListener(ORDER_DATA_CHANGED_EVENT, refreshOrders);
+    return () => window.removeEventListener(ORDER_DATA_CHANGED_EVENT, refreshOrders);
   }, []);
 
   const allOrders = useMemo(
@@ -448,9 +384,9 @@ const CtripStandardTranslationPage: React.FC = () => {
           } satisfies DecoratedOrder;
         });
 
-      return [...createApiStandardSampleOrders(), ...storedOrders.filter((item) => !item.order.orderId.startsWith('MKAPI'))];
+      return storedOrders;
     },
-    [orderVersion],
+    [orderVersion, products],
   );
 
   const appliedStatus = (() => {
@@ -499,6 +435,7 @@ const CtripStandardTranslationPage: React.FC = () => {
     if (appliedKeyword) {
       const searchableText = [
         item.order.orderId,
+        getChannelOrderNo(item.order),
         item.order.customerName,
         item.order.licenseName,
         item.order.customerPhone,
@@ -611,18 +548,28 @@ const CtripStandardTranslationPage: React.FC = () => {
     showToast('添加标准翻译件');
   };
 
-  const toggleProductionFlowPopover = (orderId: string) => {
-    setDetailOrder(null);
-    setActiveProductionFlowOrderId((currentOrderId) => (currentOrderId === orderId ? null : orderId));
-  };
-
-  const renderProductionFlowPopover = (order: Order, status: CtripStandardStatus) => (
-    <div className="license-translation-flow-popover" role="dialog" aria-label="生产记录">
-      {getProductionFlowInfoRows(order, status).map((row) => (
-        <div key={row.label} className="license-translation-flow-popover__row">
-          <span>{row.label}：</span>
-          <strong>{row.value}</strong>
-        </div>
+  const renderOrderRecords = (order: Order) => (
+    <div className="ctrip-standard-records">
+      {getOrderRecords(order).map((record) => (
+        <section key={record.label} className="ctrip-standard-record">
+          <strong>{record.label}：{!record.log && !record.time && <span className="ctrip-standard-record__empty">暂无记录</span>}</strong>
+          {(record.log || record.time) && (
+            <dl>
+              {record.translatedLog && (
+                <div className="ctrip-standard-record__secondary">
+                  <dt>翻译人：</dt><dd>{getProductionOperatorLabel(record.translatedLog)}</dd>
+                </div>
+              )}
+              {record.translatedLog && (
+                <div className="ctrip-standard-record__secondary">
+                  <dt>翻译时间：</dt><dd>{record.translatedLog.time}</dd>
+                </div>
+              )}
+              <div><dt>{record.personLabel}：</dt><dd>{record.log ? getProductionOperatorLabel(record.log) : '--'}</dd></div>
+              <div><dt>{record.timeLabel}：</dt><dd>{record.log?.time || record.time || '--'}</dd></div>
+            </dl>
+          )}
+        </section>
       ))}
     </div>
   );
@@ -663,7 +610,8 @@ const CtripStandardTranslationPage: React.FC = () => {
   };
 
   const handleMarkTranslated = (item: DecoratedOrder) => {
-    if (item.status !== 'untranslated') {
+    const latestOrder = getOrderById(item.order.orderId);
+    if (!latestOrder || getOrderStatus(latestOrder) !== 'untranslated' || latestOrder.logs.some((log) => log.action === TRANSLATED_ACTION)) {
       showToast('当前订单状态不可翻译');
       return;
     }
@@ -671,14 +619,15 @@ const CtripStandardTranslationPage: React.FC = () => {
     const timestamp = formatBeijingTimestamp();
     updateOrder(item.order.orderId, {
       updatedAt: timestamp,
-      logs: [...item.order.logs, { time: timestamp, operator: currentOperatorName, action: TRANSLATED_ACTION }],
+      logs: [...latestOrder.logs, createProductionLog(TRANSLATED_ACTION, timestamp)],
     });
     setOrderVersion((version) => version + 1);
     showToast(`订单 ${item.order.orderId} 已翻译`);
   };
 
   const handleMarkMade = (item: DecoratedOrder) => {
-    if (item.status !== 'unmade') {
+    const latestOrder = getOrderById(item.order.orderId);
+    if (!latestOrder || getOrderStatus(latestOrder) !== 'unmade' || latestOrder.logs.some((log) => log.action === MADE_ACTION)) {
       showToast('当前订单状态不可制作完成');
       return;
     }
@@ -687,7 +636,7 @@ const CtripStandardTranslationPage: React.FC = () => {
     updateOrder(item.order.orderId, {
       status: 'in_production',
       updatedAt: timestamp,
-      logs: [...item.order.logs, { time: timestamp, operator: currentOperatorName, action: MADE_ACTION }],
+      logs: [...latestOrder.logs, createProductionLog(MADE_ACTION, timestamp)],
     });
     setOrderVersion((version) => version + 1);
     showToast(`订单 ${item.order.orderId} 已制作完成`);
@@ -922,64 +871,44 @@ const CtripStandardTranslationPage: React.FC = () => {
           <table className="license-translation-table ctrip-standard-table">
             <thead>
               <tr>
-                <th>序号</th>
-                <th>订单号</th>
-                <th>订单类型</th>
-                <th>内容</th>
-                <th>发起时间</th>
-                <th>付款方式</th>
-                <th>付款状态</th>
-                <th>订单信息</th>
-                <th>操作</th>
+                <th scope="col">订单号</th>
+                <th scope="col">产品及办理类型</th>
+                <th scope="col">内容</th>
+                <th scope="col">收货地址</th>
+                <th scope="col">订单来源</th>
+                <th scope="col">订单记录<span className="ctrip-standard-records-hint">（对应人员及时间）</span></th>
+                <th scope="col">操作</th>
               </tr>
             </thead>
             <tbody>
               {paginatedOrders.length > 0 ? (
-                paginatedOrders.map((item, index) => (
+                paginatedOrders.map((item) => (
                   <tr key={item.order.orderId}>
-                    <td>{(currentPage - 1) * pageSize + index + 1}</td>
                     <td>
-                      <div className="license-translation-order-number">
-                        <strong>{item.order.orderId}</strong>
-                        <span>{`携程API:${getCtripApiOrderNo(item.order)}`}</span>
+                      <dl className="ctrip-standard-order-numbers">
+                        <div><dt>美卡平台订单号：</dt><dd>{item.order.orderId}</dd></div>
+                        <div><dt>渠道订单号：</dt><dd>{getChannelOrderNo(item.order)}</dd></div>
+                        <div><dt>下单时间：</dt><dd>{item.order.createdAt}</dd></div>
+                      </dl>
+                    </td>
+                    <td>
+                      <div className="ctrip-standard-product">
+                        <strong>{item.order.productName || '--'}</strong>
+                        <span>{getProcessTypeLabel(item.order, products)}</span>
                       </div>
                     </td>
-                    <td>{STANDARD_ORDER_TYPE_LABEL}</td>
                     <td>
                       <dl className="license-translation-order-info-table ctrip-standard-content-table">
                         {getContentRows(item.order).map(([label, value]) => (
-                          <div key={label} className={label === '驾照号' ? 'license-translation-order-info-table__row--nowrap' : undefined}>
+                          <div key={label}>
                             <dt>{label}</dt>
                             <dd>{value}</dd>
                           </div>
                         ))}
                       </dl>
                     </td>
-                    <td className="license-translation-time-cell">{item.order.createdAt.replace(' ', '\n')}</td>
-                    <td>{item.paymentMethod}</td>
                     <td>
-                      <div className="ctrip-standard-payment-status">
-                        <span className={getStatusClassName(item.status)}>{item.paymentStatus}</span>
-                        {item.status === 'unmade' || item.status === 'unshipped' || item.status === 'shipped' ? (
-                          <span className="license-translation-status-info-wrap">
-                            <button
-                              type="button"
-                              className="license-translation-status-info-button"
-                              onClick={() => toggleProductionFlowPopover(item.order.orderId)}
-                              aria-label={`查看${item.order.orderId}生产记录`}
-                              title="查看生产记录"
-                            >
-                              ?
-                            </button>
-                            {activeProductionFlowOrderId === item.order.orderId
-                              ? renderProductionFlowPopover(item.order, item.status)
-                              : null}
-                          </span>
-                        ) : null}
-                      </div>
-                    </td>
-                    <td>
-                      <dl className="license-translation-order-info-table">
+                      <dl className="license-translation-order-info-table ctrip-standard-address">
                         {getOrderInfoRows(item.order, item.status).map(([label, value]) => (
                           <div key={label}>
                             <dt>{label}</dt>
@@ -988,6 +917,8 @@ const CtripStandardTranslationPage: React.FC = () => {
                         ))}
                       </dl>
                     </td>
+                    <td><span className="ctrip-standard-source">{getSourceChannelLabel(item.order)}</span></td>
+                    <td>{renderOrderRecords(item.order)}</td>
                     <td>
                       <div className="license-translation-actions">
                         {renderActions(item)}
@@ -997,7 +928,7 @@ const CtripStandardTranslationPage: React.FC = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={9} className="license-translation-empty">
+                  <td colSpan={7} className="license-translation-empty">
                     当前筛选条件下没有Api接口标准件订单
                   </td>
                 </tr>

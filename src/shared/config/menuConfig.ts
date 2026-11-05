@@ -95,6 +95,19 @@ export const menuConfig: MenuItem[] = [
     ],
   },
   {
+    key: 'data-center',
+    labelKey: 'menu.dataCenter',
+    icon: 'reports',
+    children: [
+      {
+        key: 'sales-report',
+        labelKey: 'menu.salesReport',
+        icon: 'reports',
+        path: '/data-center/sales-report',
+      },
+    ],
+  },
+  {
     key: 'file-preview',
     labelKey: 'menu.filePreview',
     icon: 'file-preview',

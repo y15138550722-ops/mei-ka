@@ -4,6 +4,7 @@ import MainLayout from './shared/layouts/MainLayout';
 import { getStoredAuthSession, logoutAuthSession, type AuthSession } from './shared/utils/auth';
 
 const Dashboard = lazy(() => import('./modules/dashboard/Dashboard'));
+const SalesReportPage = lazy(() => import('./modules/data-center/SalesReportPage'));
 const OrderList = lazy(() => import('./modules/order-management/OrderList'));
 const IdpOrderList = lazy(() => import('./modules/order-management/IdpOrderList'));
 const DomesticLicenseOrderManagement = lazy(() => import('./modules/order-management/DomesticLicenseOrderManagement'));
@@ -158,6 +159,8 @@ const App: React.FC = () => {
 
         <Route element={<ProtectedLayout currentUser={currentUser} onLogout={handleLogout} />}>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/data-center" element={<Navigate to="/data-center/sales-report" replace />} />
+          <Route path="/data-center/sales-report" element={<SalesReportPage />} />
           <Route path="/orders" element={<OrderList />} />
           <Route path="/orders/:id" element={<OrderDetail />} />
           <Route path="/order-management/domestic-license-orders" element={<DomesticLicenseOrderManagement />} />

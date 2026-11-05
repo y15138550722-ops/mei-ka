@@ -16,6 +16,15 @@ export type ProcessType = 'normal' | 'priority' | 'urgent';
 export type PushTimeliness = 'instant' | 'within_2h' | 'same_day' | 'next_day';
 export type AgentLevel = 'self' | 'l1' | 'l2' | 'l3';
 export type Channel = 'ctrip' | 'fliggy' | 'private' | 'offline';
+/** Original acquisition channel, retained independently of the legacy broad channel. */
+export type OrderSourceChannel =
+  | 'self_taobao' | 'self_wechat' | 'self_alipay'
+  | 'ctrip_api' | 'klook_api' | 'avis_api' | 'enterprise_api' | 'hello_api'
+  | 'agent_recharge' | 'wechat_ehi' | 'wechat_sixt' | 'wechat_europcar' | 'alipay_channel'
+  | 'wukong_channel' | 'youxiangbang_channel' | 'shenkong_channel'
+  | 'partner_shandong_yiwo' | 'partner_changzhou_yulian' | 'partner_hangzhou_yuecheng'
+  | 'partner_wuhan_honghuzhizhi' | 'partner_yibantong_luoyang' | 'partner_wanteng_translation'
+  | 'partner_karlowen_flagship' | 'partner_hangzhou_yundian';
 export type ProductCategory =
   | 'translation'
   | 'notary'
@@ -90,6 +99,7 @@ export interface Order {
   processTypeId?: string;
   pushTimeliness?: PushTimeliness;
   channel: Channel;
+  sourceChannel?: OrderSourceChannel;
   agentLevel: AgentLevel;
   lockedPrice: number;
   status: OrderStatus;
@@ -103,6 +113,9 @@ export interface Order {
   flightNumber?: string;
   remark: string;
   rejectReason?: string;
+  /** Customer requirements supplied with API standard orders; an explicit “无” means none. */
+  notarizationRequirement?: string;
+  licenseSupplementRecord?: string;
   pushedNotaryOfficeId?: string;
   pushedNotaryOfficeName?: string;
   auditSelectedNotaryOfficeId?: string;
@@ -111,6 +124,9 @@ export interface Order {
   productionDisplayNotaryOfficeName?: string;
   managementOrderId?: string;
   channelOrderId?: string;
+  latestShipDate?: string;
+  /** Minority-language notary orders use manually entered language and pricing with fixed service choices. */
+  notaryOrderEntryType?: 'minority_language';
   notarySubmissionSequence?: number;
   notarySubmissionFiles?: NotarySubmissionFile[];
   notarySubmissionImages?: NotarySubmissionImage[];
@@ -151,6 +167,8 @@ export interface Order {
 export interface OrderLog {
   time: string;
   operator: string;
+  /** Employee login account at completion; legacy logs may only contain a display name. */
+  operatorAccount?: string;
   action: string;
 }
 

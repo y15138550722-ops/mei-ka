@@ -1,3 +1,5 @@
+import { appendMissingSmallbookDemoOrders, buildSmallbookApiDemoOrders } from '../../services/smallbookDemoOrders';
+
 export type KlookOrderStatus = 'pending_review' | 'pending_production' | 'shipped' | 'cancelled';
 
 export type KlookOrderLog = {
@@ -44,6 +46,7 @@ export interface KlookOrder {
 
 const STORAGE_KEY = 'meika-klook-orders';
 const HELLO_STORAGE_KEY = 'meika-hello-orders';
+export const API_ORDER_DATA_CHANGED_EVENT = 'meika-api-orders-changed';
 const DEFAULT_LOCKED_PRICE = 289;
 const PRODUCTION_OPERATOR = '生产端';
 const PRODUCTION_NODE_ACTIONS = ['已翻译', '已制作', '已发货'] as const;
@@ -557,6 +560,7 @@ const persistOrders = (storageKey: string, orders: KlookOrder[]) => {
   }
 
   window.localStorage.setItem(storageKey, JSON.stringify(orders));
+  window.dispatchEvent(new Event(API_ORDER_DATA_CHANGED_EVENT));
 };
 
 const persistKlookOrders = (orders: KlookOrder[]) => persistOrders(STORAGE_KEY, orders);
@@ -564,23 +568,27 @@ const persistKlookOrders = (orders: KlookOrder[]) => persistOrders(STORAGE_KEY, 
 const persistHelloOrders = (orders: KlookOrder[]) => persistOrders(HELLO_STORAGE_KEY, orders);
 
 const loadOrders = (storageKey: string, defaultOrders: KlookOrder[]): KlookOrder[] => {
+  const demos = buildSmallbookApiDemoOrders(storageKey === HELLO_STORAGE_KEY ? 'hello' : 'klook');
+  const seededDefaultOrders = appendMissingSmallbookDemoOrders(defaultOrders, demos);
   if (typeof window === 'undefined') {
-    return defaultOrders.map(normalizeKlookOrder);
+    return seededDefaultOrders.map(normalizeKlookOrder);
   }
 
   const storedValue = window.localStorage.getItem(storageKey);
   if (!storedValue) {
-    const fallbackOrders = defaultOrders.map(normalizeKlookOrder);
+    const fallbackOrders = seededDefaultOrders.map(normalizeKlookOrder);
     persistOrders(storageKey, fallbackOrders);
     return fallbackOrders;
   }
 
   try {
     const parsedValue = JSON.parse(storedValue) as KlookOrder[];
-    return parsedValue.map(normalizeKlookOrder);
+    const orders = appendMissingSmallbookDemoOrders(parsedValue.map(normalizeKlookOrder), demos.map(normalizeKlookOrder));
+    if (orders.length !== parsedValue.length) persistOrders(storageKey, orders);
+    return orders;
   } catch (error) {
     console.error(error);
-    const fallbackOrders = defaultOrders.map(normalizeKlookOrder);
+    const fallbackOrders = seededDefaultOrders.map(normalizeKlookOrder);
     persistOrders(storageKey, fallbackOrders);
     return fallbackOrders;
   }

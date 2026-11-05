@@ -1567,7 +1567,14 @@ const NotaryOrderManagementPreview: React.FC = () => {
       label: '商品名称',
       value: getDisplayValue(order.productName),
     },
-    ...(isExternalNotarySourceOrder(order)
+    ...(order.notaryOrderEntryType === 'minority_language'
+      ? [
+          { label: '订单来源', value: t(`channel.${order.channel}`) },
+          { label: '来源订单号', value: getDisplayValue(order.channelOrderId) },
+          { label: '最晚发货日期', value: getDisplayValue(order.latestShipDate) },
+        ]
+      : []),
+    ...(isExternalNotarySourceOrder(order) || order.notaryOrderEntryType === 'minority_language'
       ? [
           {
             label: '语言选择',

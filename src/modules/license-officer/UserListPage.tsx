@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { PRODUCTION_EMPLOYEE_ACCOUNTS } from './productionEmployeeAccounts';
 import './ChineseTranslationOrders.css';
 
 type UserIdentityFilter = '全部' | '普通会员' | '管理员' | '运营人员';
@@ -209,6 +210,18 @@ export const USER_LIST: UserListItem[] = [
     joinedAt: '2026-06-11 09:03:25',
     lastLoginAt: '2026-06-12 11:58:29',
   },
+  ...PRODUCTION_EMPLOYEE_ACCOUNTS.map((account, index) => ({
+    id: `U26070${String(index + 1).padStart(2, '0')}`,
+    nickname: account,
+    realName: account,
+    identity: '运营人员' as const,
+    enabled: true,
+    email: `employee${index + 1}@meika.local`,
+    phone: `13600136${String(index + 1).padStart(3, '0')}`,
+    joinIp: `10.0.0.${index + 1}`,
+    joinedAt: '2026-09-29 09:00:00',
+    lastLoginAt: '',
+  })),
 ];
 
 const UserListPage: React.FC = () => {

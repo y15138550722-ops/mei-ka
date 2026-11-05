@@ -1,0 +1,242 @@
+.ctrip-standard-table {
+  min-width: 1580px;
+  table-layout: fixed;
+}
+
+.ctrip-standard-table th,
+.ctrip-standard-table td {
+  border-right: 1px solid #d9dee7;
+}
+
+.ctrip-standard-table th:last-child,
+.ctrip-standard-table td:last-child {
+  border-right: 0;
+}
+
+.ctrip-standard-table th {
+  height: 68px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  color: #27313f;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: normal;
+  vertical-align: top;
+}
+
+.ctrip-standard-table td {
+  min-height: 310px;
+  padding: 20px 14px 28px;
+  color: #252b34;
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.ctrip-standard-table th:nth-child(1) { width: 280px; }
+.ctrip-standard-table th:nth-child(2) { width: 250px; }
+.ctrip-standard-table th:nth-child(3) { width: 330px; }
+.ctrip-standard-table th:nth-child(4) { width: 220px; }
+.ctrip-standard-table th:nth-child(5) { width: 160px; }
+.ctrip-standard-table th:nth-child(6) { width: 370px; }
+.ctrip-standard-table th:nth-child(7) { width: 130px; }
+
+.ctrip-standard-table .license-translation-actions {
+  gap: 5px;
+}
+
+.ctrip-standard-table .license-translation-action-button {
+  color: #252b34;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.7;
+}
+
+.ctrip-standard-table .license-translation-action-button--orange {
+  color: #c2410c;
+}
+
+.ctrip-standard-order-numbers,
+.ctrip-standard-order-numbers div {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+}
+
+.ctrip-standard-order-numbers {
+  gap: 14px;
+}
+
+.ctrip-standard-order-numbers dt,
+.ctrip-standard-order-numbers dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.ctrip-standard-order-numbers dt {
+  width: fit-content;
+  color: #303744;
+  text-decoration: underline;
+  text-decoration-color: #f7d978;
+  text-decoration-thickness: 3px;
+  text-underline-offset: 4px;
+}
+
+.ctrip-standard-order-numbers dd {
+  color: #303744;
+  font-weight: 500;
+}
+
+.ctrip-standard-product {
+  display: grid;
+  gap: 16px;
+}
+
+.ctrip-standard-product strong,
+.ctrip-standard-product span {
+  color: #303744;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.7;
+}
+
+.ctrip-standard-product strong {
+  font-weight: 600;
+}
+
+.ctrip-standard-content-table,
+.ctrip-standard-address {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  border: 0;
+  background: transparent;
+}
+
+.ctrip-standard-content-table div,
+.ctrip-standard-address div {
+  display: block;
+  min-height: 0;
+  border: 0;
+}
+
+.ctrip-standard-content-table dt,
+.ctrip-standard-content-table dd,
+.ctrip-standard-address dt,
+.ctrip-standard-address dd {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: #303744;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+.ctrip-standard-content-table dt::after,
+.ctrip-standard-address dt::after {
+  content: '：';
+}
+
+.ctrip-standard-content-table dd,
+.ctrip-standard-address dd {
+  color: #303744;
+}
+
+.ctrip-standard-source {
+  display: inline-block;
+  color: #303744;
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.ctrip-standard-records {
+  display: grid;
+  gap: 14px;
+}
+
+.ctrip-standard-record {
+  display: grid;
+  gap: 3px;
+}
+
+.ctrip-standard-record > strong {
+  width: fit-content;
+  padding: 0 2px;
+  color: #303744;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.6;
+}
+
+.ctrip-standard-record:nth-child(2) > strong,
+.ctrip-standard-record:nth-child(3) > strong {
+  background: #ffd5d1;
+}
+
+.ctrip-standard-record:nth-child(1) > strong {
+  background: #fff0a8;
+}
+
+.ctrip-standard-record dl {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+
+.ctrip-standard-record dl div {
+  display: flex;
+  min-width: 0;
+}
+
+.ctrip-standard-record dt,
+.ctrip-standard-record dd {
+  margin: 0;
+  color: #303744;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.ctrip-standard-record dt {
+  flex: 0 0 auto;
+}
+
+.ctrip-standard-record dd {
+  min-width: 0;
+}
+
+.ctrip-standard-record__secondary dt,
+.ctrip-standard-record__secondary dd {
+  background: #ffd5d1;
+}
+
+.ctrip-standard-record__empty {
+  color: #6b7280;
+  font-weight: 400;
+}
+
+.ctrip-standard-records-hint {
+  display: inline;
+  font-weight: 500;
+}
+
+@media (max-width: 900px) {
+  .ctrip-standard-table th,
+  .ctrip-standard-table td,
+  .ctrip-standard-table .license-translation-action-button,
+  .ctrip-standard-product strong,
+  .ctrip-standard-product span,
+  .ctrip-standard-content-table dt,
+  .ctrip-standard-content-table dd,
+  .ctrip-standard-address dt,
+  .ctrip-standard-address dd,
+  .ctrip-standard-record > strong,
+  .ctrip-standard-record dt,
+  .ctrip-standard-record dd {
+    font-size: 14px;
+  }
+}

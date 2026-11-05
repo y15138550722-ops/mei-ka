@@ -20,6 +20,7 @@ import {
 } from '../shared/utils/productProcessType';
 import { formatBeijingTimestamp } from '../shared/utils/dateTime';
 import { migrateDomesticLicenseOrderImages } from '../shared/utils/localImageStore';
+import { buildSmallbookDemoOrders } from './smallbookDemoOrders';
 
 const PRODUCT_STORAGE_KEY = 'meika-products';
 const PRODUCT_NEXT_ID_STORAGE_KEY = 'meika-products-next-id';
@@ -1238,6 +1239,7 @@ const loadOrders = (products: Product[]): Order[] => {
     ...buildDeployedDomesticLicenseSeedOrders(),
     ...buildNotaryManagementSeedOrders(products),
     ...buildHongKongNotarySeedOrder(products),
+    ...buildSmallbookDemoOrders(products),
   ]);
   const defaultNotaryOrders = defaultOrders.filter((order) => order.productCategory === 'notary');
   const defaultNonNotaryOrders = defaultOrders.filter((order) => order.productCategory !== 'notary');
@@ -1342,7 +1344,9 @@ const syncOrderWithProduct = (order: Order, productsById: Map<string, Product>):
     return order;
   }
 
-  const matchedProcessType = findMatchingProcessType(product, order);
+  const matchedProcessType = order.notaryOrderEntryType === 'minority_language'
+    ? undefined
+    : findMatchingProcessType(product, order);
 
   return {
     ...order,

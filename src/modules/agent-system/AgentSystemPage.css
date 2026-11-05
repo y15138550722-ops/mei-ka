@@ -1807,6 +1807,27 @@
   font-size: 12px;
 }
 
+.agent-package-card--minority {
+  min-height: 124px;
+  align-content: center;
+  gap: 14px;
+  border-radius: 8px;
+}
+
+.agent-package-card--minority span {
+  font-size: 16px;
+}
+
+.agent-package-card--minority small {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.agent-custom-price-field {
+  max-width: 560px;
+  margin-top: 20px;
+}
+
 .agent-checkout-panel {
   padding: 20px 22px 32px;
   margin-bottom: 28px;

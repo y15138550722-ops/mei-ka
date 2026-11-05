@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ORDER_DATA_CHANGED_EVENT, addOrder, getOrders, getProducts, updateOrder } from '../../services/mockDataService';
-import type { DomesticLicenseInfo, Order, OrderStatus, ProductProcessType } from '../../shared/types';
+import type { Channel, DomesticLicenseInfo, Order, OrderStatus, ProductProcessType } from '../../shared/types';
 import { LICENSE_ISSUING_AUTHORITY_OPTIONS } from '../../shared/config/licenseIssuingAuthority';
 import { orderPreviewAssets } from '../../shared/config/orderPreviewAssets';
 import DatePickerInput from '../../shared/components/form/DatePickerInput';
@@ -11,16 +11,46 @@ import { getLanguageOptionsForProduct } from '../../shared/utils/notaryLanguageO
 import { saveDomesticLicenseImages, saveNotaryCertificateImages } from '../../shared/utils/localImageStore';
 import './AgentSystemPage.css';
 
+const OTHER_NOTARY_LANGUAGE = '__other__';
+
 type ValidityPeriod = '6年' | '10年' | '60年' | '长期' | '自定义';
-type OrderEntryType = 'notary' | 'domesticLicenseTranslation';
+type OrderEntryType = 'notary' | 'minorityLanguageNotary' | 'domesticLicenseTranslation';
 type AgentPageView = 'orderEntry' | 'orderList';
 type AgentOrderStatusTab = '' | 'pending_review' | 'pending_production' | 'shipped' | 'cancelled';
 type OrderInput = Omit<Order, 'orderId'> & { orderId?: string };
 
 const orderEntryOptions: Array<{ value: OrderEntryType; label: string }> = [
   { value: 'notary', label: '公证产品下单' },
+  { value: 'minorityLanguageNotary', label: '公证产品下单-小语种' },
   { value: 'domesticLicenseTranslation', label: '换国内驾照翻译件下单' },
 ];
+
+const minorityLanguageProcessTypes: ProductProcessType[] = [
+  {
+    typeId: 'minority-notary-normal',
+    name: '正常办理',
+    description: '3–4个工作日顺丰发货 运费到付',
+    estimatedDays: 4,
+    pricing: [],
+  },
+  {
+    typeId: 'minority-notary-urgent',
+    name: '加急办理',
+    description: '1–2个工作日顺丰发货 运费到付',
+    estimatedDays: 2,
+    pricing: [],
+  },
+];
+
+const orderSourceOptions: Array<{ value: Channel; label: string }> = [
+  { value: 'ctrip', label: '携程' },
+  { value: 'fliggy', label: '飞猪' },
+  { value: 'private', label: '私域' },
+  { value: 'offline', label: '线下代理' },
+];
+
+const isValidOrderPrice = (value: string) => /^\d+(\.\d{1,2})?$/.test(value.trim()) &&
+  Number.isFinite(Number(value)) && Number(value) > 0;
 
 const agentOrderStatusTabs: Array<{ value: AgentOrderStatusTab; label: string }> = [
   { value: '', label: '所有订单' },
@@ -458,6 +488,7 @@ const AgentSystemPage: React.FC = () => {
   const [uploadedCertificates, setUploadedCertificates] = useState<Record<string, { name: string; src: string }>>({});
   const orderEntryLabel = orderEntryOptions.find((item) => item.value === orderEntryType)?.label || '公证产品下单';
   const isDomesticLicenseEntry = orderEntryType === 'domesticLicenseTranslation';
+  const isMinorityLanguageEntry = orderEntryType === 'minorityLanguageNotary';
   const [domesticLicenseForm, setDomesticLicenseForm] = useState<DomesticLicenseFormState>(() =>
     createDomesticLicenseFormState(),
   );
@@ -469,7 +500,7 @@ const AgentSystemPage: React.FC = () => {
     [],
   );
   const activeProducts = useMemo(() => {
-    const activeCategory = orderEntryType === 'notary' ? 'notary' : 'domestic_license';
+    const activeCategory = orderEntryType === 'domesticLicenseTranslation' ? 'domestic_license' : 'notary';
     const products = getProducts().filter((product) => product.category === activeCategory && product.status === 'active');
 
     return products.sort((a, b) => {
@@ -494,12 +525,21 @@ const AgentSystemPage: React.FC = () => {
   const isCompanionExchangeProduct = selectedProduct?.title === DOMESTIC_LICENSE_COMPANION_PRODUCT_TITLE;
   const languageOptions = useMemo(() => getLanguageOptionsForProduct(selectedProduct?.title), [selectedProduct?.title]);
   const [selectedLanguage, setSelectedLanguage] = useState(() => languageOptions[0] || '');
+  const [customLanguage, setCustomLanguage] = useState('');
+  const [orderSource, setOrderSource] = useState<Channel | ''>('');
+  const [sourceOrderNumber, setSourceOrderNumber] = useState('');
+  const [latestShipDate, setLatestShipDate] = useState('');
+  const [customPrice, setCustomPrice] = useState('');
   const [useCountry, setUseCountry] = useState('');
+  const processTypeOptions = isMinorityLanguageEntry ? minorityLanguageProcessTypes : selectedProduct?.processTypes ?? [];
   const selectedProcessType = useMemo(
-    () => selectedProduct?.processTypes.find((processType) => processType.typeId === selectedProcessTypeId) || null,
-    [selectedProduct?.processTypes, selectedProcessTypeId],
+    () => processTypeOptions.find((processType) => processType.typeId === selectedProcessTypeId) || null,
+    [processTypeOptions, selectedProcessTypeId],
   );
-  const selectedProcessTypePrice = getProcessTypePrice(selectedProcessType);
+  const hasValidCustomPrice = isValidOrderPrice(customPrice);
+  const selectedProcessTypePrice = isMinorityLanguageEntry
+    ? hasValidCustomPrice ? Number(customPrice) : 0
+    : getProcessTypePrice(selectedProcessType);
   const balanceAfterPayment = AGENT_ACCOUNT_BALANCE - selectedProcessTypePrice;
   const [validityPeriod, setValidityPeriod] = useState<ValidityPeriod>('6年');
   const [customValidUntilDate, setCustomValidUntilDate] = useState('');
@@ -610,7 +650,7 @@ const AgentSystemPage: React.FC = () => {
   }, [filteredAgentOrders, orderListPage]);
 
   useEffect(() => {
-    if (selectedLanguage && !languageOptions.includes(selectedLanguage)) {
+    if (selectedLanguage && selectedLanguage !== OTHER_NOTARY_LANGUAGE && !languageOptions.includes(selectedLanguage)) {
       setSelectedLanguage('');
     }
   }, [languageOptions, selectedLanguage]);
@@ -646,15 +686,14 @@ const AgentSystemPage: React.FC = () => {
   useEffect(() => {
     const firstProduct = activeProducts[0];
     setSelectedProductId(firstProduct?.productId || '');
-    setSelectedProcessTypeId(firstProduct?.processTypes[0]?.typeId || '');
+    setSelectedProcessTypeId((isMinorityLanguageEntry ? minorityLanguageProcessTypes : firstProduct?.processTypes)?.[0]?.typeId || '');
     setSelectedLanguage(getLanguageOptionsForProduct(firstProduct?.title)[0] || '');
-  }, [activeProducts]);
-
-  useEffect(() => {
-    if (selectedProcessTypeId && !selectedProduct?.processTypes.some((processType) => processType.typeId === selectedProcessTypeId)) {
-      setSelectedProcessTypeId('');
-    }
-  }, [selectedProcessTypeId, selectedProduct?.processTypes]);
+    setCustomLanguage('');
+    setOrderSource('');
+    setSourceOrderNumber('');
+    setLatestShipDate('');
+    setCustomPrice('');
+  }, [activeProducts, isMinorityLanguageEntry]);
 
   useEffect(() => {
     if (!(cityOptions as readonly string[]).includes(selectedCity)) {
@@ -861,7 +900,9 @@ const AgentSystemPage: React.FC = () => {
       updateDomesticLicenseForm({ whiteBackgroundPhoto: '', whiteBackgroundPhotoName: '' });
     }
     setSelectedLanguage(getLanguageOptionsForProduct(nextProduct?.title)[0] || '');
-    setSelectedProcessTypeId(nextProduct?.processTypes[0]?.typeId || '');
+    setCustomLanguage('');
+    setCustomPrice('');
+    setSelectedProcessTypeId((isMinorityLanguageEntry ? minorityLanguageProcessTypes : nextProduct?.processTypes)?.[0]?.typeId || '');
   };
 
   const handleOrderEntryChange = (value: OrderEntryType) => {
@@ -917,6 +958,11 @@ const AgentSystemPage: React.FC = () => {
     setAddressRecognitionText('');
     setAddressRecognitionError('');
     setUseCountry('');
+    setCustomLanguage('');
+    setOrderSource('');
+    setSourceOrderNumber('');
+    setLatestShipDate('');
+    setCustomPrice('');
     setDomesticLicenseForm(createDomesticLicenseFormState());
     setUploadedCertificates({});
     setActiveSectionIndex(0);
@@ -941,6 +987,19 @@ const AgentSystemPage: React.FC = () => {
     if (!processType) {
       showToast('请先选择办理类型');
       return;
+    }
+
+    if (isMinorityLanguageEntry) {
+      const missingMessage = !customLanguage.trim() ? '请输入小语种语言' :
+        !orderSource ? '请选择订单来源' :
+        !sourceOrderNumber.trim() ? '请输入订单号' :
+        !latestShipDate ? '请选择最晚发货日期' :
+        !customPrice.trim() ? '请输入价格' :
+        !hasValidCustomPrice ? '请输入大于0且最多两位小数的价格' : '';
+      if (missingMessage) {
+        showToast(missingMessage);
+        return;
+      }
     }
 
     if (isDomesticLicenseEntry) {
@@ -1110,6 +1169,11 @@ const AgentSystemPage: React.FC = () => {
       return;
     }
 
+    if (selectedLanguage === OTHER_NOTARY_LANGUAGE && !customLanguage.trim()) {
+      showToast('请输入其他语言');
+      return;
+    }
+
     const missingRequiredUpload = uploadItems.find((item) => item.required && !uploadedCertificates[item.key]?.src);
     if (missingRequiredUpload) {
       showToast(`请上传${missingRequiredUpload.title}`);
@@ -1134,7 +1198,9 @@ const AgentSystemPage: React.FC = () => {
       '待补充';
     const licenseIssuingRegion = joinAddressSegments([selectedProvince, selectedCity]);
     const currentTimestamp = formatBeijingTimestamp();
-    const language = selectedLanguage || getLanguageOptionsForProduct(product.title)[0] || '';
+    const language = isMinorityLanguageEntry || selectedLanguage === OTHER_NOTARY_LANGUAGE
+      ? customLanguage.trim()
+      : selectedLanguage || getLanguageOptionsForProduct(product.title)[0] || '';
     setIsSubmittingOrder(true);
     const rawNotaryCertificateImages = Object.fromEntries(
       Object.entries(uploadedCertificates)
@@ -1157,11 +1223,14 @@ const AgentSystemPage: React.FC = () => {
         productName: product.category === 'notary' ? getNotaryOrderProductName(product.title) : product.title,
         productCategory: product.category,
         processType: processType.name,
-        processTypeId: processType.typeId,
+        processTypeId: isMinorityLanguageEntry ? undefined : processType.typeId,
+        notaryOrderEntryType: isMinorityLanguageEntry ? 'minority_language' : undefined,
         pushTimeliness: 'instant',
-        channel: 'private',
+        channel: isMinorityLanguageEntry ? orderSource || 'private' : 'private',
+        channelOrderId: isMinorityLanguageEntry ? sourceOrderNumber.trim() : undefined,
+        latestShipDate: isMinorityLanguageEntry ? latestShipDate : undefined,
         agentLevel: 'self',
-        lockedPrice: getProcessTypePrice(processType),
+        lockedPrice: selectedProcessTypePrice,
         status: 'pending_review',
         deliveryAddress,
         logisticsCompany: '',
@@ -1317,6 +1386,26 @@ const AgentSystemPage: React.FC = () => {
                     <span>使用国家：</span>
                     <strong>{order.useCountry || '待补充'}</strong>
                   </div>
+                )}
+                {order.notaryOrderEntryType === 'minority_language' && (
+                  <>
+                    <div className="agent-modal__detail-item">
+                      <span>语言：</span>
+                      <strong>{order.language}</strong>
+                    </div>
+                    <div className="agent-modal__detail-item">
+                      <span>订单来源：</span>
+                      <strong>{orderSourceOptions.find((source) => source.value === order.channel)?.label}</strong>
+                    </div>
+                    <div className="agent-modal__detail-item">
+                      <span>来源订单号：</span>
+                      <strong>{order.channelOrderId}</strong>
+                    </div>
+                    <div className="agent-modal__detail-item">
+                      <span>最晚发货日期：</span>
+                      <strong>{order.latestShipDate}</strong>
+                    </div>
+                  </>
                 )}
                 <div className="agent-modal__detail-item">
                   <span>办理类型：</span>
@@ -1907,7 +1996,7 @@ const AgentSystemPage: React.FC = () => {
 
           <main className="agent-order-main animate-fadeIn">
           <section ref={(node) => assignSectionRef(0, node)} className="agent-panel agent-product-panel">
-            <div className="agent-panel__title">选择产品</div>
+            <div className="agent-panel__title">{isMinorityLanguageEntry ? orderEntryLabel : '选择产品'}</div>
             <div className="agent-product-stack">
               <label className="agent-field agent-field--wide">
                 <span>选择产品</span>
@@ -2010,27 +2099,49 @@ const AgentSystemPage: React.FC = () => {
                 </>
               ) : (
                 <>
-                  <div className="agent-field agent-field--wide agent-field--radio">
-                    <span>语言选择</span>
-                    <div className="agent-radio-group agent-language-group" aria-label="语言选择">
-                      {languageOptions.length > 0 ? (
-                        languageOptions.map((language) => (
-                          <label key={language}>
-                            <input
-                              type="radio"
-                              name="language"
-                              value={language}
-                              checked={selectedLanguage === language}
-                              onChange={(event) => setSelectedLanguage(event.target.value)}
-                            />
-                            {language}
-                          </label>
-                        ))
-                      ) : (
-                        <span className="agent-empty-hint">请先选择产品</span>
-                      )}
+                  {isMinorityLanguageEntry ? (
+                    <label className="agent-field agent-field--wide">
+                      <span>语言选择 <em className="agent-required">*</em></span>
+                      <input
+                        value={customLanguage}
+                        required
+                        placeholder="请输入小语种对应语言"
+                        onChange={(event) => setCustomLanguage(event.target.value)}
+                      />
+                    </label>
+                  ) : (
+                    <div className="agent-field agent-field--wide agent-field--radio">
+                      <span>语言选择</span>
+                      <div className="agent-radio-group agent-language-group" aria-label="语言选择">
+                        {languageOptions.length > 0 ? (
+                          [...languageOptions, OTHER_NOTARY_LANGUAGE].map((language) => (
+                            <label key={language}>
+                              <input
+                                type="radio"
+                                name="language"
+                                value={language}
+                                checked={selectedLanguage === language}
+                                onChange={(event) => setSelectedLanguage(event.target.value)}
+                              />
+                              {language === OTHER_NOTARY_LANGUAGE ? '其他' : language}
+                            </label>
+                          ))
+                        ) : (
+                          <span className="agent-empty-hint">请先选择产品</span>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
+                  {!isMinorityLanguageEntry && selectedLanguage === OTHER_NOTARY_LANGUAGE && (
+                    <label className="agent-field agent-field--wide">
+                      <span>其他语言 <em className="agent-required">*</em></span>
+                      <input
+                        value={customLanguage}
+                        placeholder="请输入语言名称"
+                        onChange={(event) => setCustomLanguage(event.target.value)}
+                      />
+                    </label>
+                  )}
                   <label className="agent-field agent-field--wide">
                     <span>使用国家 <em className="agent-required">*</em></span>
                     <input
@@ -2039,6 +2150,41 @@ const AgentSystemPage: React.FC = () => {
                       onChange={(event) => setUseCountry(event.target.value)}
                     />
                   </label>
+                  {isMinorityLanguageEntry && (
+                    <>
+                      <label className="agent-field agent-field--wide">
+                        <span>订单来源 <em className="agent-required">*</em></span>
+                        <select
+                          value={orderSource}
+                          required
+                          onChange={(event) => setOrderSource(event.target.value as Channel | '')}
+                        >
+                          <option value="" disabled>请选择订单来源</option>
+                          {orderSourceOptions.map((source) => (
+                            <option key={source.value} value={source.value}>{source.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="agent-field agent-field--wide">
+                        <span>订单号 <em className="agent-required">*</em></span>
+                        <input
+                          value={sourceOrderNumber}
+                          required
+                          placeholder="请输入订单号"
+                          onChange={(event) => setSourceOrderNumber(event.target.value)}
+                        />
+                      </label>
+                      <div className="agent-field agent-field--wide">
+                        <span>最晚发货日期 <em className="agent-required">*</em></span>
+                        <DatePickerInput
+                          ariaLabel="最晚发货日期"
+                          placeholder="请选择最晚发货日期"
+                          value={latestShipDate}
+                          onChange={setLatestShipDate}
+                        />
+                      </div>
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -2415,15 +2561,16 @@ const AgentSystemPage: React.FC = () => {
           <section ref={(node) => assignSectionRef(3, node)} className="agent-panel">
             <div className="agent-panel__title">选择办理类型</div>
             <div className="agent-package-grid">
-              {selectedProduct ? (
-                selectedProduct.processTypes.map((processType) => (
+              {selectedProduct || isMinorityLanguageEntry ? (
+                processTypeOptions.map((processType) => (
                   <button
                     key={processType.typeId}
                     type="button"
-                    className={`agent-package-card ${selectedProcessTypeId === processType.typeId ? 'agent-package-card--active' : ''}`}
+                    className={`agent-package-card ${isMinorityLanguageEntry ? 'agent-package-card--minority' : ''} ${selectedProcessTypeId === processType.typeId ? 'agent-package-card--active' : ''}`}
                     onClick={() => setSelectedProcessTypeId(processType.typeId)}
+                    aria-pressed={selectedProcessTypeId === processType.typeId}
                   >
-                    <strong>¥{getProcessTypePrice(processType)}</strong>
+                    {!isMinorityLanguageEntry && <strong>¥{getProcessTypePrice(processType)}</strong>}
                     <span>{processType.name}</span>
                     <small>{processType.description || `约 ${processType.estimatedDays} 个工作日`}</small>
                   </button>
@@ -2432,6 +2579,21 @@ const AgentSystemPage: React.FC = () => {
                 <div className="agent-panel-empty">请先选择驾照翻译认证产品</div>
               )}
             </div>
+            {isMinorityLanguageEntry && (
+              <label className="agent-field agent-field--wide agent-custom-price-field">
+                <span>价格（元） <em className="agent-required">*</em></span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0.01"
+                  step="0.01"
+                  required
+                  value={customPrice}
+                  placeholder="请输入价格"
+                  onChange={(event) => setCustomPrice(event.target.value)}
+                />
+              </label>
+            )}
           </section>
 
           <section ref={(node) => assignSectionRef(4, node)} className="agent-panel agent-checkout-panel">
@@ -2442,7 +2604,7 @@ const AgentSystemPage: React.FC = () => {
             <div className="agent-checkout-summary">
               <div className="agent-checkout-summary__row">
                 <span>产品费用</span>
-                <strong>{formatCurrency(selectedProcessTypePrice)}</strong>
+                <strong>{isMinorityLanguageEntry && !hasValidCustomPrice ? '待填写价格' : formatCurrency(selectedProcessTypePrice)}</strong>
               </div>
               <div className="agent-checkout-summary__row">
                 <span>当前余额</span>
@@ -2450,7 +2612,7 @@ const AgentSystemPage: React.FC = () => {
               </div>
               <div className="agent-checkout-summary__row agent-checkout-summary__row--total">
                 <span>支付后余额</span>
-                <strong>{formatCurrency(balanceAfterPayment, 2)}</strong>
+                <strong>{isMinorityLanguageEntry && !hasValidCustomPrice ? '待填写价格' : formatCurrency(balanceAfterPayment, 2)}</strong>
               </div>
             </div>
 

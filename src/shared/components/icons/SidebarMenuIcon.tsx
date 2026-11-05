@@ -12,6 +12,7 @@ export type SidebarMenuIconName =
   | 'klook'
   | 'hello'
   | 'products'
+  | 'reports'
   | 'file-preview';
 
 interface SidebarMenuIconProps extends SVGProps<SVGSVGElement> {
@@ -30,6 +31,7 @@ const paths: Record<SidebarMenuIconName, ReactNode> = {
   klook: <><path d="m12 3 2.1 4.9L19 8.3l-3.5 3.6.9 5.1-4.9-2.7L6.8 17l.9-5.1L4.2 8.3l4.9-.4L12 3Z" /></>,
   hello: <><path d="M20 11.5a8 8 0 0 1-8.6 8 8.1 8.1 0 0 1-3.6-1L4 20l1.5-3.4A8 8 0 1 1 20 11.5Z" /><path d="M8.5 12h.01M12 12h.01M15.5 12h.01" /></>,
   products: <><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" /><path d="m4.5 7.8 7.5 4.3 7.5-4.3M12 12.1V21" /></>,
+  reports: <><path d="M4 19V5M4 19h17" /><path d="m7 15 4-4 3 2 5-6" /><path d="M16 7h3v3" /></>,
   'file-preview': <><path d="M6 3h8l4 4v14H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" /><path d="M14 3v5h5M8 14l2-2 2 2 3-3 2 2" /></>,
 };
 

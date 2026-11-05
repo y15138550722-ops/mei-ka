@@ -16,7 +16,9 @@ const LicenseOfficerLayout: React.FC<LicenseOfficerLayoutProps> = ({ children, c
   const [isCtripMenuOpen, setIsCtripMenuOpen] = useState(false);
   const [isReportMenuOpen, setIsReportMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 820px)').matches,
+  );
 
   const isLoginPageActive = location.pathname.startsWith('/license-officer/pages/login');
   const isHomePageActive = location.pathname.startsWith('/license-officer/pages/home');
@@ -33,9 +35,9 @@ const LicenseOfficerLayout: React.FC<LicenseOfficerLayoutProps> = ({ children, c
   React.useEffect(() => {
     setIsOrderMenuOpen(isChineseTranslationActive);
     setIsCtripMenuOpen(isApiStandardTranslationActive || isExcelImportActive || isVipStandardTranslationActive);
-    setIsReportMenuOpen(isReportListActive);
+    setIsReportMenuOpen(isReportListActive || isChannelQueryActive);
     setIsUserMenuOpen(isUserListActive);
-  }, [isApiStandardTranslationActive, isChineseTranslationActive, isExcelImportActive, isReportListActive, isUserListActive, isVipStandardTranslationActive]);
+  }, [isApiStandardTranslationActive, isChannelQueryActive, isChineseTranslationActive, isExcelImportActive, isReportListActive, isUserListActive, isVipStandardTranslationActive]);
 
   const handleLogout = () => {
     if (typeof window !== 'undefined' && !window.confirm('确认退出登录吗？')) {
@@ -107,16 +109,6 @@ const LicenseOfficerLayout: React.FC<LicenseOfficerLayoutProps> = ({ children, c
             }}
           >
             首页
-          </button>
-          <button
-            type="button"
-            className={`license-officer-menu__item license-officer-menu__item--standalone ${isChannelQueryActive ? 'license-officer-menu__item--active' : ''}`}
-            onClick={() => {
-              closeExpandableMenus();
-              navigate('/license-officer/channel-standard/query');
-            }}
-          >
-            查询页
           </button>
           <button
             type="button"
@@ -203,6 +195,13 @@ const LicenseOfficerLayout: React.FC<LicenseOfficerLayoutProps> = ({ children, c
                 onClick={() => navigate('/license-officer/reports/list')}
               >
                 报表
+              </button>
+              <button
+                type="button"
+                className={`license-officer-menu__item license-officer-menu__item--child ${isChannelQueryActive ? 'license-officer-menu__item--active' : ''}`}
+                onClick={() => navigate('/license-officer/channel-standard/query')}
+              >
+                查询页
               </button>
             </div>
           )}

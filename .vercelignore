@@ -5,6 +5,7 @@
 .tmp-docx-preview
 .ssh
 .vercel
+.vercel-cli-home
 .vscode
 temp
 deploy

@@ -4,6 +4,13 @@ import ctripLogo from '../../assets/brand-logos/ctrip.png';
 import ehiLogo from '../../assets/brand-logos/ehi.png';
 import europcarLogo from '../../assets/brand-logos/europcar.svg';
 import wukongLogo from '../../assets/brand-logos/wukong.png';
+import { ORDER_DATA_CHANGED_EVENT } from '../../services/mockDataService';
+import { useTranslation } from '../../shared/i18n/config';
+import {
+  readProductionLineStatistics,
+  type ProductionLineStatistic,
+  type ProductionStatisticsFilter,
+} from './productionOrderStatistics';
 import './ProductionPortalPages.css';
 
 interface PartnerBrand {
@@ -21,14 +28,6 @@ const partnerBrands: PartnerBrand[] = [
   { name: 'SIXT', logoAlt: 'SIXT LOGO', textFallback: 'SIXT' },
   { name: 'Europcar', logoSrc: europcarLogo, logoAlt: 'Europcar LOGO' },
   { name: '一嗨 eHi', logoSrc: ehiLogo, logoAlt: '一嗨 eHi LOGO' },
-];
-
-const statusRows = [
-  { channel: '携程', status: '未翻译', tone: 'warning', count: 1353 },
-  { channel: '携程', status: '未制作', tone: 'info', count: 118 },
-  { channel: '代理商', status: '未翻译', tone: 'warning', count: 93 },
-  { channel: '代理商', status: '未制作', tone: 'info', count: 12 },
-  { channel: '其他', status: '未翻译', tone: 'warning', count: 8 },
 ];
 
 const resultSummary = [
@@ -216,7 +215,46 @@ export const ProductionHomePage: React.FC = () => (
 );
 
 export const ProductionQueryPage: React.FC = () => {
+  const { t, locale } = useTranslation();
+  const numberFormatter = new Intl.NumberFormat(locale);
   const [isEditOpen, setIsEditOpen] = React.useState(false);
+  const [statisticsFilter, setStatisticsFilter] = React.useState<ProductionStatisticsFilter>({});
+  const [productionLineStatistics, setProductionLineStatistics] = React.useState(readProductionLineStatistics);
+  const [activeStatistic, setActiveStatistic] = React.useState<ProductionLineStatistic | null>(null);
+  const refreshStatistics = React.useCallback(
+    () => setProductionLineStatistics(readProductionLineStatistics(statisticsFilter)),
+    [statisticsFilter],
+  );
+
+  const updateStatisticsDate = (field: keyof ProductionStatisticsFilter, value: string) => {
+    setStatisticsFilter((currentFilter) => {
+      const nextFilter = { ...currentFilter, [field]: value };
+      if (nextFilter.startDate && nextFilter.endDate && nextFilter.startDate > nextFilter.endDate) {
+        return field === 'startDate'
+          ? { ...nextFilter, endDate: value }
+          : { ...nextFilter, startDate: value };
+      }
+      return nextFilter;
+    });
+  };
+
+  React.useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === 'meika-orders' || event.key === null) refreshStatistics();
+    };
+    refreshStatistics();
+    window.addEventListener(ORDER_DATA_CHANGED_EVENT, refreshStatistics);
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('focus', refreshStatistics);
+    const timer = window.setInterval(refreshStatistics, 60_000);
+
+    return () => {
+      window.removeEventListener(ORDER_DATA_CHANGED_EVENT, refreshStatistics);
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('focus', refreshStatistics);
+      window.clearInterval(timer);
+    };
+  }, [refreshStatistics]);
 
   return (
     <div className="production-query-page animate-fadeIn">
@@ -226,7 +264,7 @@ export const ProductionQueryPage: React.FC = () => {
         <strong>订单查询系统</strong>
       </div>
       <div className="production-query-topbar__actions">
-        <button type="button" className="production-query-button production-query-button--plain">
+        <button type="button" className="production-query-button production-query-button--plain" onClick={refreshStatistics}>
           <RefreshIcon />
           刷新
         </button>
@@ -236,25 +274,103 @@ export const ProductionQueryPage: React.FC = () => {
 
     <main className="production-query-main">
       <section className="production-query-card">
-        <h2>
-          <ChartIcon />
-          订单状态统计
-        </h2>
+        <div className="production-query-card__header">
+          <h2>
+            <ChartIcon />
+            {t('production.statistics.title')}
+          </h2>
+          <div className="production-query-stat-filter" role="group" aria-label={t('production.statistics.period')}>
+            <span className="production-query-stat-filter__label">{t('production.statistics.period')}</span>
+            <label className="production-query-stat-filter__date">
+              <CalendarIcon />
+              <input
+                type="date"
+                value={statisticsFilter.startDate || ''}
+                max={statisticsFilter.endDate || undefined}
+                aria-label={t('production.statistics.startDate')}
+                onChange={(event) => updateStatisticsDate('startDate', event.target.value)}
+              />
+            </label>
+            <span className="production-query-stat-filter__separator">{t('production.statistics.to')}</span>
+            <label className="production-query-stat-filter__date">
+              <CalendarIcon />
+              <input
+                type="date"
+                value={statisticsFilter.endDate || ''}
+                min={statisticsFilter.startDate || undefined}
+                aria-label={t('production.statistics.endDate')}
+                onChange={(event) => updateStatisticsDate('endDate', event.target.value)}
+              />
+            </label>
+            <button
+              type="button"
+              className="production-query-button production-query-button--plain production-query-button--compact"
+              onClick={() => setStatisticsFilter({})}
+            >
+              {t('common.reset')}
+            </button>
+          </div>
+        </div>
         <div className="production-query-table-wrap">
           <table className="production-query-table">
             <thead>
               <tr>
-                <th>支付方式</th>
-                <th>状态</th>
-                <th>数量</th>
+                <th scope="col">{t('production.statistics.line')}</th>
+                <th scope="col">{t('production.statistics.newOrders')}</th>
+                <th scope="col">{t('production.statistics.pending')}</th>
               </tr>
             </thead>
             <tbody>
-              {statusRows.map((row) => (
-                <tr key={`${row.channel}-${row.status}-${row.count}`}>
-                  <td>{row.channel}</td>
-                  <td><span className={`production-query-tag production-query-tag--${row.tone}`}>{row.status}</span></td>
-                  <td>{row.count}</td>
+              {productionLineStatistics.map((row, rowIndex) => (
+                <tr key={row.key}>
+                  <th scope="row" className="production-query-line-name">{t(row.labelKey)}</th>
+                  <td><span className="production-query-stat production-query-stat--new">{numberFormatter.format(row.newOrders)}</span></td>
+                  <td>
+                    <div
+                      className={`production-query-stat-detail-trigger${rowIndex >= 3 ? ' production-query-stat-detail-trigger--above' : ''}`}
+                      onMouseEnter={() => setActiveStatistic(row)}
+                      onMouseLeave={() => setActiveStatistic(null)}
+                      onBlur={(event) => {
+                        if (!event.currentTarget.contains(event.relatedTarget)) setActiveStatistic(null);
+                      }}
+                    >
+                      <div className="production-query-stat-detail-actions">
+                        <span className="production-query-stat production-query-stat--pending">{numberFormatter.format(row.pendingProduction)}</span>
+                        <button
+                          type="button"
+                          className="production-query-stat-detail-button"
+                          onClick={() => setActiveStatistic(row)}
+                          aria-expanded={activeStatistic?.key === row.key}
+                        >
+                          <InfoIcon />
+                          {t('production.statistics.viewDetails')}
+                        </button>
+                      </div>
+                      {activeStatistic?.key === row.key && (
+                        <div className="production-query-stat-detail-popover" role="tooltip">
+                          <strong className="production-query-stat-detail-popover__title">
+                            {t(row.labelKey)} {t('production.statistics.detailTitle')}
+                          </strong>
+                          <table className="production-query-stat-detail-table">
+                            <thead>
+                              <tr>
+                                <th>{t('order.field.status')}</th>
+                                <th>{t('production.statistics.orderCount')}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {row.pendingStatusCounts.map((status) => (
+                                <tr key={status.key}>
+                                  <th scope="row">{t(status.labelKey)}</th>
+                                  <td>{numberFormatter.format(status.count)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -270,15 +386,15 @@ export const ProductionQueryPage: React.FC = () => {
         <div className="production-query-form">
           <label className="production-query-input">
             <InputIcon type="search" />
-            <input placeholder="请输入单号姓名等" />
+            <input placeholder="请输入姓名 姓名拼音等" />
           </label>
           <label className="production-query-input">
             <InputIcon type="order" />
-            <input placeholder="请输入订单号" />
+            <input placeholder="请输入mk订单号、客户订单号、驾照官订单号等" />
           </label>
           <label className="production-query-input">
             <InputIcon type="card" />
-            <input placeholder="请输入客户订单号" />
+            <input placeholder="请输入快递单号 手机号" />
           </label>
           <label className="production-query-input">
             <InputIcon type="license" />
